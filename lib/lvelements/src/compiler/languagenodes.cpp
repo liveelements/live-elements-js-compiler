@@ -22,6 +22,7 @@
 #include <vector>
 #include <algorithm>
 #include <set>
+#include <string.h>
 
 namespace lv{ namespace el{
 
