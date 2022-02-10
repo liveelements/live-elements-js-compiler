@@ -1,0 +1,7 @@
+build
+miniqt
+node_modules
+npm-debug.log
+.nyc
+.env
+.DS_Store

@@ -1,0 +1,25 @@
+{
+  "name": "live-elements-js-compiler",
+  "version": "0.1.0",
+  "description": "Js compiler for Live Elements.",
+  "author": "Dinu SV",
+  "license": "LGPLv3",
+  "main": "index.js",
+  "privaate" : false,
+  "repository": {
+      "type": "git",
+      "url": "https://github.com/live-keys/live-elements-js-compiler.git"
+  },
+  "scripts": {
+    "install": "cross-env npm run setupqt && npm run cmake",
+    "setupqt": "cross-env node ./scripts/setupqt.js",
+    "cmake": "cross-env CMAKE_BUILD_PARALLEL_LEVEL=8 cmake-js compile",
+    "test": "cross-env node test/test.js"
+  },
+  "dependencies": {
+    "@nodegui/artifact-installer": "^1.1.0",
+    "cmake-js": "^6.3.0",
+    "cross-env": "^7.0.3",
+    "node-addon-api": "^4.3.0"
+  }
+}
