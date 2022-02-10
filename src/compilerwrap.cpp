@@ -51,8 +51,8 @@ void convertToMLNode(const Napi::Value& v, MLNode& n){
         n = MLNode(v.As<Napi::Boolean>());
     } else if ( v.IsNumber() ){
         Napi::Number number = v.As<Napi::Number>();
-        double dn = number.DoubleValue();
-        int64_t ln = number.Int64Value();
+        MLNode::FloatType dn = static_cast<MLNode::FloatType>(number.DoubleValue());
+        MLNode::IntType ln = static_cast<MLNode::IntType>(number.Int64Value());
         n = dn == ln ? MLNode(ln) : MLNode(dn);
     } else {
         n = MLNode();

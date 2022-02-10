@@ -57,7 +57,7 @@ target_include_directories(lvbase
     PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/lvbase/src"
     PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/lvbase/include"
 )
-target_compile_definitions(lvbase PRIVATE LV_BASE_LIB)
+target_compile_definitions(lvbase PRIVATE LV_BASE_LIB LV_BASE_STATIC)
 
 # Link qt
 
@@ -105,7 +105,7 @@ target_include_directories(lvelements
     PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/lvelements/src/compiler"
     PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/lvelements/include"
 )
-target_compile_definitions(lvelements PRIVATE LV_ELEMENTS_LIB)
+target_compile_definitions(lvelements PRIVATE LV_ELEMENTS_LIB LV_BASE_STATIC)
 
 # Include 3rdparty library - treesitter
 

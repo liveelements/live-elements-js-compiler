@@ -25,6 +25,7 @@ jobs:
           COMPILER: g++
           LINKER: g++
         - os: windows-latest
+          NAME: windows
           platform: win32
           arch: x64
 
