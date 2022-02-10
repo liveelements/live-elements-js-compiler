@@ -36,7 +36,7 @@ target_link_libraries(live_elements_js_compiler PRIVATE
 # Add CMake-js
 
 include_directories(${CMAKE_JS_INC})
-target_link_libraries(${PROJECT_NAME} ${CMAKE_JS_LIB})
+target_link_libraries(${PROJECT_NAME} PUBLIC ${CMAKE_JS_LIB})
 
 # Add napi
 
