@@ -26,6 +26,10 @@ if (APPLE)
     set_target_properties(live_elements_js_compiler PROPERTIES BUILD_WITH_INSTALL_RPATH TRUE)
 endif()
 
+target_compile_definitions(live_elements_js_compiler PRIVATE
+    LV_BASE_STATIC 
+    LV_ELEMENTS_STATIC
+)
 
 target_link_libraries(live_elements_js_compiler PRIVATE
     Qt5::Core
@@ -53,6 +57,8 @@ target_include_directories(live_elements_js_compiler PRIVATE
     "${NODE_ADDON_API_DIR}"
 ) 
 target_compile_definitions(live_elements_js_compiler PRIVATE
+    LV_BASE_STATIC 
+    LV_ELEMENTS_STATIC
     NAPI_CPP_EXCEPTIONS
 )
 

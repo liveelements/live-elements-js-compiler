@@ -105,7 +105,7 @@ target_include_directories(lvelements
     PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/lvelements/src/compiler"
     PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/lvelements/include"
 )
-target_compile_definitions(lvelements PRIVATE LV_ELEMENTS_LIB LV_BASE_STATIC)
+target_compile_definitions(lvelements PRIVATE LV_ELEMENTS_LIB LV_BASE_STATIC LV_ELEMENTS_STATIC)
 
 # Include 3rdparty library - treesitter
 
