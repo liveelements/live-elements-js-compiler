@@ -71,7 +71,7 @@ jobs:
           path: ${{ env.ARCHIVE_FILENAME }}
 
       - name: Upload release binaries
-        if: github.ref == 'refs/heads/master' && contains(matrix.os, 'windows-latest')
+        if: startsWith(github.ref, 'refs/tags/v') && contains(matrix.os, 'windows-latest')
         uses: alexellis/upload-assets@0.2.2
         env:
           GITHUB_TOKEN: ${{ github.token }}
