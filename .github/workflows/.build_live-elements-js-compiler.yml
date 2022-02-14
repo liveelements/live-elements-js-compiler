@@ -52,7 +52,7 @@ jobs:
           npm run cmake
 
       - name: Compress files on windows
-        if: github.ref == 'refs/heads/master' && contains(matrix.os, 'windows-latest')
+        if: (startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/master') && contains(matrix.os, 'windows-latest')
         uses: a7ul/tar-action@v1.0.2
         id: compress-windows
         with:
@@ -65,7 +65,7 @@ jobs:
           outPath: ${{ env.ARCHIVE_FILENAME }}
 
       - uses: actions/upload-artifact@v1
-        if: github.ref == 'refs/heads/master' && contains(matrix.os, 'windows-latest')
+        if: (startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/master') && contains(matrix.os, 'windows-latest')
         with:
           name: ${{ env.ARCHIVE_FILENAME }}
           path: ${{ env.ARCHIVE_FILENAME }}

@@ -82,7 +82,7 @@ void populateError(Napi::Env env, Napi::Object ob, lv::Exception* e){
     ob.Set("__internal", internal);
     ob.Set("message", e->message());
     ob.Set("code", e->code());
-    Napi::ObjectReference err = Napi::TypeError::New(env, e->what());
+    Napi::ObjectReference err = Napi::TypeError::New(env, e->message());
     ob.Set("error", err.Value());
 }
 

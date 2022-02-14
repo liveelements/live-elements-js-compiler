@@ -58,11 +58,12 @@ class BaseNode{
 public:
     class ConversionContext{
     public:
-        ConversionContext() : jsImportsEnabled(true){}
+        ConversionContext() : jsImportsEnabled(true), allowUnresolved(true){}
 
         std::string baseComponent;
         std::string baseComponentImportUri;
         bool        jsImportsEnabled;
+        bool        allowUnresolved;
         std::list<std::string> implicitTypes;
 
         static std::string baseComponentName(ConversionContext* ctx);

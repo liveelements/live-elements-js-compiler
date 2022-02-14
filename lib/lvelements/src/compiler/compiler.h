@@ -56,6 +56,7 @@ public:
         void addImportPath(const std::string& path);
         void setBaseComponent(const std::string& name, const std::string& importUri);
         void initialize(const MLNode& config);
+        void allowUnresolvedTypes(bool allow){ m_allowUnresolved = allow; }
 
     private:
         bool                   m_fileOutput;
@@ -69,6 +70,7 @@ public:
         std::string            m_importLocalPath;
         std::string            m_packageBuildPath;
         bool                   m_enableJsImports;
+        bool                   m_allowUnresolved;
     };
 
 public:

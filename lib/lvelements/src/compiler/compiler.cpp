@@ -43,6 +43,7 @@ public:
             ctx->baseComponent = config.m_baseComponent;
             ctx->baseComponentImportUri = config.m_baseComponentUri;
         }
+        ctx->allowUnresolved = config.m_allowUnresolved;
         ctx->jsImportsEnabled = config.m_enableJsImports;
 
         return ctx;
@@ -282,6 +283,7 @@ Compiler::Config::Config(bool fileOutput, const std::string &outputExtension, Fi
     , m_fileIO(ioInterface)
     , m_outputExtension(outputExtension)
     , m_enableJsImports(true)
+    , m_allowUnresolved(true)
 {
     if ( m_fileOutput && !m_fileIO ){
         THROW_EXCEPTION(lv::Exception, "File reader & writer not defined for compiler.", lv::Exception::toCode("~FileIO"));
@@ -336,6 +338,9 @@ void Compiler::Config::initialize(const MLNode &config){
     }
     if ( config.hasKey("outputExtension") ){
         m_outputExtension = "." + config["outputExtension"].asString();
+    }
+    if ( config.hasKey("allowUnresolved") ){
+        m_allowUnresolved = config["allowUnresolved"].asBool();
     }
 }
 
