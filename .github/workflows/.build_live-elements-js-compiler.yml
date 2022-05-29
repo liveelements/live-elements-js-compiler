@@ -31,18 +31,16 @@ jobs:
 
     steps:
       - uses: actions/checkout@v1
-
-      - name: Get Version
-        id: get_version
-        run: echo ::set-output name=VERSION::${GITHUB_REF#refs/tags/}
-
+      
       - name: Get Archive Name
         id: get_archive_name
-        run: echo ::set-output name=ARCHIVE_FILENAME::live-elements-js-compiler-${{steps.get_version.outputs.VERSION}}-${{ matrix.platform }}-${{ matrix.arch }}.tar.gz
+        run: echo "::set-output name=ARCHIVE_FILENAME::live-elements-js-compiler-${{ github.event.release.tag_name }}-${{ matrix.platform }}-${{ matrix.arch }}.tar.gz"
 
       - uses: actions/setup-node@v2
         with:
           node-version: '16.x'
+        env:
+          ARCHIVE_NAME: ${{ steps.get_archive_name.outputs.ARCHIVE_FILENAME }}
         
       - name: Install ubuntu deps
         if: contains(matrix.os, 'ubuntu-18.04')
