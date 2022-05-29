@@ -29,11 +29,14 @@ jobs:
           platform: win32
           arch: x64
 
-    env:
-      ARCHIVE_FILENAME: live-elements-js-compiler-${{GITHUB_REF#refs/tags/}}-${{ matrix.platform }}-${{ matrix.arch }}.tar.gz
-
     steps:
       - uses: actions/checkout@v1
+      
+      - name: Get names
+        id: get_names
+        run: |
+          echo ::set-output name=VERSION::${GITHUB_REF#refs/tags/}
+          echo ::set-output name=ARCHIVE_FILENAME::live-elements-js-compiler-${{ matrix.platform }}-${{ matrix.arch }}.tar.gz
 
       - uses: actions/setup-node@v2
         with:
@@ -62,13 +65,13 @@ jobs:
             ./live_elements_js_compiler.node
             ./live_elements_js_compiler.lib
             ./live_elements_js_compiler.exp
-          outPath: ${{ env.ARCHIVE_FILENAME }}
+          outPath: ${{ steps.get_names.outputs.ARCHIVE_FILENAME }}
 
       - uses: actions/upload-artifact@v1
         if: (startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/master') && contains(matrix.os, 'windows-latest')
         with:
-          name: ${{ env.ARCHIVE_FILENAME }}
-          path: ${{ env.ARCHIVE_FILENAME }}
+          name: ${{ steps.get_names.outputs.ARCHIVE_FILENAME }}
+          path: ${{ steps.get_names.outputs.ARCHIVE_FILENAME }}
 
       - name: Upload release binaries
         if: startsWith(github.ref, 'refs/tags/v') && contains(matrix.os, 'windows-latest')
