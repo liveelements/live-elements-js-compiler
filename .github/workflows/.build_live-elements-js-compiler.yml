@@ -32,10 +32,65 @@ jobs:
     steps:
       - uses: actions/checkout@v1
       
-      - id: get_version
-        uses: battila7/get-version-action@v2
+      - name: Get Package Version
+        id: package_version
+        uses: martinbeentjes/npm-get-version-action@main
 
-      - run: echo ${{ steps.get_version.outputs.version }}
+      - name: Get Archive Name
+        id: get_archive_name
+        run: echo "::set-output name=ARCHIVE_FILENAME::live-elements-js-compiler-${{steps.package_version.outputs.current-version}}-${{ matrix.platform }}-${{ matrix.arch }}.tar.gz"
 
-      - run: echo ${{ steps.get_version.outputs.version-without-v }}
+      - uses: actions/setup-node@v2
+        with:
+          node-version: '16.x'
+        
+      - name: Install ubuntu deps
+        if: contains(matrix.os, 'ubuntu-18.04')
+        run: sudo apt install mesa-common-dev libglu1-mesa-dev
 
+      - name: Install deps
+        run: npm install
+
+      - name: Build
+        run: |
+          npm run setupqt
+          npm run cmake
+
+      - name: Compress files on windows
+        if: (startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/master') && contains(matrix.os, 'windows-latest')
+        uses: a7ul/tar-action@v1.0.2
+        id: compress-windows
+        env:
+          ARCHIVE_NAME: ${{ steps.get_archive_name.outputs.ARCHIVE_FILENAME }}
+        with:
+          command: c
+          cwd: ./build/Release
+          files: |
+            ./live_elements_js_compiler.node
+            ./live_elements_js_compiler.lib
+            ./live_elements_js_compiler.exp
+          outPath: ${{ steps.get_archive_name.outputs.ARCHIVE_FILENAME }}
+
+      - uses: actions/upload-artifact@v1
+        if: (startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/master') && contains(matrix.os, 'windows-latest')
+        with:
+          name: ${{ steps.get_archive_name.outputs.ARCHIVE_FILENAME }}
+          path: ${{ steps.get_archive_name.outputs.ARCHIVE_FILENAME }}
+
+      - name: Upload release binaries
+        if: startsWith(github.ref, 'refs/tags/v') && contains(matrix.os, 'windows-latest')
+        uses: softprops/action-gh-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          files: |
+            ${{ steps.get_archive_name.outputs.ARCHIVE_FILENAME }}
+
+      - name: Publish
+        if: startsWith(github.ref, 'refs/tags/v') && contains(matrix.os, 'ubuntu-18.04')
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_PUBLISH_TOKEN }}
+          CMAKE_BUILD_PARALLEL_LEVEL: 8
+        run: |
+          echo '//registry.npmjs.org/:_authToken=${NPM_TOKEN}' >> .npmrc
+          npm publish --access=public
