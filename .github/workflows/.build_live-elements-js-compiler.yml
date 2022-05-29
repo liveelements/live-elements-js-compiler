@@ -32,10 +32,12 @@ jobs:
     steps:
       - uses: actions/checkout@v1
       
+#          echo ::set-output name=VERSION::${GITHUB_REF#refs/tags/}
       - name: Get names
         id: get_names
         run: |
-          echo ::set-output name=VERSION::${GITHUB_REF#refs/tags/}
+          $VER=${{matrix.platform}}
+          echo ::set-output name=VERSION::$VER
           echo ::set-output name=ARCHIVE_FILENAME::live-elements-js-compiler-${{ matrix.platform }}-${{ matrix.arch }}.tar.gz
 
       - uses: actions/setup-node@v2
