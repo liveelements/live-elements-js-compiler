@@ -38,7 +38,7 @@ jobs:
 
       - name: Get Archive Name
         id: get_archive_name
-        run: echo ::set-output name=ARCHIVE_FILENAME::live-elements-js-compiler-${{steps.get_version.outputs.VERSION}}-${{ matrix.platform }}-${{ matrix.arch }}.tar.gz
+        run: echo ::set-output name=ARCHIVE_FILENAME::live-elements-js-compiler
 
       - name: Use Archive Test
         run: echo '${{ steps.get_archive_name.outputs.ARCHIVE_FILENAME }}'
