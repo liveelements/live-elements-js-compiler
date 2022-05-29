@@ -45,14 +45,6 @@ jobs:
 
       - name: Install deps
         run: npm install
-        
-      - name: Fix 7zip Macos
-        if: contains(matrix.os, 'macos-latest')
-        run: chmod +x -R node_modules/7zip-bin/mac/x64
-        
-      - name: Fix 7zip linux
-        if: contains(matrix.os, 'ubuntu-18.04')
-        run: chmod +x -R node_modules/7zip-bin/linux
 
       - name: Build
         run: |
