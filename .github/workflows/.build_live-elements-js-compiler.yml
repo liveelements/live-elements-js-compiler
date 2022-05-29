@@ -32,13 +32,9 @@ jobs:
     steps:
       - uses: actions/checkout@v1
       
-      - name: Get Package Version
-        id: package_version
-        uses: martinbeentjes/npm-get-version-action@main
-
       - name: Get Archive Name
         id: get_archive_name
-        run: echo "::set-output name=ARCHIVE_FILENAME::live-elements-js-compiler-${{steps.package_version.outputs.current-version}}-${{ matrix.platform }}-${{ matrix.arch }}.tar.gz"
+        run: echo "::set-output name=ARCHIVE_FILENAME::live-elements-js-compiler-${{ github.event.release.tag_name }}-${{ matrix.platform }}-${{ matrix.arch }}.tar.gz"
 
       - uses: actions/setup-node@v2
         with:
