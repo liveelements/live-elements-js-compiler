@@ -1,6 +1,6 @@
 {
   "name": "live-elements-js-compiler",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Js compiler for Live Elements.",
   "author": "Dinu SV",
   "license": "LGPLv3",
@@ -11,7 +11,8 @@
       "url": "https://github.com/live-keys/live-elements-js-compiler.git"
   },
   "scripts": {
-    "install": "cross-env npm run setupqt && npm run cmake",
+    "install": "cross-env npm run setupqt && (npm run downloadbinary || npm run cmake)",
+    "downloadbinary": "cross-env node ./scripts/downloadbinary.js",
     "setupqt": "cross-env node ./scripts/setupqt.js",
     "cmake": "cross-env CMAKE_BUILD_PARALLEL_LEVEL=8 cmake-js compile",
     "test": "cross-env node test/test.js"
