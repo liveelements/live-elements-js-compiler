@@ -38,7 +38,7 @@ jobs:
 
       - name: Get Archive Name
         id: get_archive_name
-        run: echo ::set-output name=ARCHIVE_FILENAME::live-elements-js-compiler
+        run: echo "::set-output name=ARCHIVE_FILENAME::live-elements-js-compiler"
 
       - name: Use Archive Test
         run: echo $ARCHIVE_NAME
