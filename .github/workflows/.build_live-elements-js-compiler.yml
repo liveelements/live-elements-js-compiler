@@ -30,7 +30,7 @@ jobs:
           arch: x64
 
     env:
-      ARCHIVE_FILENAME: live-elements-js-compiler-${GITHUB_REF#refs/tags/}-${{ matrix.platform }}-${{ matrix.arch }}.tar.gz
+      ARCHIVE_FILENAME: live-elements-js-compiler-${{GITHUB_REF#refs/tags/}}-${{ matrix.platform }}-${{ matrix.arch }}.tar.gz
 
     steps:
       - uses: actions/checkout@v1
