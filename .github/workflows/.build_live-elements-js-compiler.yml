@@ -41,5 +41,7 @@ jobs:
         run: echo ::set-output name=ARCHIVE_FILENAME::live-elements-js-compiler
 
       - name: Use Archive Test
-        run: echo '${{ steps.get_archive_name.outputs.ARCHIVE_FILENAME }}'
+        run: echo $ARCHIVE_NAME
+        env:
+          ARCHIVE_NAME: ${{ steps.get_archive_name.outputs.ARCHIVE_FILENAME }}
 
