@@ -31,17 +31,11 @@ jobs:
 
     steps:
       - uses: actions/checkout@v1
+      
+      - id: get_version
+        uses: battila7/get-version-action@v2
 
-      - name: Get Version
-        id: get_version
-        run: echo ::set-output name=VERSION::${GITHUB_REF#refs/tags/}
+      - run: echo ${{ steps.get_version.outputs.version }}
 
-      - name: Get Archive Name
-        id: get_archive_name
-        run: echo "::set-output name=ARCHIVE_FILENAME::live-elements-js-compiler"
-
-      - name: Use Archive Test
-        run: echo "$ARCHIVE_NAME"
-        env:
-          ARCHIVE_NAME: ${{ steps.get_archive_name.outputs.ARCHIVE_FILENAME }}
+      - run: echo ${{ steps.get_version.outputs.version-without-v }}
 
