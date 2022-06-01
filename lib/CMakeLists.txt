@@ -99,6 +99,7 @@ add_library(lvelements STATIC
     "${CMAKE_CURRENT_SOURCE_DIR}/lvelements/src/compiler/languageparser.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/lvelements/src/compiler/modulefile.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/lvelements/src/compiler/sourcerange.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/lvelements/src/compiler/propertybindingcontainer.cpp"
 )
 target_include_directories(lvelements
     PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/lvelements/src"
