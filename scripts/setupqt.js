@@ -22,12 +22,14 @@ const getAllFiles = function(dirPath) {
   }
 
 if ( process.platform === 'darwin' ){
-    var files = getAllFiles(__dirname + '/../node_modules/7zip-bin/mac')
+    var zipPath = path.dirname(require.resolve("7zip-bin/package.json"));
+    var files = getAllFiles(zipPath + '/mac')
     for ( var i = 0; i < files.length; ++i ){
         fs.chmodSync(files[i], '755');
     }
 } else if ( process.platform === 'linux' ){
-    var files = getAllFiles(__dirname + '/../node_modules/7zip-bin/linux')
+    var zipPath = path.dirname(require.resolve("7zip-bin/package.json"));
+    var files = getAllFiles(zipPath + '/linux')
     for ( var i = 0; i < files.length; ++i ){
         fs.chmodSync(files[i], '755');
     }
