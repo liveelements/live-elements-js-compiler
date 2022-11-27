@@ -32,7 +32,7 @@ Library::Ptr Library::loadImpl(const std::string &path){
 
     if (!MultiByteToWideChar(CP_UTF8,
                              0,
-                             pathWithSUffix,
+                             pathWithSUffix.c_str(),
                              -1,
                              pathWithSuffixW,
                              32768))
