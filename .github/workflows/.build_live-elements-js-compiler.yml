@@ -51,7 +51,6 @@ jobs:
 
       - name: Build
         run: |
-          npm run setupqt
           npm run cmake
 
       - name: Compress files on windows
