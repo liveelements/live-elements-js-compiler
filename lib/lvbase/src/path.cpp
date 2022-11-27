@@ -25,7 +25,7 @@ template <typename TP> std::chrono::system_clock::time_point toTimePoint(TP tp){
 // ----------------------------------------------------------------------------
 
 std::string Path::temporaryDirectory(){
-    return fs::temp_directory_path();
+    return fs::temp_directory_path().string();
 }
 
 bool Path::exists(const std::string &s){
@@ -92,7 +92,7 @@ void Path::copyRecursive(const std::string &from, const std::string &to, int opt
 }
 
 std::string Path::join(const std::string &p1, const std::string &p2){
-    return fs::path(p1) / fs::path(p2);
+    return (fs::path(p1) / fs::path(p2)).string();
 }
 
 std::vector<std::string> Path::split(const std::string p){
@@ -107,23 +107,23 @@ std::vector<std::string> Path::split(const std::string p){
  * \brief Returns the file name including the extension (i.e. filename.txt)
  */
 std::string Path::name(const std::string &p){
-    return fs::path(p).filename();
+    return fs::path(p).filename().string();
 }
 
 std::string Path::parent(const std::string &p){
-    return fs::path(p).parent_path();
+    return fs::path(p).parent_path().string();
 }
 
 std::string Path::absolutePath(const std::string &p){
-    return fs::absolute(p);
+    return fs::absolute(p).string();
 }
 
 std::string Path::resolve(const std::string &p){
-    return fs::canonical(p);
+    return fs::canonical(p).string();
 }
 
 std::string Path::rootPath(const std::string &p){
-    return fs::path(p).root_path();
+    return fs::path(p).root_path().string();
 }
 
 bool Path::isRelative(const std::string &p){
@@ -150,7 +150,7 @@ std::string Path::baseName(const std::string &p){
 }
 
 std::string Path::extension(const std::string &p){
-    return fs::path(p).extension();
+    return fs::path(p).extension().string();
 }
 
 std::string Path::suffix(const std::string &p){
@@ -230,7 +230,7 @@ bool Path::isSymlink(const std::string &p){
 }
 
 std::string Path::followSymlink(const std::string &p){
-    return fs::read_symlink(p);
+    return fs::read_symlink(p).string();
 }
 
 std::string Path::relativePath(const std::string &referencePath, const std::string &path){
