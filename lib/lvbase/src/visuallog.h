@@ -23,16 +23,19 @@
 
 #include "live/mlnode.h"
 
-class QDateTime;
-class QVariant;
-
 namespace lv{
 
 class Utf8;
+class DateTime;
 
 class LV_BASE_EXPORT VisualLog{
 
 public:
+    class Configuration;
+    class ConfigurationContainer;
+
+    typedef std::function<void(int, const std::string&)> MessageHandlerFunction;
+
     /** Bitmasks for each type of output */
     enum Output{
         /** Console output */
@@ -46,9 +49,6 @@ public:
         /** Extentions output */
         Extensions = 16
     };
-
-    class Configuration;
-    class ConfigurationContainer;
 
     /**
       \class lv::VisualLog::SourceLocation
@@ -101,7 +101,7 @@ public:
         std::string sourceFileName() const;
         int         sourceLineNumber() const;
         std::string sourceFunctionName() const;
-        const QDateTime& stamp() const;
+        const DateTime& stamp() const;
         std::string prefix(const VisualLog::Configuration* configuration) const;
         std::string tag(const VisualLog::Configuration* configuration) const;
         Level       level() const;
@@ -114,9 +114,9 @@ public:
 
         std::string expand(const std::string& pattern) const;
 
-        Level              m_level;
-        SourceLocation*    m_location;
-        mutable QDateTime* m_stamp;
+        Level            m_level;
+        SourceLocation*  m_location;
+        mutable DateTime* m_stamp;
     };
 
     /**
@@ -139,6 +139,12 @@ public:
                               const MLNode& node) = 0;
     };
 
+
+    class LV_BASE_EXPORT ViewObject{
+    public:
+        virtual ~ViewObject(){}
+    };
+
     /**
      * \class lv::VisualLog::ViewTransport
      * \brief Abstraction of the transport used to pass visual (view) messages
@@ -159,7 +165,7 @@ public:
             const VisualLog::Configuration* configuration,
             const VisualLog::MessageInfo& messageInfo,
             const std::string& viewName,
-            const QVariant& value
+            ViewObject* vo
         ) = 0;
     };
 
@@ -172,7 +178,7 @@ public:
 
     VisualLog& at(const std::string& file, int line = 0, const std::string& functionName = "");
     VisualLog& at(const std::string& remote, const std::string& file, int line = 0, const std::string& functionName = "");
-    VisualLog& overrideStamp(const QDateTime& stamp);
+    VisualLog& overrideStamp(const DateTime &stamp);
 
     template<typename T> VisualLog& operator <<( const T& x );
     template<typename T> VisualLog& operator <<( std::ostream& (*f)(std::ostream&) );
@@ -208,16 +214,14 @@ public:
     void flushLine();
     void closeFile();
 
-    void asView(const std::string& viewPath, const QVariant& viewData);
-    void asView(const std::string& viewPath, std::function<QVariant()> cloneFunction);
-    template<typename T> void asObject(const std::string& type, const T& value);
     void asObject(const std::string& type, const MLNode& value);
-
+    template<typename LogBehavior, typename T> VisualLog& behavior(const T& value);
 
     static ViewTransport* model();
     static void setViewTransport(ViewTransport* model);
 
     static void flushConsole(const std::string& data);
+    static void setInternalMessageHandler(const MessageHandlerFunction& fn);
 
 private:
     DISABLE_COPY(VisualLog);
@@ -234,6 +238,8 @@ private:
 
     static ConfigurationContainer createDefaultConfigurations();
     static ConfigurationContainer& registeredConfigurations();
+    static MessageHandlerFunction& internalMessageHandler();
+    static void defaultInternalMessageHandler(int, const std::string& message);
 
     static ViewTransport* m_model;
 
@@ -284,13 +290,30 @@ template<typename T> void VisualLog::object(VisualLog::MessageInfo::Level level,
     object(value);
 }
 
-/** \brief Display value as object of given type */
-template<typename T> void VisualLog::asObject(const std::string &type, const T &value){
+
+template<typename LogBehavior, typename T>
+VisualLog &VisualLog::behavior(const T &value){
+    // as object
     if ( canLog() && m_objectOutput && canLogObjects(m_configuration) ){
-        MLNode mlvalue;
-        ml::serialize(value, mlvalue);
-        asObject(type, mlvalue);
+        if ( LogBehavior::hasTransport() ){
+            MLNode mlvalue;
+            LogBehavior::toTransport(value, mlvalue);
+            ml::serialize(value, mlvalue);
+            asObject(LogBehavior::typeId(value), mlvalue);
+        }
     }
+    // as view
+    if ( canLog() && m_objectOutput && (m_output & VisualLog::View) ){
+        if ( LogBehavior::hasViewObject() ){
+            VisualLog::ViewObject* vo = LogBehavior::toView(value);
+            std::string viewDelegate = LogBehavior::defaultViewDelegate(value);
+            m_model->onView(m_configuration, m_messageInfo, viewDelegate, vo);
+            m_output = removeOutputFlag(m_output, VisualLog::View);
+        }
+    }
+    // as stream
+    LogBehavior::toStream(*this, value);
+    return *this;
 }
 
 /** \brief Log given value as object with level Fatal */

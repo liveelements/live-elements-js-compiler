@@ -1,23 +1,24 @@
-include(../config/qt.cmake)
 
 ## lvbase library
 ## ------------------------------------------------------------------------
 
 add_library(lvbase STATIC  
     "${CMAKE_CURRENT_SOURCE_DIR}/lvbase/src/applicationcontext.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/lvbase/src/bytebuffer.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/lvbase/src/commandlineparser.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/lvbase/src/datetime.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/lvbase/src/directory.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/lvbase/src/exception.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/lvbase/src/fileio.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/lvbase/src/library.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/lvbase/src/libraryloadpath.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/lvbase/src/librarytable.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/lvbase/src/lockedfileiosession.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/lvbase/src/mlnode.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/lvbase/src/mlnodetojson.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/lvbase/src/module.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/lvbase/src/package.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/lvbase/src/packagegraph.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/lvbase/src/palettecontainer.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/lvbase/src/path.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/lvbase/src/program.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/lvbase/src/stacktrace.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/lvbase/src/typename.cpp"
@@ -30,6 +31,7 @@ if (WIN32)
     target_sources(lvbase
         PRIVATE 
             "${CMAKE_CURRENT_SOURCE_DIR}/lvbase/src/stacktrace_win.cpp"
+            "${CMAKE_CURRENT_SOURCE_DIR}/lvbase/src/library_win.cpp"
             "${CMAKE_CURRENT_SOURCE_DIR}/lvbase/src/libraryloadpath_win.cpp"
             "${CMAKE_CURRENT_SOURCE_DIR}/lvbase/src/applicationcontext_win.cpp"
     )
@@ -39,6 +41,7 @@ if(UNIX AND NOT APPLE)
     target_sources(lvbase
         PRIVATE
             "${CMAKE_CURRENT_SOURCE_DIR}/lvbase/src/stacktrace_unix.cpp"
+            "${CMAKE_CURRENT_SOURCE_DIR}/lvbase/src/library_unix.cpp"
             "${CMAKE_CURRENT_SOURCE_DIR}/lvbase/src/libraryloadpath_unix.cpp"
             "${CMAKE_CURRENT_SOURCE_DIR}/lvbase/src/applicationcontext_unix.cpp"
     )
@@ -58,11 +61,25 @@ target_include_directories(lvbase
     PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/lvbase/include"
 )
 target_compile_definitions(lvbase PRIVATE LV_BASE_LIB LV_BASE_STATIC)
+target_compile_features(lvbase PRIVATE cxx_std_17)
 
-# Link qt
 
-AddQtSupport(lvbase)
-target_link_libraries(lvbase PRIVATE Qt5::Core)
+
+# Include 3rdparty library - date
+
+target_include_directories(lvbase
+    PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/lvbase/3rdparty/date/include"
+)
+
+# Include 3rdparty library - libb64
+
+target_include_directories(lvbase
+    PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/lvbase/3rdparty/libb64/include"
+)
+target_sources(lvbase
+    PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/lvbase/3rdparty/libb64/src/cdecode.c"
+    PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/lvbase/3rdparty/libb64/src/cencode.c"
+)
 
 # Include 3rdparty library - backward
 
@@ -108,6 +125,10 @@ target_include_directories(lvelements
 )
 target_compile_definitions(lvelements PRIVATE LV_ELEMENTS_LIB LV_BASE_STATIC LV_ELEMENTS_STATIC)
 
+# Link lvbase
+
+target_link_libraries(lvelements PRIVATE lvbase)
+
 # Include 3rdparty library - treesitter
 
 target_sources(lvelements
@@ -129,9 +150,4 @@ target_sources(lvelements
 target_include_directories(lvelements
     PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/lvelements/3rdparty/treesitterelements"
 )
-
-# Link qt and lvbase
-
-AddQtSupport(lvelements)
-target_link_libraries(lvelements PRIVATE Qt5::Core lvbase)
 

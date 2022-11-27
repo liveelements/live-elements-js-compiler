@@ -16,11 +16,10 @@
 #include "compilerwrap.h"
 #include "live/visuallog.h"
 #include "live/utf8.h"
+#include "live/path.h"
 #include "live/elements/compiler/compiler.h"
 #include "live/elements/compiler/modulefile.h"
 #include "live/mlnodetojson.h"
-
-#include <QFileInfo>
 
 namespace lv{
 
@@ -113,18 +112,27 @@ void compileWrap(const Napi::CallbackInfo& info){
     try{
         std::string file = fileArg.Utf8Value();
         MLNode compilerOptions;
+
+        if ( optionsArg.Has("log") ){
+            Napi::Object logOptionsArg = optionsArg.Get("log").As<Napi::Object>();
+            MLNode logOptions;
+            convertToMLNode(logOptionsArg, logOptions);
+
+            vlog().configure("global", logOptions);
+            optionsArg.Delete("log");
+        }
+
         convertToMLNode(optionsArg, compilerOptions);
 
-        QFileInfo finfo(QString::fromStdString(file));
-        if ( !finfo.exists() ){
+        if ( !Path::exists(file) ){
             THROW_EXCEPTION(lv::Exception, "Error: Script file not found.", lv::Exception::toCode("~File"));
         }
 
         lv::el::Compiler::Config config;
         config.initialize(compilerOptions);
         lv::el::Compiler::Ptr compiler = lv::el::Compiler::create(config);
-        std::string scriptFile = finfo.absoluteFilePath().toStdString();
-        std::string pluginPath = finfo.absolutePath().toStdString();
+        std::string scriptFile = Path::resolve(file);
+        std::string pluginPath = Path::parent(scriptFile);
 
         Module::Ptr module(nullptr);
         if ( Module::existsIn(pluginPath) ){

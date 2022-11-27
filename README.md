@@ -31,6 +31,7 @@ compile(pathToLvFile, options, callback)
     * `importLocalPath` is the default import path for other lv packages.
     * `packageBuildPath` is the build path for each package, where all the `js` modules are build.
     * `outputExtension` is the output extension for each of the `js` module files. By default, this is `mjs`
+    * `log` is an object defining log options. (i.e. `log: { level: "verbose" })`)
 
 * The `callback` is a function with 2 arguments, a `result`, which is the path to the compiled *js* file, and an
 `error` object, which is a data object containing different parameters depending on the error that was generated.
@@ -57,5 +58,4 @@ compile('main.lv', options, (result, err) => {
     console.log("Compiled file at: " + result)
 })
 ```
-
 
