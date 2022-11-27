@@ -70,7 +70,7 @@ bool Directory::Iterator::hasEntry() const{
 }
 
 std::string Directory::Iterator::path(){
-    return m_d->dit->path();
+    return m_d->dit->path().string();
 }
 
 // Directory

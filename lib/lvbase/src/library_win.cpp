@@ -27,8 +27,7 @@ std::string Library::extensionImpl(){
 Library::Ptr Library::loadImpl(const std::string &path){
     std::string pathWithSUffix = Path::suffix(path) == "" ? path + "." + extensionImpl() : path;
 
-    int pathWithSuffixWSize = 32768;
-    WCHAR pathWithSuffixW[pathWithSuffixWSize];
+    WCHAR pathWithSuffixW[32768];
 
 
     if (!MultiByteToWideChar(CP_UTF8,
@@ -36,7 +35,7 @@ Library::Ptr Library::loadImpl(const std::string &path){
                              pathWithSUffix,
                              -1,
                              pathWithSuffixW,
-                             pathWithSuffixWSize))
+                             32768))
     {
         std::string error = LibraryPrivate::formatError(path, GetLastError());
         THROW_EXCEPTION(lv::Exception, Utf8("Library load error: %").format(error), lv::Exception::toCode("~Library"));
