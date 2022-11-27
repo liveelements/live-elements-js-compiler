@@ -27,7 +27,7 @@ std::string Library::extensionImpl(){
 Library::Ptr Library::loadImpl(const std::string &path){
     std::string pathWithSUffix = Path::suffix(path) == "" ? path + "." + extensionImpl() : path;
 
-    int pathWithSuffixWSize = 32768
+    int pathWithSuffixWSize = 32768;
     WCHAR pathWithSuffixW[pathWithSuffixWSize];
 
 

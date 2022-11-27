@@ -105,6 +105,17 @@ target_sources(lvbase
     PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/lvbase/3rdparty/utf8proc/utf8proc.c"
 )
 
+# Link experimental filesystem on older compilers
+
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS 5.4)
+        message(FATAL_ERROR "GCC version must be newer than 5.4.")
+    elseif (CMAKE_CXX_COMPILER_VERSION VERSION_LESS 8.0)
+        message(WARNING "Older Verison of GCC detected (<8.0). Using Legacy C++ support")
+        target_link_libraries(lvbase -lstdc++fs)
+    endif()
+endif()
+
 ## lvelements/compiler library
 ## ------------------------------------------------------------------------
 
@@ -150,4 +161,12 @@ target_sources(lvelements
 target_include_directories(lvelements
     PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/lvelements/3rdparty/treesitterelements"
 )
+
+
+# Set position independent code for static libraries
+
+if(UNIX AND NOT APPLE)
+    set_property(TARGET lvbase PROPERTY POSITION_INDEPENDENT_CODE ON)
+    set_property(TARGET lvelements PROPERTY POSITION_INDEPENDENT_CODE ON)
+endif()
 

@@ -1,9 +1,18 @@
 #include "path.h"
 #include "live/visuallog.h"
 
-#include <filesystem>
-
-namespace fs = std::filesystem;
+#if defined(__GNUC__) && !defined(__llvm__) && !defined(__INTEL_COMPILER)
+#  if(__GNUC__ > 7)
+#    include <filesystem>
+     namespace fs = std::filesystem;
+#  else
+#    include <experimental/filesystem>
+     namespace fs = std::experimental::filesystem;
+#  endif
+#else
+#  include <filesystem>
+   namespace fs = std::filesystem;
+#endif
 
 namespace lv{
 
