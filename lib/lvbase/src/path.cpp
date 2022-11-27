@@ -108,7 +108,7 @@ std::vector<std::string> Path::split(const std::string p){
     std::vector<std::string> result;
     fs::path path(p);
     for( auto& part : path )
-        result.push_back(part.filename());
+        result.push_back(part.filename().string());
     return result;
 }
 
