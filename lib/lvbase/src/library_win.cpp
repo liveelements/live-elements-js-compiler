@@ -27,7 +27,8 @@ std::string Library::extensionImpl(){
 Library::Ptr Library::loadImpl(const std::string &path){
     std::string pathWithSUffix = Path::suffix(path) == "" ? path + "." + extensionImpl() : path;
 
-    WCHAR pathWithSuffixW[32768];
+    int pathWithSuffixWSize = 32768
+    WCHAR pathWithSuffixW[pathWithSuffixWSize];
 
 
     if (!MultiByteToWideChar(CP_UTF8,
@@ -35,7 +36,7 @@ Library::Ptr Library::loadImpl(const std::string &path){
                              pathWithSUffix,
                              -1,
                              pathWithSuffixW,
-                             ARRAY_SIZE(pathWithSuffixW)))
+                             pathWithSuffixWSize))
     {
         std::string error = LibraryPrivate::formatError(path, GetLastError());
         THROW_EXCEPTION(lv::Exception, Utf8("Library load error: %").format(error), lv::Exception::toCode("~Library"));
@@ -78,7 +79,7 @@ void Library::cleanImpl(){
 void *Library::symbolImpl(const char *symbol){
     void *ptr = (void*)(uintptr_t)GetProcAddress(m_d->handle, symbol);
     if ( !ptr ){
-        std::string error = LibraryPrivate::formatError(path, GetLastError());
+        std::string error = LibraryPrivate::formatError(m_d->path, GetLastError());
         THROW_EXCEPTION(lv::Exception, Utf8("Library symbol error: %").format(error), lv::Exception::toCode("~Library"));
     }
     return ptr;
