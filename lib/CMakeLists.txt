@@ -50,6 +50,7 @@ endif()
 if(APPLE)
     target_sources(lvbase
         PRIVATE
+            "${CMAKE_CURRENT_SOURCE_DIR}/lvbase/src/library_unix.cpp"
             "${CMAKE_CURRENT_SOURCE_DIR}/lvbase/src/stacktrace_unix.cpp"
             "${CMAKE_CURRENT_SOURCE_DIR}/lvbase/src/libraryloadpath_unix.cpp"
             "${CMAKE_CURRENT_SOURCE_DIR}/lvbase/src/applicationcontext_mac.cpp"
