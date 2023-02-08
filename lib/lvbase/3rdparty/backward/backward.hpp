@@ -1507,47 +1507,47 @@ public:
       trace.inliners = backtrace_inliners(fobj, *details_selected);
 
 #if 0
-			if (trace.inliners.size() == 0) {
-				// Maybe the trace was not inlined... or maybe it was and we
-				// are lacking the debug information. Let's try to make the
-				// world better and see if we can get the line number of the
-				// function (trace.source.function) now.
-				//
-				// We will get the location of where the function start (to be
-				// exact: the first instruction that really start the
-				// function), not where the name of the function is defined.
-				// This can be quite far away from the name of the function
-				// btw.
-				//
-				// If the source of the function is the same as the source of
-				// the trace, we cannot say if the trace was really inlined or
-				// not.  However, if the filename of the source is different
-				// between the function and the trace... we can declare it as
-				// an inliner.  This is not 100% accurate, but better than
-				// nothing.
+            if (trace.inliners.size() == 0) {
+                // Maybe the trace was not inlined... or maybe it was and we
+                // are lacking the debug information. Let's try to make the
+                // world better and see if we can get the line number of the
+                // function (trace.source.function) now.
+                //
+                // We will get the location of where the function start (to be
+                // exact: the first instruction that really start the
+                // function), not where the name of the function is defined.
+                // This can be quite far away from the name of the function
+                // btw.
+                //
+                // If the source of the function is the same as the source of
+                // the trace, we cannot say if the trace was really inlined or
+                // not.  However, if the filename of the source is different
+                // between the function and the trace... we can declare it as
+                // an inliner.  This is not 100% accurate, but better than
+                // nothing.
 
-				if (symbol_info.dli_saddr) {
-					find_sym_result details = find_symbol_details(fobj,
-							symbol_info.dli_saddr,
-							symbol_info.dli_fbase);
+                if (symbol_info.dli_saddr) {
+                    find_sym_result details = find_symbol_details(fobj,
+                            symbol_info.dli_saddr,
+                            symbol_info.dli_fbase);
 
-					if (details.found) {
-						ResolvedTrace::SourceLoc diy_inliner;
-						diy_inliner.line = details.line;
-						if (details.filename) {
-							diy_inliner.filename = details.filename;
-						}
-						if (details.funcname) {
-							diy_inliner.function = demangle(details.funcname);
-						} else {
-							diy_inliner.function = trace.source.function;
-						}
-						if (diy_inliner != trace.source) {
-							trace.inliners.push_back(diy_inliner);
-						}
-					}
-				}
-			}
+                    if (details.found) {
+                        ResolvedTrace::SourceLoc diy_inliner;
+                        diy_inliner.line = details.line;
+                        if (details.filename) {
+                            diy_inliner.filename = details.filename;
+                        }
+                        if (details.funcname) {
+                            diy_inliner.function = demangle(details.funcname);
+                        } else {
+                            diy_inliner.function = trace.source.function;
+                        }
+                        if (diy_inliner != trace.source) {
+                            trace.inliners.push_back(diy_inliner);
+                        }
+                    }
+                }
+            }
 #endif
     }
 
@@ -3350,7 +3350,7 @@ private:
       if (dwarf_srcfiles(cu_die, &srcfiles, &file_count, &error) == DW_DLV_OK) {
         if (file_count > 0 && file_index <= static_cast<Dwarf_Unsigned>(file_count)) {
           file = std::string(srcfiles[file_index - 1]);
-	}
+    }
 
         // Deallocate all strings!
         for (int i = 0; i < file_count; ++i) {
@@ -3620,11 +3620,11 @@ public:
     SymSetOptions(symOptions);
     EnumProcessModules(process, &module_handles[0],
                        static_cast<DWORD>(module_handles.size() * sizeof(HMODULE)),
-		       &cbNeeded);
+               &cbNeeded);
     module_handles.resize(cbNeeded / sizeof(HMODULE));
     EnumProcessModules(process, &module_handles[0],
                        static_cast<DWORD>(module_handles.size() * sizeof(HMODULE)),
-		       &cbNeeded);
+               &cbNeeded);
     std::transform(module_handles.begin(), module_handles.end(),
                    std::back_inserter(modules), get_mod_info(process));
     void *base = modules[0].base_address;
