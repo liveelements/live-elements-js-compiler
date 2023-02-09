@@ -18,6 +18,7 @@
 namespace lv{
 
     void compileWrap(const Napi::CallbackInfo& info);
+    void compileModuleWrap(const Napi::CallbackInfo& info);
     Napi::Object Init(Napi::Env env, Napi::Object exports);
 
     NODE_API_MODULE(live_elements_js_compiler, Init)

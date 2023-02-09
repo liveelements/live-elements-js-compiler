@@ -99,7 +99,7 @@ void populateSyntaxError(Napi::Env env, Napi::Object ob, lv::el::SyntaxException
 void compileWrap(const Napi::CallbackInfo& info){
     Napi::Env env = info.Env();
     if( info.Length() < 2 || !info[0].IsString() || !info[1].IsObject()){
-        Napi::TypeError::New(env, "path:String, options::Object expected").ThrowAsJavaScriptException();
+        Napi::TypeError::New(env, "Compile: path:String, options:Object expected").ThrowAsJavaScriptException();
         return;
     }
 
@@ -172,8 +172,74 @@ void compileWrap(const Napi::CallbackInfo& info){
     }
 }
 
+void compileModuleWrap(const Napi::CallbackInfo &info){
+    Napi::Env env = info.Env();
+    if( info.Length() < 2 || !info[0].IsString() || !info[1].IsObject()){
+        Napi::TypeError::New(env, "Compile: path:String, options:Object expected").ThrowAsJavaScriptException();
+        return;
+    }
+
+    Napi::String modulePathArg = info[0].As<Napi::String>();
+    Napi::Object optionsArg = info[1].As<Napi::Object>();
+
+    Napi::Value err = env.Undefined();
+    Napi::Value res = env.Undefined();
+
+    try{
+        std::string modulePath = modulePathArg.Utf8Value();
+        MLNode compilerOptions;
+
+        if ( optionsArg.Has("log") ){
+            Napi::Object logOptionsArg = optionsArg.Get("log").As<Napi::Object>();
+            MLNode logOptions;
+            convertToMLNode(logOptionsArg, logOptions);
+
+            vlog().configure("global", logOptions);
+            optionsArg.Delete("log");
+        }
+
+        convertToMLNode(optionsArg, compilerOptions);
+
+        if ( !Path::exists(modulePath) ){
+            THROW_EXCEPTION(lv::Exception, "Error: Module path not found.", lv::Exception::toCode("~Path"));
+        }
+
+        lv::el::Compiler::Config config;
+        config.initialize(compilerOptions);
+        lv::el::Compiler::Ptr compiler = lv::el::Compiler::create(config);
+
+        lv::el::ElementsModule::Ptr elemMod = lv::el::Compiler::compile(compiler, modulePath);
+        if ( elemMod ){
+            res = Napi::String::New(env, compiler->moduleBuildPath(elemMod->module()));
+        }
+
+    } catch ( lv::el::SyntaxException& e ){
+        Napi::Object ob = Napi::Object::New(env);
+        populateSyntaxError(env, ob, &e);
+        err = ob;
+    } catch ( lv::Exception& e ){
+        Napi::Object ob = Napi::Object::New(env);
+        populateError(env, ob, &e);
+        err = ob;
+    } catch ( std::exception& e ){
+        Napi::Object ob = Napi::Object::New(env);
+        populateErrorMessage(env, ob, &e);
+        err = ob;
+    } catch ( ... ){
+        Napi::Object ob = Napi::Object::New(env);
+        populateErrorMessage(env, ob, nullptr);
+        err = ob;
+    }
+
+    if ( info.Length() > 2 ){
+        Napi::Function cb = info[2].As<Napi::Function>();
+        cb.Call(env.Global(), {res, err});
+    }
+}
+
 Napi::Object Init(Napi::Env env, Napi::Object exports) {
     exports.Set("compile", Napi::Function::New(env, lv::compileWrap));
+    exports.Set("compileModule", Napi::Function::New(env, lv::compileModuleWrap));
     return exports;
 }
 
