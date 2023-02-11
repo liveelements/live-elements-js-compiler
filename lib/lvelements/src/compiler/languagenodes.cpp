@@ -2008,62 +2008,17 @@ void ComponentDeclarationNode::convertToJs(const std::string &source, std::vecto
         std::string id = slice(source, m_idComponents[i]->id());
         auto properties = m_idComponents[i]->properties();
 
-        for (uint32_t idx = 0; idx < properties.size(); ++idx)
-        {
-            *compose << indent(indentValue + 2) << ConversionContext::baseComponentName(ctx) << ".addProperty(" << id << ", '" << slice(source, properties[idx]->name())
-                     << "', { type: \'" << slice(source, properties[idx]->type()) << "\', notify: \'"
-                     << slice(source, properties[idx]->name()) << "Changed\' })\n";
+        for (uint32_t idx = 0; idx < properties.size(); ++idx){
+            std::string propertyName = slice(source, properties[idx]->name());
+            PropertyAccessorDeclarationNode::PropertyAccess accessPair;
+            properties[idx]->convertToJs(source, id, indentValue + 2, ctx, accessPair, compose);
         }
     }
 
     for (size_t i = 0; i < m_properties.size(); ++i){
         std::string propertyName = slice(source, m_properties[i]->name());
-        PropertyAccessorDeclarationNode* propertyGetter = nullptr;
-        PropertyAccessorDeclarationNode* propertySetter = nullptr;
-        for ( size_t j = 0; j < m_propertyAccesors.size(); ++j ){
-            PropertyAccessorDeclarationNode* pa = m_propertyAccesors[j];
-            if ( slice(source, pa->name()) == propertyName ){
-                if ( pa->access() == PropertyAccessorDeclarationNode::Getter ){
-                    propertyGetter = pa;
-                    propertyGetter->setIsPropertyAttached(true);
-                } else if ( pa->access() == PropertyAccessorDeclarationNode::Setter ){
-                    propertySetter = pa;
-                    propertySetter->setIsPropertyAttached(true);
-                }
-            }
-        }
-        *compose << indent(indentValue + 2) << ConversionContext::baseComponentName(ctx) << ".addProperty(this, '" << slice(source, m_properties[i]->name())
-                 << "', { type: \'" << (m_properties[i]->type() ? slice(source, m_properties[i]->type()) : "") << "\', notify: \'"
-                 << slice(source, m_properties[i]->name()) << "Changed\' ";
-
-        if ( propertyGetter ){
-            *compose << ", get: function()";
-            JSSection* jssection = new JSSection;
-            jssection->from = propertyGetter->body()->startByte();
-            jssection->to   = propertyGetter->body()->endByte();
-            propertyGetter->body()->convertToJs(source, jssection->m_children, indentValue + 1, ctx);
-            std::vector<std::string> flat;
-            jssection->flatten(source, flat);
-            for (auto s: flat){
-                *compose << s << "\n";
-            }
-            delete jssection;
-        }
-        if ( propertySetter ){
-            *compose << ", set: function(" << (propertySetter->firstParameterName() ? slice(source, propertySetter->firstParameterName()) : "") << ")";
-            JSSection* jssection = new JSSection;
-            jssection->from = propertySetter->body()->startByte();
-            jssection->to   = propertySetter->body()->endByte();
-            propertySetter->body()->convertToJs(source, jssection->m_children, indentValue + 1, ctx);
-            std::vector<std::string> flat;
-            jssection->flatten(source, flat);
-            for (auto s: flat){
-                *compose << s << "\n";
-            }
-            delete jssection;
-        }
-
-        *compose << "})\n";
+        PropertyAccessorDeclarationNode::PropertyAccess accessPair = propertyAccessors(source, propertyName);
+        m_properties[i]->convertToJs(source, "this", indentValue + 2, ctx, accessPair, compose);
     }
 
     for (size_t i = 0; i < m_events.size(); ++i){
@@ -2379,6 +2334,25 @@ void ComponentDeclarationNode::convertToJs(const std::string &source, std::vecto
     fragments.push_back(compose);
 }
 
+PropertyAccessorDeclarationNode::PropertyAccess ComponentDeclarationNode::propertyAccessors(const std::string &source, const std::string &propertyName){
+    PropertyAccessorDeclarationNode::PropertyAccess result;
+
+    for ( size_t j = 0; j < m_propertyAccesors.size(); ++j ){
+        PropertyAccessorDeclarationNode* pa = m_propertyAccesors[j];
+        if ( slice(source, pa->name()) == propertyName ){
+            if ( pa->access() == PropertyAccessorDeclarationNode::Getter ){
+                result.getter = pa;
+                pa->setIsPropertyAttached(true);
+            } else if ( pa->access() == PropertyAccessorDeclarationNode::Setter ){
+                result.setter = pa;
+                pa->setIsPropertyAttached(true);
+            }
+        }
+    }
+
+    return result;
+}
+
 std::string ComponentDeclarationNode::name(const std::string& source) const{
     std::string name = slice(source, m_name);
 
@@ -2436,25 +2410,22 @@ void NewComponentExpressionNode::convertToJs(const std::string &source, std::vec
     }
 
     if (isRoot || !m_id){
-        for (size_t i = 0; i < m_properties.size(); ++i)
-        {
-            *compose << indent(indt + 2) << ConversionContext::baseComponentName(ctx) << ".addProperty(" + id_root + ", '" << slice(source, m_properties[i]->name())
-                     << "', { type: '" << (m_properties[i]->type() ? slice(source, m_properties[i]->type()) : "") << "', notify: '"
-                     << slice(source, m_properties[i]->name()) << "Changed' })\n";
+        for (size_t i = 0; i < m_properties.size(); ++i){
+            std::string propertyName = slice(source, m_properties[i]->name());
+            PropertyAccessorDeclarationNode::PropertyAccess accessPair;
+            m_properties[i]->convertToJs(source, id_root, indt + 2, ctx, accessPair, compose);
         }
     }
 
     if (isRoot && !m_idComponents.empty()){
-        for (size_t i = 0; i < m_idComponents.size();++i)
-        {
+        for (size_t i = 0; i < m_idComponents.size();++i){
             std::string id = slice(source, m_idComponents[i]->id());
             auto properties = m_idComponents[i]->properties();
 
-            for (size_t idx = 0; idx < properties.size(); ++idx)
-            {
-                *compose << indent(indt + 1) << ConversionContext::baseComponentName(ctx) << ".addProperty(" << id << ", '" << slice(source, properties[idx]->name())
-                         << "', { type: '" << slice(source, properties[idx]->type()) << "', notify: '"
-                         << slice(source, properties[idx]->name()) << "Changed' })\n";
+            for (size_t idx = 0; idx < properties.size(); ++idx){
+                std::string propertyName = slice(source, properties[idx]->name());
+                PropertyAccessorDeclarationNode::PropertyAccess accessPair;
+                properties[idx]->convertToJs(source, id, indt + 1, ctx, accessPair, compose);
             }
         }
     }
@@ -2462,7 +2433,7 @@ void NewComponentExpressionNode::convertToJs(const std::string &source, std::vec
     for (size_t i = 0; i < m_properties.size(); ++i){
 
         std::string bindingsInJs = m_properties[i]->bindingIdentifiersToJs(source);
-        if (bindingsInJs.size() > 0){
+        if (bindingsInJs.size() > 0 && m_properties[i]->isBindingsAssignment() ){
             std::string comp = "";
             if (m_properties[i]->expression()){
                 comp += indent(indt + 1) + ConversionContext::baseComponentName(ctx) + ".assignPropertyExpression(this,\n"
@@ -2889,6 +2860,50 @@ std::string PropertyDeclarationNode::bindingIdentifiersToString(const std::strin
 
 std::string PropertyDeclarationNode::bindingIdentifiersToJs(const std::string &source) const{
     return m_bindingContainer->bindingIdentifiersToJs(source);
+}
+
+void PropertyDeclarationNode::convertToJs(
+        const std::string &source,
+        const std::string &componentReference,
+        int indt,
+        BaseNode::ConversionContext *ctx,
+        const PropertyAccessorDeclarationNode::PropertyAccess &propertyAccess,
+        ElementsInsertion* compose)
+{
+    *compose << indent(indt) << ConversionContext::baseComponentName(ctx) << ".addProperty(" + componentReference + ", '" << slice(source, name())
+             << "', { type: '" << (type() ? slice(source, type()) : "") << "', notify: '"
+             << slice(source, name()) << "Changed'";
+
+
+    if ( propertyAccess.getter ){
+        *compose << ", get: function()";
+        JSSection* jssection = new JSSection;
+        jssection->from = propertyAccess.getter->body()->startByte();
+        jssection->to   = propertyAccess.getter->body()->endByte();
+        propertyAccess.getter->body()->convertToJs(source, jssection->m_children, indt + 1, ctx);
+        std::vector<std::string> flat;
+        jssection->flatten(source, flat);
+        for (auto s: flat){
+            *compose << s << "\n";
+        }
+        delete jssection;
+    }
+    if ( propertyAccess.setter ){
+        *compose << ", set: function(" << (propertyAccess.setter->firstParameterName() ? slice(source, propertyAccess.setter->firstParameterName()) : "") << ")";
+        JSSection* jssection = new JSSection;
+        jssection->from = propertyAccess.setter->body()->startByte();
+        jssection->to   = propertyAccess.setter->body()->endByte();
+        propertyAccess.setter->body()->convertToJs(source, jssection->m_children, indt + 1, ctx);
+        std::vector<std::string> flat;
+        jssection->flatten(source, flat);
+        for (auto s: flat){
+            *compose << s << "\n";
+        }
+        delete jssection;
+    }
+
+
+    *compose << "})\n";
 }
 
 StaticPropertyDeclarationNode::StaticPropertyDeclarationNode(const TSNode &node)

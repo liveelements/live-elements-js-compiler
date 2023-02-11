@@ -208,7 +208,7 @@ void compileModuleWrap(const Napi::CallbackInfo &info){
         config.initialize(compilerOptions);
         lv::el::Compiler::Ptr compiler = lv::el::Compiler::create(config);
 
-        lv::el::ElementsModule::Ptr elemMod = lv::el::Compiler::compile(compiler, modulePath);
+        lv::el::ElementsModule::Ptr elemMod = lv::el::Compiler::compileModule(compiler, modulePath);
         if ( elemMod ){
             res = Napi::String::New(env, compiler->moduleBuildPath(elemMod->module()));
         }

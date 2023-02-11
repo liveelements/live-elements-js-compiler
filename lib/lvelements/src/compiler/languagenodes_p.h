@@ -432,6 +432,69 @@ private:
 
 };
 
+class TypedMethodDeclarationNode : public BaseNode{
+    friend class BaseNode;
+public:
+    TypedMethodDeclarationNode(const TSNode& node);
+    virtual std::string toString(int indent = 0) const;
+
+    IdentifierNode* name() const{ return m_name; }
+    ParameterListNode* parameters() const{ return m_parameters; }
+    JsBlockNode* body() const{ return m_body; }
+
+    void setAsync(bool async){ m_async = async; }
+    void setStatic(bool value){ m_static = value; }
+
+    bool isAsync() const{ return m_async; }
+    bool isStatic() const{ return m_static; }
+
+protected:
+    TypedMethodDeclarationNode(const TSNode& node, const std::string& typeString);
+
+private:
+    IdentifierNode*    m_name;
+    ParameterListNode* m_parameters;
+    JsBlockNode*       m_body;
+    bool               m_async;
+    bool               m_static;
+};
+
+class PropertyAccessorDeclarationNode : public TypedMethodDeclarationNode{
+
+public:
+    friend class BaseNode;
+
+    enum Access{
+        Unknown = 0,
+        Getter,
+        Setter
+    };
+
+    class PropertyAccess{
+    public:
+        PropertyAccess() : getter(nullptr), setter(nullptr){}
+
+        PropertyAccessorDeclarationNode* getter;
+        PropertyAccessorDeclarationNode* setter;
+    };
+
+public:
+    PropertyAccessorDeclarationNode(const TSNode& node)
+        : TypedMethodDeclarationNode(node, "PropertyAccessorDeclaration")
+        , m_access(PropertyAccessorDeclarationNode::Unknown)
+        , m_isPropertyAttached(false)
+    {}
+
+    Access access() const{ return m_access; }
+    void setIsPropertyAttached(bool attached) { m_isPropertyAttached = attached; }
+    bool isPropertyAttached() const{ return m_isPropertyAttached; }
+    IdentifierNode* firstParameterName() const;
+
+private:
+    Access m_access;
+    bool   m_isPropertyAttached;
+};
+
 class PropertyDeclarationNode : public JsBlockNode{
 
     friend class BaseNode;
@@ -452,6 +515,15 @@ public:
 
     bool hasAssignment(){ return m_expression != nullptr || m_statementBlock != nullptr; }
     bool isBindingsAssignment(){ return m_isBindingAssignment; }
+
+    void convertToJs(
+        const std::string& source,
+        const std::string& componentRef,
+        int indt,
+        ConversionContext* ctx,
+        const PropertyAccessorDeclarationNode::PropertyAccess& propertyAccess,
+        ElementsInsertion *compose
+    );
 
 private:
     IdentifierNode* m_name;
@@ -553,6 +625,8 @@ public:
 
     void pushToAssignments(PropertyAssignmentNode* pan) { m_assignments.push_back(pan); }
     std::vector<PropertyAssignmentNode*>& assignments() { return m_assignments; }
+
+    PropertyAccessorDeclarationNode::PropertyAccess propertyAccessors(const std::string& source, const std::string& propertyName);
 
     std::string name(const std::string &source) const;
     const std::vector<IdentifierNode*> heritage() const{ return m_heritage; }
@@ -794,61 +868,6 @@ private:
     IdentifierNode* m_name;
 };
 
-
-class TypedMethodDeclarationNode : public BaseNode{
-    friend class BaseNode;
-public:
-    TypedMethodDeclarationNode(const TSNode& node);
-    virtual std::string toString(int indent = 0) const;
-
-    IdentifierNode* name() const{ return m_name; }
-    ParameterListNode* parameters() const{ return m_parameters; }
-    JsBlockNode* body() const{ return m_body; }
-
-    void setAsync(bool async){ m_async = async; }
-    void setStatic(bool value){ m_static = value; }
-
-    bool isAsync() const{ return m_async; }
-    bool isStatic() const{ return m_static; }
-
-protected:
-    TypedMethodDeclarationNode(const TSNode& node, const std::string& typeString);
-
-private:
-    IdentifierNode*    m_name;
-    ParameterListNode* m_parameters;
-    JsBlockNode*       m_body;
-    bool               m_async;
-    bool               m_static;
-};
-
-class PropertyAccessorDeclarationNode : public TypedMethodDeclarationNode{
-
-public:
-    friend class BaseNode;
-
-    enum Access{
-        Unknown = 0,
-        Getter,
-        Setter
-    };
-
-public:
-    PropertyAccessorDeclarationNode(const TSNode& node)
-        : TypedMethodDeclarationNode(node, "PropertyAccessorDeclaration")
-        , m_access(PropertyAccessorDeclarationNode::Unknown)
-        , m_isPropertyAttached(false)
-    {}
-
-    Access access() const{ return m_access; }
-    void setIsPropertyAttached(bool attached) { m_isPropertyAttached = attached; }
-    bool isPropertyAttached() const{ return m_isPropertyAttached; }
-    IdentifierNode* firstParameterName() const;
-
-private:
-    Access m_access;
-    bool   m_isPropertyAttached;
-};
 
 }} // namespace lv, el
 
