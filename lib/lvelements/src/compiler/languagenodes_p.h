@@ -190,6 +190,13 @@ public:
     ObjectNode(const TSNode& node, const std::string& typeString = "Object") : BaseNode(node, typeString){}
 };
 
+
+class ExpressionNode: public BaseNode {
+    friend class BaseNode;
+public:
+    ExpressionNode(const TSNode& node, const std::string& typeString = "Expression") : BaseNode(node, typeString){}
+};
+
 class ReturnStatementNode: public BaseNode {
     friend class BaseNode;
 public:
@@ -607,7 +614,6 @@ public:
 private:
     ConstructorDefinitionNode* m_constructor;
     friend class ComponentDeclarationNode;
-
 };
 
 class ComponentDeclarationNode : public JsBlockNode{
@@ -801,10 +807,12 @@ public:
     IdentifierNode* name() const{ return m_name; }
     ParameterListNode* parameterList() const{ return m_parameters; }
     JsBlockNode* body() const{ return m_body; }
+    ExpressionNode* bodyExpression() const{ return m_bodyExpression; }
 private:
     IdentifierNode*    m_name;
     ParameterListNode* m_parameters;
     JsBlockNode*       m_body;
+    ExpressionNode*    m_bodyExpression;
 };
 
 class MethodDefinitionNode : public BaseNode{

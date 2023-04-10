@@ -111,6 +111,7 @@ void compileWrap(const Napi::CallbackInfo& info){
 
     try{
         std::string file = fileArg.Utf8Value();
+
         MLNode compilerOptions;
 
         if ( optionsArg.Has("log") ){
@@ -139,13 +140,14 @@ void compileWrap(const Napi::CallbackInfo& info){
             module = Module::createFromPath(pluginPath);
             Package::Ptr package = Package::createFromPath(module->package());
             if ( package ){
-                compiler->setPackageImportPaths({package->path() + "/" + compiler->importLocalPath()});
+                compiler->setPackageImportPaths({Path::join(package->path(), compiler->importLocalPath())});
             }
         }
         lv::el::ElementsModule::Ptr elemMod = lv::el::Compiler::compile(compiler, scriptFile);
         lv::el::ModuleFile* mf = elemMod->moduleFileBypath(scriptFile);
+
         if ( mf ){
-            res = Napi::String::New(env, mf->jsFilePath());
+            res = Napi::String::New(env, Path::toUnixSeparator(mf->jsFilePath()));
         }
 
     } catch ( lv::el::SyntaxException& e ){

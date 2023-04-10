@@ -977,11 +977,20 @@ void BaseNode::visitListenerDeclaration(BaseNode *parent, const TSNode &node){
             enode->m_name = new IdentifierNode(child);
         } else if ( strcmp(ts_node_type(child), "formal_parameters") == 0 ){
             enode->m_parameters = scanFormalParameters(parent, child);
-        } else if ( strcmp(ts_node_type(child), "statement_block") == 0 ){
-            enode->m_body = new JsBlockNode(child);
-            enode->addChild(enode->m_body);
-            visitChildren(enode->m_body, child);
         }
+    }
+
+    TSNode body = BaseNode::nodeChildByFieldName(node, "body");
+    assertValid(parent, body, "Failed to find listener body.");
+
+    if ( strcmp(ts_node_type(body), "statement_block") == 0 ){
+        enode->m_body = new JsBlockNode(body);
+        enode->addChild(enode->m_body);
+        visitChildren(enode->m_body, body);
+    } else {
+        enode->m_bodyExpression = new ExpressionNode(body);
+        enode->addChild(enode->m_bodyExpression);
+        visitChildren(enode->m_bodyExpression, body);
     }
 
     if (parent->parent() && parent->parent()->typeString() == "ComponentDeclaration"){
@@ -2036,6 +2045,7 @@ void ComponentDeclarationNode::convertToJs(const std::string &source, std::vecto
     }
 
     for (size_t i = 0; i < m_listeners.size(); ++i){
+
         std::string paramList = "";
         if ( m_listeners[i]->parameterList() ){
             ParameterListNode* pdn = m_listeners[i]->parameterList()->as<ParameterListNode>();
@@ -2046,13 +2056,21 @@ void ComponentDeclarationNode::convertToJs(const std::string &source, std::vecto
             }
         }
 
-        *compose << "this.on(\'" << slice(source, m_listeners[i]->name()) << "\', function(" << paramList << ")";
+        *compose << indent(indentValue + 2) << "this.on(\'" << slice(source, m_listeners[i]->name()) << "\', function(" << paramList << ")";
 
-        JSSection* jssection = new JSSection;
-        jssection->from = m_listeners[i]->body()->startByte();
-        jssection->to   = m_listeners[i]->body()->endByte();
-        m_listeners[i]->body()->convertToJs(source, jssection->m_children, indentValue + 1, ctx);
-        *compose << jssection << ".bind(this));\n";
+        if ( m_listeners[i]->body() ){
+            JSSection* jssection = new JSSection;
+            jssection->from = m_listeners[i]->body()->startByte();
+            jssection->to   = m_listeners[i]->body()->endByte();
+            m_listeners[i]->body()->convertToJs(source, jssection->m_children, indentValue + 1, ctx);
+            *compose << jssection << ".bind(this));\n";
+        } else {
+            JSSection* jssection = new JSSection;
+            jssection->from = m_listeners[i]->bodyExpression()->startByte();
+            jssection->to   = m_listeners[i]->bodyExpression()->endByte();
+            m_listeners[i]->bodyExpression()->convertToJs(source, jssection->m_children, indentValue + 1, ctx);
+            *compose << "{" << jssection << "}.bind(this));\n";
+        }
     }
 
     for (size_t i = 0; i < m_properties.size(); ++i){
@@ -2638,11 +2656,20 @@ void NewComponentExpressionNode::convertToJs(const std::string &source, std::vec
         }
 
         *compose << indent(indt + 1) << "this.on(\'" << slice(source, ldn->name()) << "\', function(" << paramList << ")";
-        JSSection* jssection = new JSSection;
-        jssection->from = ldn->body()->startByte();
-        jssection->to   = ldn->body()->endByte();
-        ldn->convertToJs(source, jssection->m_children, indt + 1, ctx);
-        *compose << jssection << ".bind(this));\n";
+
+        if ( ldn->body() ){
+            JSSection* jssection = new JSSection;
+            jssection->from = ldn->body()->startByte();
+            jssection->to   = ldn->body()->endByte();
+            ldn->body()->convertToJs(source, jssection->m_children, indt + 1, ctx);
+            *compose << jssection << ".bind(this));\n";
+        } else {
+            JSSection* jssection = new JSSection;
+            jssection->from = ldn->bodyExpression()->startByte();
+            jssection->to   = ldn->bodyExpression()->endByte();
+            ldn->bodyExpression()->convertToJs(source, jssection->m_children, indt + 1, ctx);
+            *compose << "{" << jssection << "}.bind(this));\n";
+        }
     }
 
     for ( auto it = m_methods.begin(); it != m_methods.end(); ++it ){
@@ -3037,6 +3064,7 @@ ListenerDeclarationNode::ListenerDeclarationNode(const TSNode &node)
     , m_name(nullptr)
     , m_parameters(nullptr)
     , m_body(nullptr)
+    , m_bodyExpression(nullptr)
 {}
 
 std::string ListenerDeclarationNode::toString(int indent) const{
