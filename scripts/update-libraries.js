@@ -10,8 +10,8 @@ const lkPath = process.argv[2];
 
 async function copyPathStructure(paths){
     try {
-        await fs.promises.rmdir(__dirname + "/../lib/lvbase", { recursive: true })
-        await fs.promises.rmdir(__dirname + "/../lib/lvelements", { recursive: true })
+        await fs.promises.rm(__dirname + "/../lib/lvbase", { recursive: true })
+        await fs.promises.rm(__dirname + "/../lib/lvelements", { recursive: true })
 
         console.log("Lib folder has been cleared.")
 
@@ -28,14 +28,9 @@ async function copyPathStructure(paths){
 }
 
 var pathStructure = {
-    "lib/lvbase/3rdparty": "../lib/lvbase/3rdparty",
-    "lib/lvbase/include": "../lib/lvbase/include",
-    "lib/lvbase/src": "../lib/lvbase/src",
-    "lib/lvelements/3rdparty": "../lib/lvelements/3rdparty",
-    "lib/lvelements/include/live/elements/compiler": "../lib/lvelements/include/live/elements/compiler",
-    "lib/lvelements/include/live/elements/lvelementsglobal.h": "../lib/lvelements/include/live/elements/lvelementsglobal.h",
-    "lib/lvelements/src/compiler": "../lib/lvelements/src/compiler",
-    "lib/lvelements/src/lvelementsglobal.h": "../lib/lvelements/src/lvelementsglobal.h"
+    "lib/lvbase" : "../lib/lvbase",
+    "lib/lvelements/compiler": "../lib/lvelements/compiler",
+    "project/functions.cmake": "../project/functions.cmake"
 }
 
 copyPathStructure(pathStructure)
