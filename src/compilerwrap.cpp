@@ -140,7 +140,19 @@ void compileWrap(const Napi::CallbackInfo& info){
             module = Module::createFromPath(pluginPath);
             Package::Ptr package = Package::createFromPath(module->package());
             if ( package ){
-                compiler->setPackageImportPaths({Path::join(package->path(), compiler->importLocalPath())});
+                std::string current = package->path();
+                std::vector<std::string> importPaths;
+                while ( Path::exists(current) ){
+                    auto importPath = Path::join(current, compiler->importLocalPath() );
+                    if ( Package::existsIn(current) && Path::exists( importPath ) ){
+                        importPaths.push_back(importPath);
+                    }
+                    if ( Path::rootPath(current) == current ){
+                        break;
+                    }
+                    current = Path::parent(current);
+                }
+                compiler->setPackageImportPaths(importPaths);
             }
         }
         lv::el::ElementsModule::Ptr elemMod = lv::el::Compiler::compile(compiler, scriptFile);
