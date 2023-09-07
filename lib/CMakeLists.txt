@@ -6,6 +6,8 @@ set(BUILD_LVELEMENTSCOMPILER_STATIC ON)
 add_subdirectory(lvbase)
 add_subdirectory(lvelements/compiler)
 
+target_compile_definitions(lvbase PRIVATE WIN_LOG_TO_CONSOLE)
+
 # Set position independent code for static libraries
 
 if(UNIX AND NOT APPLE)

@@ -35,7 +35,11 @@ public:
     std::map<std::string, ElementsModule::Ptr> loadedModules;
     std::map<std::string, ElementsModule::Ptr> loadedModulesByPath;
 
-    BaseNode::ConversionContext* createConversionContext(const std::string& componentPath = "", const std::string& relativePathFromBuild = ""){
+    BaseNode::ConversionContext* createConversionContext(
+            const Module::Ptr& module = nullptr,
+            const std::string& componentPath = "",
+            const std::string& relativePathFromBuild = "")
+    {
         BaseNode::ConversionContext* ctx = new BaseNode::ConversionContext;
         ctx->implicitTypes = config.m_implicitTypes;
         if ( config.hasCustomBaseComponent() ){
@@ -46,13 +50,22 @@ public:
         ctx->jsImportsEnabled = config.m_enableJsImports;
         ctx->componentPath = componentPath;
         ctx->relativePathFromBuild = relativePathFromBuild;
-
+        if ( config.componentMetaInfoEnabled() ){
+            if ( module && module->context() && !(module->context()->importId.isEmpty()) ){
+                ctx->outputComponentMeta = true;
+                ctx->currentImportUri = module->context()->importId.data();
+            }
+        }
         return ctx;
     }
 };
 
 bool Compiler::Config::hasCustomBaseComponent(){
     return !m_baseComponent.empty();
+}
+
+bool Compiler::Config::componentMetaInfoEnabled(){
+    return m_enableComponentMetaInfo;
 }
 
 Compiler::Compiler(const Config &opt, PackageGraph* pg)
@@ -110,6 +123,7 @@ std::string Compiler::compileToJs(const std::string &path, const std::string &co
     section->to   = static_cast<int>(contents.size());
 
     auto ctx = m_d->createConversionContext();
+
     LanguageNodesToJs lnt;
     lnt.convert(node, contents, section->m_children, 0, ctx);
     delete ctx;
@@ -140,9 +154,10 @@ std::string Compiler::compileModuleFileToJs(const Module::Ptr &module, const std
     Utf8 outputPath = moduleFileBuildPath(module, path);
     Utf8 relativePathFromOutput;
 
-    auto outputPathSegments = outputPath.split("/");
+    std::string pathSeparator(1, Path::separator);
+    auto outputPathSegments = outputPath.split(pathSeparator.c_str());
     outputPathSegments.pop_back();
-    auto filePathSegments = Utf8(path).split("/");
+    auto filePathSegments = Utf8(path).split(pathSeparator.c_str());
     filePathSegments.pop_back();
 
     std::vector<Utf8> relativePathFromOutputSegments;
@@ -167,7 +182,7 @@ std::string Compiler::compileModuleFileToJs(const Module::Ptr &module, const std
 
     relativePathFromOutput = Utf8::join(relativePathFromOutputSegments, "/");
 
-    auto ctx = m_d->createConversionContext(path, relativePathFromOutput.data());
+    auto ctx = m_d->createConversionContext(module, path, relativePathFromOutput.data());
     LanguageNodesToJs lnt;
     lnt.convert(node, contents, section->m_children, 0, ctx);
     delete ctx;
@@ -225,13 +240,13 @@ std::string Compiler::moduleFileBuildPath(const Module::Ptr &plugin, const std::
 
     std::string buildPath = createModuleBuildPath(plugin);
     std::string fileName = Path::name(path);
-    return buildPath + "/" + fileName + m_d->config.m_outputExtension;
+    return Path::join(buildPath, fileName + m_d->config.m_outputExtension);
 }
 
 std::string Compiler::moduleBuildPath(const Module::Ptr &module){
     std::string buildDir = Path::join( module->packagePath(), m_d->config.m_packageBuildPath);
     if ( !module->pathFromPackage().empty() ){
-        buildDir += "/" + module->pathFromPackage();
+        buildDir = Path::join(buildDir, module->pathFromPackage());
     }
     return buildDir;
 }
@@ -280,19 +295,20 @@ void Compiler::configureImplicitType(const std::string &type){
 }
 
 std::shared_ptr<ElementsModule> Compiler::compile(Ptr compiler, const std::string &path, Engine *engine){
-    std::string pluginPath = Path::parent(path);
+    std::string modulePath = Path::parent(path);
     std::string fileName = Path::name(path);
 
     Module::Ptr module(nullptr);
-    if ( Module::existsIn(pluginPath) ){
-        module = Module::createFromPath(pluginPath);
+    if ( Module::existsIn(modulePath) ){
+        //HERE: When making module files optional, the package must be found in parent directories
+        module = Module::createFromPath(modulePath);
         Package::Ptr package = Package::createFromPath(module->package());
         compiler->m_d->packageGraph->loadRunningPackageAndModule(package, module);
     } else {
-        module = compiler->m_d->packageGraph->createRunningModule(pluginPath);
+        module = compiler->m_d->packageGraph->createRunningModule(modulePath);
     }
 
-    auto epl = engine ? ElementsModule::create(module, engine) : ElementsModule::create(module, compiler);
+    auto epl = engine ? ElementsModule::create(module, compiler, engine) : ElementsModule::create(module, compiler);
     ElementsModule::addModuleFile(epl, fileName);
     epl->compile();
 
@@ -311,14 +327,14 @@ std::shared_ptr<ElementsModule> Compiler::compileModule(Compiler::Ptr compiler, 
     Package::Ptr package = Package::createFromPath(module->package());
     compiler->m_d->packageGraph->loadRunningPackageAndModule(package, module);
 
-    auto epl = engine ? ElementsModule::create(module, engine) : ElementsModule::create(module, compiler);
+    auto epl = engine ? ElementsModule::create(module, compiler, engine) : ElementsModule::create(module, compiler);
     epl->compile();
     return epl;
 }
 
 std::vector<std::shared_ptr<ElementsModule> > Compiler::compilePackage(Compiler::Ptr compiler, const std::string &path, Engine *engine){
     if ( !Path::exists(path) ){
-        THROW_EXCEPTION(lv::Exception, Utf8("Path does not exist: %.").format(path), lv::Exception::toCode("~Path"));
+        THROW_EXCEPTION(lv::Exception, Utf8("Path doesn't exist: %.").format(path), lv::Exception::toCode("~Path"));
     }
     if ( !Package::existsIn(path) ){
         THROW_EXCEPTION(lv::Exception, Utf8("Package not found in %.").format(path), lv::Exception::toCode("~Path"));
@@ -339,9 +355,9 @@ std::vector<std::shared_ptr<ElementsModule> > Compiler::compilePackage(Compiler:
 std::shared_ptr<ElementsModule> Compiler::compileImportedModule(Compiler::Ptr compiler, const std::string &importKey, const Module::Ptr& requestingModule, Engine *engine){
     auto foundEp = compiler->m_d->loadedModules.find(importKey);
     if ( foundEp == compiler->m_d->loadedModules.end() ){
-        Module::Ptr plugin = compiler->m_d->packageGraph->loadModule(importKey, requestingModule);
-        if ( plugin ){
-            auto ep = engine ? ElementsModule::create(plugin, engine) : ElementsModule::create(plugin, compiler);
+        Module::Ptr module = compiler->m_d->packageGraph->loadModule(importKey, requestingModule);
+        if ( module  ){
+            auto ep = engine ? ElementsModule::create(module , compiler, engine) : ElementsModule::create(module , compiler);
             compiler->m_d->loadedModules[importKey] = ep;
             compiler->m_d->loadedModulesByPath[ep->module()->path()] = ep;
             return ep;
@@ -432,6 +448,9 @@ void Compiler::Config::initialize(const MLNode &config){
     }
     if ( config.hasKey("allowUnresolved") ){
         m_allowUnresolved = config["allowUnresolved"].asBool();
+    }
+    if ( config.hasKey("enableComponentMetaInfo") ){
+        m_enableComponentMetaInfo = config["enableComponentMetaInfo"].asBool();
     }
 }
 
