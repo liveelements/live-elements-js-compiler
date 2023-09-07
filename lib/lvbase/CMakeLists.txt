@@ -56,7 +56,6 @@ if(ENABLE_STACK_TRACE)
         target_compile_definitions(lvbase PUBLIC USE_STACK_TRACE)
         target_link_libraries(lvbase dbghelp)
     elseif(UNIX AND NOT APPLE)
-        target_link_libraries(lvbase -ldl)
         if ( BUILD_UNIX_BFD_TRACE )
             target_compile_definitions(lvbase PRIVATE ENABLE_STACK_TRACE)
             target_link_libraries(lvbase -lbfd)
@@ -134,6 +133,7 @@ if (WIN32)
 endif ()
 
 if(UNIX AND NOT APPLE)
+    target_link_libraries(lvbase -ldl)
     target_sources(lvbase
         PRIVATE
             "${CMAKE_CURRENT_SOURCE_DIR}/src/stacktrace_unix.cpp"
