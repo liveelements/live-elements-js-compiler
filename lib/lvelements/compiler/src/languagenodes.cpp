@@ -279,27 +279,24 @@ ParameterListNode *BaseNode::scanFormalParameters(BaseNode *parent, const TSNode
             auto paramNode = new ParameterNode(ftpc, nameNode);
             result->m_parameters.push_back(paramNode);
         } else if ( strcmp(ts_node_type(ftpc), "required_parameter") == 0 ){
-            uint32_t paramterInteralCount = ts_node_child_count(ftpc);
-            for (uint32_t pi = 0; pi < paramterInteralCount; ++pi){
-                TSNode ftpci = ts_node_child(ftpc, pi);
-                assertError(parent, ftpci, "Function declaration not supported.");
-                if (strcmp(ts_node_type(ftpci), "identifier") == 0){
-                    auto nameNode = new IdentifierNode(ftpci);
-                    auto paramNode = new ParameterNode(ftpc, nameNode);
-                    result->m_parameters.push_back(paramNode);
-                }
+            auto name = BaseNode::nodeChildByFieldName(ftpc, "pattern");
+            auto paramNode = new ParameterNode(ftpc, new IdentifierNode(name));
+            
+            auto type = BaseNode::nodeChildByFieldName(ftpc, "type");
+            if (!ts_node_is_null(type)) {
+                paramNode->m_type = new TypeNode(type);
             }
+            result->m_parameters.push_back(paramNode);
         } else if ( strcmp(ts_node_type(ftpc), "optional_parameter") == 0 ){
-            uint32_t paramterInteralCount = ts_node_child_count(ftpc);
-            for (uint32_t pi = 0; pi < paramterInteralCount; ++pi){
-                TSNode ftpci = ts_node_child(ftpc, pi);
-                assertError(parent, ftpci, "Function declaration not supported.");
-                if (strcmp(ts_node_type(ftpci), "identifier") == 0){
-                    auto nameNode = new IdentifierNode(ftpci);
-                    auto paramNode = new ParameterNode(ftpc, nameNode);
-                    result->m_parameters.push_back(paramNode);
-                }
+            auto name = BaseNode::nodeChildByFieldName(ftpc, "pattern");
+            auto paramNode = new ParameterNode(ftpc, new IdentifierNode(name));
+            paramNode->m_isOptional = true;
+            
+            auto type = BaseNode::nodeChildByFieldName(ftpc, "type");
+            if (!ts_node_is_null(type)) {
+                paramNode->m_type = new TypeNode(type);
             }
+            result->m_parameters.push_back(paramNode);
         }
     }
     return result;
@@ -1429,68 +1426,33 @@ void BaseNode::visitClassDeclaration(BaseNode *parent, const TSNode &node)
 
 void BaseNode::visitVariableDeclaration(BaseNode *parent, const TSNode &node)
 {
-    VariableDeclarationNode* vdn = new VariableDeclarationNode(node);
-    parent->addChild(vdn);
-
-    uint32_t count = ts_node_child_count(node);
-    for ( uint32_t i = 0; i < count; ++i ){
-        TSNode child = ts_node_child(node, i);
-        if ( strcmp(ts_node_type(child), "variable_declarator") == 0 ){
-            VariableDeclaratorNode* decl = new VariableDeclaratorNode(child);
-            decl->setParent(vdn);
-            vdn->addChild(decl);
-            vdn->m_declarators.push_back(decl);
-
-            uint32_t subcount = ts_node_child_count(child);
-            bool equalsFound = false;
-
-            for ( uint32_t k = 0; k < subcount; ++k ){
-                TSNode smaller_child = ts_node_child(child, k);
-                if ( !equalsFound && strcmp(ts_node_type(smaller_child), "identifier") == 0 ){
-                    IdentifierNode* id = new IdentifierNode(smaller_child);
-                    decl->addChild(id);
-                    addToDeclarations(decl, id);
-                } else if ( strcmp(ts_node_type(smaller_child), "=") == 0 ){
-                    equalsFound = true;
-                } else {
-                    visit(decl, smaller_child);
-                }
-            }
-        } else if ( strcmp(ts_node_type(child), ";") == 0 ) {
-            vdn->m_hasSemicolon = true;
-        } else {
-            visit(vdn, child);
-        }
-    }
-
+    return visitLexicalDeclaration(parent, node);
 }
 
 void BaseNode::visitLexicalDeclaration(BaseNode *parent, const TSNode &node){
     VariableDeclarationNode* vdn = new VariableDeclarationNode(node);
+    vdn->m_declarationForm = VariableDeclarationNode::Let;
     parent->addChild(vdn);
     uint32_t count = ts_node_child_count(node);
     for ( uint32_t i = 0; i < count; ++i ){
         TSNode child = ts_node_child(node, i);
         if ( strcmp(ts_node_type(child), "variable_declarator") == 0 ){
-            VariableDeclaratorNode* decl = new VariableDeclaratorNode(child);
-            decl->setParent(vdn);
-            vdn->addChild(decl);
-            vdn->m_declarators.push_back(decl);
+            VariableDeclaratorNode* declaratorNode = new VariableDeclaratorNode(child);
+            declaratorNode->setParent(vdn);
+            vdn->addChild(declaratorNode);
+            vdn->m_declarators.push_back(declaratorNode);
+            
+            TSNode name = BaseNode::nodeChildByFieldName(child, "name");
+            TSNode type = BaseNode::nodeChildByFieldName(child, "type");
+            TSNode value = BaseNode::nodeChildByFieldName(child, "value");
 
-            uint32_t subcount = ts_node_child_count(child);
-            bool equalsFound = false;
-
-            for ( uint32_t k = 0; k < subcount; ++k ){
-                TSNode smaller_child = ts_node_child(child, k);
-                if ( !equalsFound && strcmp(ts_node_type(smaller_child), "identifier") == 0 ){
-                    IdentifierNode* id = new IdentifierNode(smaller_child);
-                    decl->addChild(id);
-                    addToDeclarations(decl, id);
-                } else if ( strcmp(ts_node_type(smaller_child), "=") == 0 ){
-                    equalsFound = true;
-                } else {
-                    visit(decl, smaller_child);
-                }
+            declaratorNode->m_name = new IdentifierNode(name);
+            if (!ts_node_is_null(type)) {
+                declaratorNode->m_type = new TypeNode(type);
+            }
+            if (!ts_node_is_null(value)) {
+                declaratorNode->m_value = new ExpressionNode(value);
+                visit(declaratorNode->m_value, value);
             }
         } else if ( strcmp(ts_node_type(child), ";") == 0 ) {
             vdn->m_hasSemicolon = true;

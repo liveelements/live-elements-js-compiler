@@ -35,7 +35,65 @@ void LanguageNodesToJs::convert(BaseNode* node, const std::string &source, std::
         convertNewTaggedComponentExpression(node->as<NewTaggedComponentExpressionNode>(), source, sections, indentValue, ctx);
     } else if ( node->isNodeType<NewTrippleTaggedComponentExpressionNode>() ){
         convertNewTrippleTaggedComponentExpression(node->as<NewTrippleTaggedComponentExpressionNode>(), source, sections, indentValue, ctx);
-    } else {
+    } 
+    else if (node->isNodeType<VariableDeclarationNode>()) {
+        auto variableDecl = node->as<VariableDeclarationNode>();
+        ElementsInsertion* compose = new ElementsInsertion;
+        compose->from = node->startByte();
+        compose->to = node->endByte();
+
+        *compose << "\n" << indent(indentValue + 2) << variableDecl->declarationFormString() << " ";
+        for (auto i = 0; i < variableDecl->declarators().size(); i++) {
+            const auto declarator = variableDecl->declarators()[i];
+            if (i != 0)
+                *compose << ",";
+            *compose << slice(source, declarator->name());
+
+            if (ctx->outputTypes && declarator->type()) {
+                *compose << slice(source, declarator->type());
+            }
+
+            if (declarator->value()) {
+                JSSection* jssection = new JSSection;
+                jssection->from = declarator->value()->startByte();
+                jssection->to   = declarator->value()->endByte();
+                convert(declarator->value(), source, jssection->m_children, indentValue + 1, ctx);
+                 *compose << " = " << jssection << "\n";
+            }
+        }
+        sections.push_back(compose);
+    }
+    else if ( node->isNodeType<FunctionDeclarationNode>() ){
+        auto funcNode = node->as<FunctionDeclarationNode>();
+        ElementsInsertion* compose = new ElementsInsertion;
+        compose->from = node->startByte();
+        compose->to = node->endByte();
+
+        std::string paramList = "";
+        
+        auto params = funcNode->parameters();
+        for ( auto pit = params->parameters().begin(); pit != params->parameters().end(); ++pit ) {
+            if ( pit != params->parameters().begin() )
+                paramList += ",";
+            paramList += slice(source, (*pit)->identifier());
+            if (ctx->outputTypes && (*pit)->type()) {
+                paramList += slice(source, (*pit)->type());
+            }
+        }
+
+        *compose << indent(indentValue + 2) << "function " << slice(source, funcNode->name()) << "(" << paramList << ")";
+
+        if ( funcNode->body() ){
+            JSSection* jssection = new JSSection;
+            jssection->from = funcNode->body()->startByte();
+            jssection->to   = funcNode->body()->endByte();
+            convert(funcNode->body(), source, jssection->m_children, indentValue + 1, ctx);
+            *compose << jssection << "\n";
+        }
+
+        sections.push_back(compose);
+    }
+    else {
         for ( BaseNode* child : node->children() ){
             convert(child, source, sections, indentValue, ctx);
         }
