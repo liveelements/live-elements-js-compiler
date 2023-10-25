@@ -28,7 +28,6 @@ try{
         fs.unlinkSync(path)
         exit(0)
     })
-    exit(0)
 } catch (err) {
     console.error(err)
     exit(1)
