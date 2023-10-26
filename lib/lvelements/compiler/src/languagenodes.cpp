@@ -314,11 +314,9 @@ ParameterListNode *BaseNode::scanFormalTypeParameters(BaseNode *parent, const TS
             if ( ts_node_child_count(ftpc) > 0 ){
                 TSNode typeParameter = ts_node_child(ftpc, 0);
 
-                std::string paramKey = "name";
-                TSNode parameterName = ts_node_child_by_field_name(typeParameter, paramKey.c_str(), paramKey.length());
+                TSNode parameterName = BaseNode::nodeChildByFieldName(typeParameter, "name");
                 assertValid(parent, parameterName, "Parameter name is null.");
-                paramKey = "type";
-                TSNode parameterType = ts_node_child_by_field_name(typeParameter, paramKey.c_str(), paramKey.length());
+                TSNode parameterType = BaseNode::nodeChildByFieldName(typeParameter, "type");
                 assertValid(parent, parameterType, "Parameter type is null.");
 
                 if ( strcmp(ts_node_type(typeParameter), "required_type_parameter") == 0 ){
@@ -752,13 +750,11 @@ void BaseNode::visitPropertyDeclaration(BaseNode *parent, const TSNode &node){
     PropertyDeclarationNode* enode = new PropertyDeclarationNode(node);
     parent->addChild(enode);
 
-    std::string paramKey = "name";
-    TSNode propName = ts_node_child_by_field_name(node, paramKey.c_str(), paramKey.length());
+    TSNode propName = BaseNode::nodeChildByFieldName(node, "name");
     assertValid(parent, propName, "Property name is null.");
     enode->m_name = new IdentifierNode(propName);
     enode->addChild(enode->m_name);
-    paramKey = "type";
-    TSNode propType = ts_node_child_by_field_name(node, paramKey.c_str(), paramKey.length());
+    TSNode propType = BaseNode::nodeChildByFieldName(node, "type");
     if ( !ts_node_is_null(propType) ){
         enode->m_type = new TypeNode(propType);
         enode->addChild(enode->m_type);
@@ -1195,11 +1191,9 @@ void BaseNode::visitConstructorDefinition(BaseNode *parent, const TSNode &node)
                     if ( ts_node_child_count(ftpc) > 0 ){
                         TSNode typeParameter = ts_node_child(ftpc, 0);
 
-                        std::string paramKey = "name";
-                        TSNode parameterName = ts_node_child_by_field_name(typeParameter, paramKey.c_str(), paramKey.length());
+                        TSNode parameterName = BaseNode::nodeChildByFieldName(typeParameter, "name");
                         assertValid(cdnode, parameterName, "Parameter name is null.");
-                        paramKey = "type";
-                        TSNode parameterType = ts_node_child_by_field_name(typeParameter, paramKey.c_str(), paramKey.length());
+                        TSNode parameterType = BaseNode::nodeChildByFieldName(typeParameter, "type");
                         assertValid(cdnode, parameterType, "Parameter type is null.");
 
                         if ( strcmp(ts_node_type(typeParameter), "required_type_parameter") == 0 ){
@@ -1349,7 +1343,6 @@ void BaseNode::visitTrippleTaggedString(BaseNode *parent, const TSNode &node){
 void BaseNode::visitFunction(BaseNode *parent, const TSNode &node){
     FunctionNode* enode = new FunctionNode(node);
     parent->addChild(enode);
-
     uint32_t count = ts_node_child_count(node);
     for ( uint32_t i = 0; i < count; ++i ){
         TSNode child = ts_node_child(node, i);
@@ -1424,14 +1417,18 @@ void BaseNode::visitClassDeclaration(BaseNode *parent, const TSNode &node)
         }
 }
 
-void BaseNode::visitVariableDeclaration(BaseNode *parent, const TSNode &node)
-{
-    return visitLexicalDeclaration(parent, node);
+void BaseNode::visitVariableDeclaration(BaseNode *parent, const TSNode &node){
+    return visitDeclarationForm(parent, node, VariableDeclarationNode::Var);
 }
 
 void BaseNode::visitLexicalDeclaration(BaseNode *parent, const TSNode &node){
+    visitDeclarationForm(parent, node, VariableDeclarationNode::Let);
+}
+
+
+void BaseNode::visitDeclarationForm(BaseNode * parent, const TSNode & node, int form){
     VariableDeclarationNode* vdn = new VariableDeclarationNode(node);
-    vdn->m_declarationForm = VariableDeclarationNode::Let;
+    vdn->m_declarationForm = static_cast<VariableDeclarationNode::DeclarationForm>(form);
     parent->addChild(vdn);
     uint32_t count = ts_node_child_count(node);
     for ( uint32_t i = 0; i < count; ++i ){
@@ -1447,11 +1444,15 @@ void BaseNode::visitLexicalDeclaration(BaseNode *parent, const TSNode &node){
             TSNode value = BaseNode::nodeChildByFieldName(child, "value");
 
             declaratorNode->m_name = new IdentifierNode(name);
+            declaratorNode->addChild(declaratorNode->m_name);
+            addToDeclarations(declaratorNode, declaratorNode->m_name);
             if (!ts_node_is_null(type)) {
                 declaratorNode->m_type = new TypeNode(type);
+                declaratorNode->addChild(declaratorNode->m_type);
             }
             if (!ts_node_is_null(value)) {
                 declaratorNode->m_value = new ExpressionNode(value);
+                declaratorNode->addChild(declaratorNode->m_value);
                 visit(declaratorNode->m_value, value);
             }
         } else if ( strcmp(ts_node_type(child), ";") == 0 ) {
@@ -1461,6 +1462,7 @@ void BaseNode::visitLexicalDeclaration(BaseNode *parent, const TSNode &node){
         }
     }
 }
+
 
 void BaseNode::visitDestructuringPattern(BaseNode *parent, const TSNode &node){
     uint32_t count = ts_node_child_count(node);
@@ -2274,7 +2276,7 @@ std::string ArrowFunctionNode::toString(int indent) const{
 
 
 FunctionNode::FunctionNode(const TSNode &node)
-    : BaseNode(node, FunctionDeclarationNode::nodeInfo())
+    : BaseNode(node, FunctionNode::nodeInfo())
     , m_parameters(nullptr)
     , m_body(nullptr)
 {

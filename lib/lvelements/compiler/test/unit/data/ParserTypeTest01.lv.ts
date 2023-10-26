@@ -8,15 +8,10 @@ export class X extends Element{
     }
 
     run(){
-            let a: number = 100
-
-            let x:number = 100
-
-            let y:string = 20
-
-            let {m, n} = {m: 1, n: 2}
-            function test(c:number,d:number){
-       }
-
+        var a: number = 100
+        let x:number = 100
+        let y:string = 20
+        let {m, n} = {m: 1, n: 2}
+        function test(c:number,d:number){}
    }
 }

@@ -181,6 +181,8 @@ private:
     static void visitObject(BaseNode* parent, const TSNode& node);
     static void visitTryCatchBlock(BaseNode* parent, const TSNode& node);
 
+    static void visitDeclarationForm(BaseNode * parent, const TSNode & node, int form);
+
     BaseNode*                  m_parent;
     TSNode                     m_node;
     LanguageNodeInfo::ConstPtr m_nodeInfo;
@@ -357,6 +359,8 @@ public:
     }
 
     const std::vector<VariableDeclaratorNode*>& declarators() const { return m_declarators; }
+    bool hasSemicolon() const{ return m_hasSemicolon; }
+
 private:
     std::vector<VariableDeclaratorNode*> m_declarators;
     bool m_hasSemicolon;
