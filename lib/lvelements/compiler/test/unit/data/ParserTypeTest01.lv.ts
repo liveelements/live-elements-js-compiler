@@ -12,6 +12,7 @@ export class X extends Element{
         let x:number = 100
         let y:string = 20
         let {m, n} = {m: 1, n: 2}
+        const z:number = 100
         function test(c:number,d:number){}
    }
 }

@@ -1422,7 +1422,13 @@ void BaseNode::visitVariableDeclaration(BaseNode *parent, const TSNode &node){
 }
 
 void BaseNode::visitLexicalDeclaration(BaseNode *parent, const TSNode &node){
-    visitDeclarationForm(parent, node, VariableDeclarationNode::Let);
+    TSNode kind = BaseNode::nodeChildByFieldName(node, "kind");
+    VariableDeclarationNode::DeclarationForm mode = VariableDeclarationNode::Let;
+    if (!ts_node_is_null(kind) && strcmp(ts_node_type(kind), "const") == 0) {
+        mode = VariableDeclarationNode::Const;
+    }
+
+    visitDeclarationForm(parent, node, mode);
 }
 
 
@@ -1430,6 +1436,7 @@ void BaseNode::visitDeclarationForm(BaseNode * parent, const TSNode & node, int 
     VariableDeclarationNode* vdn = new VariableDeclarationNode(node);
     vdn->m_declarationForm = static_cast<VariableDeclarationNode::DeclarationForm>(form);
     parent->addChild(vdn);
+
     uint32_t count = ts_node_child_count(node);
     for ( uint32_t i = 0; i < count; ++i ){
         TSNode child = ts_node_child(node, i);
