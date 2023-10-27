@@ -1343,17 +1343,25 @@ void BaseNode::visitTrippleTaggedString(BaseNode *parent, const TSNode &node){
 void BaseNode::visitFunction(BaseNode *parent, const TSNode &node){
     FunctionNode* enode = new FunctionNode(node);
     parent->addChild(enode);
-    uint32_t count = ts_node_child_count(node);
-    for ( uint32_t i = 0; i < count; ++i ){
-        TSNode child = ts_node_child(node, i);
-        if ( strcmp(ts_node_type(child), "formal_parameters") == 0 ){
-            enode->m_parameters = BaseNode::scanFormalParameters(parent, child);
-        } else if ( strcmp(ts_node_type(child), "statement_block") == 0 ){
-            enode->m_body = new JsBlockNode(child);
-            enode->addChild(enode->m_body);
-            visitChildren(enode->m_body, child);
-        }
+
+    // Function parameters
+    const TSNode parameters = BaseNode::nodeChildByFieldName(node, "parameters");
+    assertValid(parent, parameters, "Function parameters are null.");
+    enode->m_parameters = BaseNode::scanFormalParameters(parent, parameters);
+
+    // Function return type
+    const TSNode returnType = BaseNode::nodeChildByFieldName(node, "return_type");
+    if (!ts_node_is_null(returnType)) {
+        enode->m_returnType = new TypeNode(returnType);
+        enode->addChild(enode->m_returnType);
     }
+
+    // Function body
+    const TSNode body = BaseNode::nodeChildByFieldName(node, "body");
+    assertValid(parent, body, "Function body is null.");
+    enode->m_body = new JsBlockNode(body);
+    enode->addChild(enode->m_body);
+    visitChildren(enode->m_body, body);
 
     if ( enode->m_parameters ){
         if (enode->m_body ){

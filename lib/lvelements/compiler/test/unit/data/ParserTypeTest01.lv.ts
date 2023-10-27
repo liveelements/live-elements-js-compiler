@@ -18,5 +18,7 @@ export class X extends Element{
         const test2 = (a:number, b:number): number => {}
 
         const test3 = (s) => new Array(100)
+
+       const simple = function(a: number):number{}
    }
 }

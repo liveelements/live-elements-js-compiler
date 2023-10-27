@@ -66,7 +66,9 @@ void LanguageNodesToJs::convert(BaseNode* node, const std::string &source, std::
         convertFunctionDeclaration(node->as<FunctionDeclarationNode>(), source, sections, indentValue, ctx);
     } else if (node->isNodeType<ArrowFunctionNode>()) {
         convertArrowFunction(node->as<ArrowFunctionNode>(), source, sections, indentValue, ctx);
-    } 
+    } else if (node->isNodeType<FunctionNode>()) {
+        convertFunction(node->as<FunctionNode>(), source, sections, indentValue, ctx);
+    }
     else {
         for ( BaseNode* child : node->children() ){
             convert(child, source, sections, indentValue, ctx);
@@ -1213,6 +1215,48 @@ void LanguageNodesToJs::convertArrowFunction(
         jssection->from = arrowNode->body()->startByte();
         jssection->to   = arrowNode->body()->endByte();
         convert(arrowNode->body(), source, jssection->m_children, indentValue + 1, ctx);
+        *compose << jssection;
+    }
+    *compose << "\n";
+    
+    sections.push_back(compose);
+}
+
+void LanguageNodesToJs::convertFunction(
+    FunctionNode *funcNode, 
+    const std::string &source, 
+    std::vector<ElementsInsertion *> &sections, 
+    int indentValue, 
+    BaseNode::ConversionContext *ctx)
+{
+    ElementsInsertion* compose = new ElementsInsertion;
+    compose->from = funcNode->startByte();
+    compose->to = funcNode->endByte();
+
+    std::string paramList = "";
+    
+    auto params = funcNode->parameters();
+    for ( auto pit = params->parameters().begin(); pit != params->parameters().end(); ++pit ) {
+        if ( pit != params->parameters().begin() )
+            paramList += ",";
+        paramList += slice(source, (*pit)->identifier());
+        if (ctx->outputTypes && (*pit)->type()) {
+            paramList += slice(source, (*pit)->type());
+        }
+    }
+
+    std::string returnType = "";
+    if (ctx->outputTypes && funcNode->returnType() != nullptr) {
+        returnType = slice(source, funcNode->returnType());
+    }
+
+    *compose << "\n" << indent(indentValue + 2) << "function " << "(" << paramList << ")" << returnType;
+
+    if ( funcNode->body() ){
+        JSSection* jssection = new JSSection;
+        jssection->from = funcNode->body()->startByte();
+        jssection->to   = funcNode->body()->endByte();
+        convert(funcNode->body(), source, jssection->m_children, indentValue + 1, ctx);
         *compose << jssection;
     }
     *compose << "\n";
