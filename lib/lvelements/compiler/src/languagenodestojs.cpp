@@ -64,7 +64,10 @@ void LanguageNodesToJs::convert(BaseNode* node, const std::string &source, std::
         convertVariableDeclaration(node->as<VariableDeclarationNode>(), source, sections, indentValue, ctx);
     } else if ( node->isNodeType<FunctionDeclarationNode>() ){
         convertFunctionDeclaration(node->as<FunctionDeclarationNode>(), source, sections, indentValue, ctx);
-    } else {
+    } else if (node->isNodeType<ArrowFunctionNode>()) {
+        convertArrowFunction(node->as<ArrowFunctionNode>(), source, sections, indentValue, ctx);
+    } 
+    else {
         for ( BaseNode* child : node->children() ){
             convert(child, source, sections, indentValue, ctx);
         }
@@ -1174,6 +1177,49 @@ void LanguageNodesToJs::convertFunctionDeclaration(
     
     sections.push_back(compose);
 }
+
+void LanguageNodesToJs::convertArrowFunction(
+    ArrowFunctionNode *arrowNode, 
+    const std::string &source, 
+    std::vector<ElementsInsertion *> &sections, 
+    int indentValue, 
+    BaseNode::ConversionContext *ctx)
+{
+    ElementsInsertion* compose = new ElementsInsertion;
+    compose->from = arrowNode->startByte();
+    compose->to = arrowNode->endByte();
+
+    std::string paramList = "";
+    
+    auto params = arrowNode->parameters();
+    for ( auto pit = params->parameters().begin(); pit != params->parameters().end(); ++pit ) {
+        if ( pit != params->parameters().begin() )
+            paramList += ",";
+        paramList += slice(source, (*pit)->identifier());
+        if (ctx->outputTypes && (*pit)->type()) {
+            paramList += slice(source, (*pit)->type());
+        }
+    }
+
+    std::string returnType = "";
+    if (ctx->outputTypes && arrowNode->returnType() != nullptr) {
+        returnType = slice(source, arrowNode->returnType());
+    }
+
+    *compose << "\n" << indent(indentValue + 2) << "(" << paramList << ")" << returnType << " => ";
+
+    if ( arrowNode->body() ){
+        JSSection* jssection = new JSSection;
+        jssection->from = arrowNode->body()->startByte();
+        jssection->to   = arrowNode->body()->endByte();
+        convert(arrowNode->body(), source, jssection->m_children, indentValue + 1, ctx);
+        *compose << jssection;
+    }
+    *compose << "\n";
+    
+    sections.push_back(compose);
+}
+
 
 void LanguageNodesToJs::convertPropertyDeclaration(PropertyDeclarationNode *node, const std::string &source, const std::string &componentReference, int indt, BaseNode::ConversionContext *ctx, const PropertyAccessorDeclarationNode::PropertyAccess &propertyAccess, ElementsInsertion *compose){
     *compose << indent(indt) << BaseNode::ConversionContext::baseComponentName(ctx) << ".addProperty(" + componentReference + ", '" << slice(source, node->name())

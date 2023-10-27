@@ -80,6 +80,14 @@ public:
         BaseNode::ConversionContext *ctx
     );
 
+    void convertArrowFunction(
+        ArrowFunctionNode* node,
+        const std::string &source,
+        std::vector<ElementsInsertion *> &sections,
+        int indentValue,
+        BaseNode::ConversionContext *ctx
+    );
+
     void convertPropertyDeclaration(
         PropertyDeclarationNode* node,
         const std::string& source,
