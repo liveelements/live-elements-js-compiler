@@ -1156,7 +1156,12 @@ void LanguageNodesToJs::convertFunctionDeclaration(
         }
     }
 
-    *compose << "\n" << indent(indentValue + 2) << "function " << (funcNode->name() ? slice(source, funcNode->name()) : "") << "(" << paramList << ")";
+    std::string returnType = "";
+    if (ctx->outputTypes && funcNode->returnType() != nullptr) {
+        returnType = slice(source, funcNode->returnType());
+    }
+
+    *compose << "\n" << indent(indentValue + 2) << "function " << (funcNode->name() ? slice(source, funcNode->name()) : "") << "(" << paramList << ")" << returnType;
 
     if ( funcNode->body() ){
         JSSection* jssection = new JSSection;

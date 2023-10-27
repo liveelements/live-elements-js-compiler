@@ -970,6 +970,7 @@ public:
 
     ParameterListNode* parameters() const{ return m_parameters; }
     JsBlockNode* body() const{ return m_body; }
+    TypeNode* returnType() const{ return m_returnType; }
 
 protected:
     FunctionNode(const TSNode& node, const LanguageNodeInfo::ConstPtr& ni);
@@ -977,6 +978,7 @@ protected:
 private:
     ParameterListNode* m_parameters;
     JsBlockNode*       m_body;
+    TypeNode*          m_returnType;
 };
 
 class FunctionDeclarationNode: public FunctionNode{
