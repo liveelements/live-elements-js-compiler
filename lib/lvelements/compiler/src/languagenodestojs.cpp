@@ -739,14 +739,14 @@ void LanguageNodesToJs::convertNewComponentExpression(NewComponentExpressionNode
     }
 
     for (size_t i = 0; i < node->assignments().size(); ++i){
-        if ( node->assignments()[i]->property().size() == 0 )
+        const auto assignment = node->assignments()[i];
+        if ( assignment->property().size() == 0 )
             continue;
 
         std::string bindingsInJs = node->assignments()[i]->bindingIdentifiersToJs(source);
-
-        if ( bindingsInJs.length() > 0 ){ // has bindings
-            if (node->assignments()[i]->expression() ){
-                auto& property = node->assignments()[i]->property();
+        if ( bindingsInJs.length() > 0 && assignment->isBindingAssignment()){ // has bindings
+            if (assignment->expression() ){
+                auto& property = assignment->property();
                 std::string object = "this";
                 for (size_t x = 0; x < property.size() - 1; x++){
                     object += "." + slice(source, property[x]);
@@ -756,7 +756,7 @@ void LanguageNodesToJs::convertNewComponentExpression(NewComponentExpressionNode
                          << indent(indt + 2) << "function(){ return ";
 
                 el::JSSection* section = new el::JSSection;
-                auto expr = node->assignments()[i]->expression();
+                auto expr = assignment->expression();
                 section->from = expr->startByte();
                 section->to = expr->endByte();
                 convert(expr, source, section->m_children, indt + 2, ctx);
@@ -770,8 +770,8 @@ void LanguageNodesToJs::convertNewComponentExpression(NewComponentExpressionNode
                 *compose << "}.bind(" << object << "),\n"
                          << indent(indt + 2) << bindingsInJs << "\n"
                          << indent(indt + 1) << ")\n";
-            } else if ( node->assignments()[i]->statementBlock() ){
-                auto& property = node->assignments()[i]->property();
+            } else if ( assignment->statementBlock() ){
+                auto& property = assignment->property();
                 std::string object = "this";
                 for (size_t x = 0; x < property.size() - 1; x++){
                     object += "." + slice(source, property[x]);
@@ -781,7 +781,7 @@ void LanguageNodesToJs::convertNewComponentExpression(NewComponentExpressionNode
                          << indent(indt + 2) << "function()";
 
                 el::JSSection* section = new el::JSSection;
-                auto block = node->assignments()[i]->statementBlock();
+                auto block = assignment->statementBlock();
                 section->from = block->startByte();
                 section->to = block->endByte();
                 convert(block, source, section->m_children, indt + 2, ctx);
@@ -797,11 +797,11 @@ void LanguageNodesToJs::convertNewComponentExpression(NewComponentExpressionNode
                          << indent(indt + 1) << ")\n";
             }
         } else {
-            if (node->assignments()[i]->expression()){
+            if (assignment->expression()){
                 *compose << indent(indt + 1) << "this";
-                auto expr = node->assignments()[i]->expression();
-                for (size_t prop = 0; prop < node->assignments()[i]->property().size(); ++prop){
-                    *compose << "." << slice(source, node->assignments()[i]->property()[prop]);
+                auto expr = assignment->expression();
+                for (size_t prop = 0; prop < assignment->property().size(); ++prop){
+                    *compose << "." << slice(source, assignment->property()[prop]);
                 }
                 *compose << " = ";
 
@@ -817,15 +817,15 @@ void LanguageNodesToJs::convertNewComponentExpression(NewComponentExpressionNode
 
                 *compose << "\n";
 
-            } else if (node->assignments()[i]->statementBlock() ) {
+            } else if (assignment->statementBlock() ) {
                 std::string propName = "this";
-                for (size_t prop = 0; prop < node->assignments()[i]->property().size(); ++prop){
-                    propName += "." + slice(source, node->assignments()[i]->property()[prop]);
+                for (size_t prop = 0; prop <assignment->property().size(); ++prop){
+                    propName += "." + slice(source, assignment->property()[prop]);
                 }
                 *compose << indent(indt + 1) << propName << " = " << "(function()";
 
                 el::JSSection* section = new el::JSSection;
-                auto block = node->assignments()[i]->statementBlock();
+                auto block = assignment->statementBlock();
                 section->from = block->startByte();
                 section->to = block->endByte();
                 convert(block, source, section->m_children, indt + 2, ctx);
