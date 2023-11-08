@@ -217,10 +217,32 @@ void compileModuleWrap(const Napi::CallbackInfo &info){
         if ( !Path::exists(modulePath) ){
             THROW_EXCEPTION(lv::Exception, "Error: Module path not found.", lv::Exception::toCode("~Path"));
         }
+        if ( !Module::existsIn(modulePath) ){
+            THROW_EXCEPTION(lv::Exception, Utf8("Error: Module path not found: %").format(modulePath), lv::Exception::toCode("~Path"));
+        }
+
 
         lv::el::Compiler::Config config;
         config.initialize(compilerOptions);
         lv::el::Compiler::Ptr compiler = lv::el::Compiler::create(config);
+
+        auto module = Module::createFromPath(modulePath);
+        Package::Ptr package = Package::createFromPath(module->package());
+        if ( package ){
+            std::string current = package->path();
+            std::vector<std::string> importPaths;
+            while ( Path::exists(current) ){
+                auto importPath = Path::join(current, compiler->importLocalPath() );
+                if ( Package::existsIn(current) && Path::exists( importPath ) ){
+                    importPaths.push_back(importPath);
+                }
+                if ( Path::rootPath(current) == current ){
+                    break;
+                }
+                current = Path::parent(current);
+            }
+            compiler->setPackageImportPaths(importPaths);
+        }
 
         lv::el::ElementsModule::Ptr elemMod = lv::el::Compiler::compileModule(compiler, modulePath);
         if ( elemMod ){
