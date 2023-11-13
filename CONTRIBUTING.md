@@ -15,14 +15,14 @@ The alias can be used to push to one of the subtrees:
 
 ```sh
 git subtree push --prefix=lib/lvbase origin-base master
-git subtree push --prefix=lib/lvlements/compiler origin-compiler master
+git subtree push --prefix=lib/lvelements/compiler origin-compiler master
 ```
 
 Or to pull from one of the subtrees:
 
 ```sh
 git subtree pull --prefix=lib/lvbase origin-base master
-git subtree pull --prefix=lib/lvlements/compiler origin-compiler master
+git subtree pull --prefix=lib/lvelements/compiler origin-compiler master
 ```
 
 Note: Changes outside any subtree will not produce a commit to that particular subtree:
