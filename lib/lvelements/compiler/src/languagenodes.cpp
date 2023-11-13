@@ -197,14 +197,16 @@ JsBlockNode *BaseNode::addUsedIdentifier(BaseNode *parent, IdentifierNode *idNod
     return nullptr;
 }
 
+std::string BaseNode::nodeSourceFilePath(BaseNode *p){
+    while (p && !p->isNodeType<ProgramNode>() )
+        p = p->parent();
+    return p && p->isNodeType<ProgramNode>() ? static_cast<ProgramNode*>(p)->m_filePath : "";
+}
+
 void BaseNode::assertValid(BaseNode *from, const TSNode &node, const std::string& message){
     if ( ts_node_is_null(node) ){
         SyntaxException se = CREATE_EXCEPTION(SyntaxException, "Syntax error: " + message, Exception::toCode("~Language"));
-        BaseNode* p = from;
-        while (p && p->nodeType() != ProgramNode::nodeInfoType())
-            p = p->parent();
-
-        std::string fileName = p && p->isNodeType<ProgramNode>() ? static_cast<ProgramNode*>(p)->m_filePath : "";
+        std::string fileName = BaseNode::nodeSourceFilePath(from);
         int line = from ? ts_node_start_point(from->current()).row : -2;
         int column = from ? ts_node_start_point(from->current()).column : -2;
         int startByte = from ? ts_node_start_byte(from->current()) : -1;
@@ -218,11 +220,7 @@ void BaseNode::assertValid(BaseNode *from, const TSNode &node, const std::string
 void BaseNode::assertError(BaseNode *from, const TSNode &node, const std::string &message){
     if ( strcmp(ts_node_type(node), "ERROR") == 0 ){
         SyntaxException se = CREATE_EXCEPTION(SyntaxException, "Syntax error: " + message, Exception::toCode("~Language"));
-        BaseNode* p = from;
-        while (p && !p->isNodeType<ProgramNode>() )
-            p = p->parent();
-
-        std::string fileName = p && p->isNodeType<ProgramNode>() ? static_cast<ProgramNode*>(p)->m_filePath : "";
+        std::string fileName = BaseNode::nodeSourceFilePath(from);
         se.setParseLocation(ts_node_start_point(node).row + 1, ts_node_start_point(node).column + 1, ts_node_start_byte(node), fileName);
         throw se;
     }
@@ -230,11 +228,7 @@ void BaseNode::assertError(BaseNode *from, const TSNode &node, const std::string
 
 void BaseNode::throwError(BaseNode *from, const TSNode &node, const std::string &message){
     SyntaxException se = CREATE_EXCEPTION(SyntaxException, "Syntax error: " + message, Exception::toCode("~LanguageNodes"));
-    BaseNode* p = from;
-    while (p && !p->isNodeType<ProgramNode>() )
-        p = p->parent();
-
-    std::string fileName = p && p->isNodeType<ProgramNode>() ? static_cast<ProgramNode*>(p)->m_filePath : "";
+    std::string fileName = BaseNode::nodeSourceFilePath(from);
     se.setParseLocation(ts_node_start_point(node).row + 1, ts_node_start_point(node).column + 1, ts_node_start_byte(node), fileName);
     throw se;
 }
@@ -385,6 +379,8 @@ void BaseNode::visit(BaseNode *parent, const TSNode &node){
         visitComponentInstanceStatement(parent, node);
     } else if ( strcmp(ts_node_type(node), "new_component_expression") == 0 ){
         visitNewComponentExpression(parent, node);
+    } else if ( strcmp(ts_node_type(node), "nested_new_component_expression") == 0 ){
+        visitNewComponentExpression(parent, node);
     } else if ( strcmp(ts_node_type(node), "arrow_function") == 0 ){
         visitArrowFunction(parent, node);
     } else if ( strcmp(ts_node_type(node), "component_body") == 0 ){
@@ -452,12 +448,8 @@ void BaseNode::visit(BaseNode *parent, const TSNode &node){
     } else if ( strcmp(ts_node_type(node), "try_statement") == 0 ){
         visitTryCatchBlock(parent, node);
     } else if ( strcmp(ts_node_type(node), "ERROR") == 0 ){
-        SyntaxException se = CREATE_EXCEPTION(SyntaxException, "Syntax error.", Exception::toCode("~LanguageNodes"));
-        BaseNode* p = parent;
-        while (p && !p->isNodeType<ProgramNode>() )
-            p = p->parent();
-
-        std::string fileName = p && p->isNodeType<ProgramNode>() ? static_cast<ProgramNode*>(p)->m_filePath : "";
+        SyntaxException se = CREATE_EXCEPTION(SyntaxException, "Syntax error.", Exception::toCode("~Language"));
+        std::string fileName = BaseNode::nodeSourceFilePath(parent);
         se.setParseLocation(ts_node_start_point(node).row + 1, ts_node_start_point(node).column + 1, ts_node_start_byte(node), fileName);
 
         throw se;
@@ -2280,6 +2272,14 @@ FunctionNode::FunctionNode(const TSNode &node)
 {
 }
 
+FunctionNode::FunctionNode(const TSNode &node, const LanguageNodeInfo::ConstPtr &ni)
+    : BaseNode(node, ni)
+    , m_parameters(nullptr)
+    , m_body(nullptr)
+    , m_returnType(nullptr)
+{
+}
+
 std::string FunctionNode::toString(int indent) const{
     std::string result;
     if ( indent > 0 )
@@ -2299,12 +2299,6 @@ std::string FunctionNode::toString(int indent) const{
         result += m_body->toString(indent >= 0 ? indent + 1 : indent);
 
     return result;
-}
-
-FunctionNode::FunctionNode(const TSNode &node, const LanguageNodeInfo::ConstPtr &ni)
-    : BaseNode(node, ni)
-    , m_body(nullptr)
-{
 }
 
 

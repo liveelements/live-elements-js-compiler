@@ -97,7 +97,7 @@ TEST_CASE( "Parse Error Test", "[ParseError]" ) {
         try {
             compiler->compileToJs(filePath, contents);
         } catch (lv::Exception& e) {
-            REQUIRE(e.code() == lv::Exception::toCode("~LanguageNodes"));
+            REQUIRE(e.code() == lv::Exception::toCode("~Language"));
             hadException = true;
         }
         REQUIRE(hadException);
