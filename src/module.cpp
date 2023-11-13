@@ -23,6 +23,7 @@
 #include "live/palettecontainer.h"
 #include "live/visuallog.h"
 #include "live/path.h"
+#include "live/directory.h"
 #include <list>
 #include <map>
 
@@ -64,6 +65,12 @@ Module::~Module(){
 
 /** Checks if live.module.json exists in the given path */
 bool Module::existsIn(const std::string &path){
+    if ( Module::fileExistsIn(path) )
+        return true;
+    return Module::lvFilesExistIn(path);
+}
+
+bool Module::fileExistsIn(const std::string &path){
     if ( !Path::exists(path) )
         return false;
     return Path::exists(Path::join(path, Module::fileName));
@@ -81,27 +88,47 @@ Module::Ptr Module::createFromPath(const std::string &path){
         moduleDirPath = Path::parent(modulePath);
     }
 
-    std::ifstream instream(modulePath, std::ifstream::in | std::ifstream::binary);
-    if ( !instream.is_open() ){
-        THROW_EXCEPTION(lv::Exception, Utf8("Cannot open file: %").format(path), 1);
+    if ( Path::exists(modulePath) ){
+        std::ifstream instream(modulePath, std::ifstream::in | std::ifstream::binary);
+        if ( !instream.is_open() ){
+            THROW_EXCEPTION(lv::Exception, Utf8("Cannot open file: '%'").format(path), lv::Exception::toCode("~file"));
+        }
+
+        try{
+            instream.seekg(0, std::ios::end);
+            size_t size = static_cast<size_t>(instream.tellg());
+            std::string buffer(size, ' ');
+            instream.seekg(0);
+            instream.read(&buffer[0], static_cast<std::streamsize>(size));
+
+            MLNode m;
+            ml::fromJson(buffer, m);
+
+            return createFromNode(moduleDirPath, modulePath, m);
+        } catch ( lv::Exception& e ){
+            THROW_EXCEPTION(lv::Exception, Utf8("Error when parsing file %: %").format(modulePath, e.message()), lv::Exception::toCode("parse"));
+        } catch ( std::exception& e ){
+            THROW_EXCEPTION(lv::Exception, Utf8("Error when parsing file %: %").format(modulePath, e.what()), lv::Exception::toCode("parse"));
+        }
+    } else {
+        std::string name = Path::name(moduleDirPath);
+        std::string package = Module::findPackageFrom(moduleDirPath);
+        if ( package.empty() || !Path::exists(package))
+            THROW_EXCEPTION(lv::Exception, Utf8("Package not found for module: \'%\'.").format(moduleDirPath), Exception::toCode("~Keys"));
+        if ( Path::isRelative(package) )
+            package = Path::resolve(Path::join(path, package));
+        if ( Path::isDir(package) )
+            package = Path::join(package, Package::fileName);
+
+        Module::Ptr pt(new Module(moduleDirPath, modulePath, name, package));
+
+        auto files = Module::scanLvFiles(path);
+        for ( auto it = files.begin(); it != files.end(); ++it )
+            pt->m_d->modules.push_back(*it);
+
+        return pt;
     }
 
-    try{
-        instream.seekg(0, std::ios::end);
-        size_t size = static_cast<size_t>(instream.tellg());
-        std::string buffer(size, ' ');
-        instream.seekg(0);
-        instream.read(&buffer[0], static_cast<std::streamsize>(size));
-
-        MLNode m;
-        ml::fromJson(buffer, m);
-
-        return createFromNode(moduleDirPath, modulePath, m);
-    } catch ( lv::Exception& e ){
-        THROW_EXCEPTION(lv::Exception, Utf8("Error when parsing file %: %").format(modulePath, e.message()), lv::Exception::toCode("parse"));
-    } catch ( std::exception& e ){
-        THROW_EXCEPTION(lv::Exception, Utf8("Error when parsing file %: %").format(modulePath, e.what()), lv::Exception::toCode("parse"));
-    }
     return nullptr;
 }
 
@@ -109,16 +136,14 @@ Module::Ptr Module::createFromPath(const std::string &path){
 Module::Ptr Module::createFromNode(const std::string &path, const std::string &filePath, const MLNode &m){
     std::string name = m.hasKey("name") ? m["name"].asString() : Path::name(path);
     std::string package = m.hasKey("package") ? m["package"].asString() : Module::findPackageFrom(path);
+
     if ( package.empty() || !Path::exists(package))
         THROW_EXCEPTION(lv::Exception, Utf8("Package not found for module: \'%\'.").format(filePath), Exception::toCode("~Keys"));
 
-    if ( Path::isRelative(package) ){
+    if ( Path::isRelative(package) )
         package = Path::resolve(Path::join(path, package));
-    }
-
-    if ( Path::isDir(package) ){
+    if ( Path::isDir(package) )
         package = Path::join(package, Package::fileName);
-    }
 
     Module::Ptr pt(new Module(path, filePath, name, package));
 
@@ -146,10 +171,25 @@ Module::Ptr Module::createFromNode(const std::string &path, const std::string &f
     }
 
     if ( m.hasKey("modules") ){
-        MLNode::ArrayType mod = m["modules"].asArray();
-        for ( auto it = mod.begin(); it != mod.end(); ++it ){
-            pt->m_d->modules.push_back(it->asString());
+        MLNode moduleDef = m["modules"];
+        if ( moduleDef.type() == MLNode::Array ){
+            MLNode::ArrayType mod = m["modules"].asArray();
+            for ( auto it = mod.begin(); it != mod.end(); ++it ){
+                pt->m_d->modules.push_back(it->asString());
+            }
+        } else if ( moduleDef.type() == MLNode::String ){
+            std::string mod = moduleDef.asString();
+            if ( mod == "*" ){
+                auto files = Module::scanLvFiles(path);
+                for ( auto it = files.begin(); it != files.end(); ++it )
+                    pt->m_d->modules.push_back(*it);
+            } else {
+                pt->m_d->modules.push_back(mod);
+            }
+        } else {
+            THROW_EXCEPTION(lv::Exception, "'modules' key expected to be array or string.", lv::Exception::toCode("~Parse"));
         }
+
     }
 
     if ( m.hasKey("libraryModules") ){
@@ -260,6 +300,29 @@ Module::Module(const std::string &path, const std::string &filePath, const std::
     m_d->name     = name;
     m_d->package  = package;
     m_d->context  = nullptr;
+}
+
+bool Module::lvFilesExistIn(const std::string &dir){
+    auto it = Directory::iterate(dir);
+    while ( !it.isEnd() ){
+        std::string path = it.path();
+        if ( Path::extension(path) == ".lv" )
+            return true;
+        it.next();
+    }
+    return false;
+}
+
+std::list<std::string> Module::scanLvFiles(const std::string &dir){
+    auto it = Directory::iterate(dir);
+    std::list<std::string> result;
+    while ( !it.isEnd() ){
+        std::string path = it.path();
+        if ( Path::extension(path) == ".lv" )
+            result.push_back(Path::baseName(path));
+        it.next();
+    }
+    return result;
 }
 
 std::string Module::findPackageFrom(const std::string& path){
