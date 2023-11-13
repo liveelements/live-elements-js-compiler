@@ -121,6 +121,7 @@ public:
     BaseNode* parent() const{ return m_parent; }
     void setParent(BaseNode* parent){ m_parent = parent; }
 
+    static std::string nodeSourceFilePath(BaseNode* node);
     static TSNode nodeChildByFieldName(const TSNode& node, const std::string& name);
     static std::vector<IdentifierNode*> fromNestedIdentifier(BaseNode* parent, const TSNode& node);
     static ParameterListNode* scanFormalParameters(BaseNode* parent, const TSNode& formalParameters);
@@ -943,24 +944,6 @@ private:
     JsBlockNode*       m_body;
 };
 
-
-class ArrowFunctionNode: public JsBlockNode{
-    friend class BaseNode;
-    LANGUAGE_NODE_INFO(ArrowFunctionNode);
-public:
-    ArrowFunctionNode(const TSNode& node);
-
-    virtual std::string toString(int indent = 0) const;
-
-    IdentifierNode* name() const{ return m_name; }
-    std::vector<IdentifierNode*> parameters() const{ return m_parameters; }
-    JsBlockNode* body() const{ return m_body; }
-private:
-    IdentifierNode*    m_name;
-    std::vector<IdentifierNode*> m_parameters;
-    JsBlockNode*       m_body;
-};
-
 class FunctionNode: public BaseNode {
     friend class BaseNode;
     LANGUAGE_NODE_INFO(FunctionNode);
@@ -970,14 +953,24 @@ public:
 
     ParameterListNode* parameters() const{ return m_parameters; }
     JsBlockNode* body() const{ return m_body; }
+    TypeNode* returnType() const{ return m_returnType; }
 
 protected:
     FunctionNode(const TSNode& node, const LanguageNodeInfo::ConstPtr& ni);
-
-private:
     ParameterListNode* m_parameters;
     JsBlockNode*       m_body;
+    TypeNode*          m_returnType;
 };
+
+class ArrowFunctionNode: public FunctionNode{
+    friend class BaseNode;
+    LANGUAGE_NODE_INFO(ArrowFunctionNode);
+public:
+    ArrowFunctionNode(const TSNode& node);
+
+    virtual std::string toString(int indent = 0) const;
+};
+
 
 class FunctionDeclarationNode: public FunctionNode{
     friend class BaseNode;

@@ -20,6 +20,7 @@
 #include "live/fileio.h"
 #include "live/path.h"
 #include "live/visuallog.h"
+#include "live/elements/compiler/tracepointexception.h"
 
 namespace lv{ namespace el{
 
@@ -111,7 +112,14 @@ ModuleFile *ElementsModule::addModuleFile(ElementsModule::Ptr &epl, const std::s
 
     Compiler::Ptr compiler = epl->m_d->compiler;
 
-    std::string filePath = epl->module()->path() + "/" + name;
+    std::string filePath = Path::join(epl->module()->path(), name);
+    if ( !Path::exists(filePath) ){
+        THROW_EXCEPTION(
+            lv::Exception,
+            Utf8("Module file '%' does not exit. (Defined in '%')").format(filePath, epl->module()->filePath()),
+            lv::Exception::toCode("~Module")
+        );
+    }
     std::string content = compiler->fileIO()->readFromFile(filePath);
     LanguageParser::AST* ast = compiler->parser()->parse(content);
 
@@ -145,40 +153,47 @@ ModuleFile *ElementsModule::addModuleFile(ElementsModule::Ptr &epl, const std::s
 
         if ( imp.isRelative ){
             if ( epl->module()->context()->package == nullptr ){
-                THROW_EXCEPTION(lv::Exception, Utf8("Cannot import relative path withouth package: \'%\' in \'%\'").format(imp.uri, currentUriName), Exception::toCode("~Import"));
+                THROW_EXCEPTION(TracePointException, Utf8("Cannot import relative path withouth package: \'%\' in \'%\'").format(imp.uri, currentUriName), Exception::toCode("~Import"));
             }
             if ( epl->module()->context()->package->name() == "." ){
-                THROW_EXCEPTION(lv::Exception, Utf8("Cannot import relative path withouth package: \'%\' in \'%\'").format(imp.uri, currentUriName), Exception::toCode("~Import"));
+                THROW_EXCEPTION(TracePointException, Utf8("Cannot import relative path withouth package: \'%\' in \'%\'").format(imp.uri, currentUriName), Exception::toCode("~Import"));
             }
 
             std::string importUri = epl->module()->context()->package->name() + (imp.uri == "." ? "" : imp.uri);
+            if ( importUri == epl->module()->context()->importId.data() ){
+                THROW_EXCEPTION(
+                    TracePointException,
+                    Utf8("Cannot import own module ('import %') in file '%'.").format(imp.uri, filePath),
+                    Exception::toCode("Import")
+                );
+            }
 
             try{
                 ElementsModule::Ptr ep = Compiler::compileImportedModule(epl->m_d->compiler, importUri, epl->module(), epl->engine());
                 if ( !ep ){
-                    THROW_EXCEPTION(lv::Exception, Utf8("Failed to find module \'%\' imported in \'%\'").format(imp.uri, currentUriName), Exception::toCode("~Import"));
+                    THROW_EXCEPTION(TracePointException, Utf8("Failed to find module \'%\' imported in \'%\'").format(imp.uri, currentUriName), Exception::toCode("~Import"));
                 }
                 mf->resolveImport(imp.uri, ep);
-
-            } catch ( lv::Exception& e ){
-                if ( e.code() == lv::Exception::toCode("import") )
-                    THROW_EXCEPTION(lv::Exception, Utf8("%\n - Imported \'%\' from \'%\'").format(e.message(), importUri, currentUriName), e.code());
-                else
-                    throw e;
+            } catch ( TracePointException& e ){
+                throw TracePointException(e, Utf8(" - Imported \'%\' from \'%\'").format(importUri, currentUriName));
             }
 
         } else {
+            if ( imp.uri == epl->module()->context()->importId.data() ){
+                THROW_EXCEPTION(
+                    TracePointException,
+                    Utf8("Cannot import own module ('import %') in file '%'.").format(imp.uri, filePath),
+                    Exception::toCode("Import")
+                );
+            }
             try{
                 ElementsModule::Ptr ep = Compiler::compileImportedModule(epl->m_d->compiler, it->uri, epl->module(), epl->engine());
                 if ( !ep ){
                     THROW_EXCEPTION(lv::Exception, Utf8("Failed to find module \'%\' imported in \'%\'").format(imp.uri, currentUriName), Exception::toCode("~Import"));
                 }
                 mf->resolveImport(imp.uri, ep);
-            } catch ( lv::Exception& e ){
-                if ( e.code() == lv::Exception::toCode("import") )
-                    THROW_EXCEPTION(lv::Exception, Utf8("%\n - Imported \'%\' from \'%\'").format(e.message(), imp.uri, currentUriName), e.code());
-                else
-                    throw e;
+            } catch ( TracePointException& e ){
+                throw TracePointException(e, Utf8(" - Imported \'%\' from \'%\'").format(imp.uri, currentUriName));
             }
         }
     }
@@ -194,9 +209,10 @@ ModuleFile *ElementsModule::findModuleFileByName(const std::string &name) const{
 }
 
 ModuleFile *ElementsModule::moduleFileBypath(const std::string &path) const{
+    std::string pathNormalized = Path::resolve(path);
     for ( auto it = m_d->fileModules.begin(); it != m_d->fileModules.end(); ++it ){
         ModuleFile* mf = it->second;
-        if ( mf->filePath() == path )
+        if ( mf->filePath() == pathNormalized )
             return mf;
     }
     return nullptr;
