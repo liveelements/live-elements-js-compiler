@@ -97,5 +97,11 @@ logAndExit(
             .then(d => { console.log("Testing download:"); return d })
             .then(_ => runNodeProcess(data.test.script))
             .then(status => console.log(`Test existed with status: ${status}`))
+    }).catch( e => {
+        const shouldBuild = process.env.LIVE_ELEMENTS_COMPILER_BUILD
+        if ( shouldBuild && shouldBuild.toLowerCase() === 'skip')
+            return 'Failed to find binary release, skipping build due to environment variable flag.'
+
+        return e
     })
 )
