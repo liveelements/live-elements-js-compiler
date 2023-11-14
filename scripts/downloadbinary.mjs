@@ -96,7 +96,7 @@ logAndExit(
         return downloadAndExtractFirst(data.download.urls, data.download.destination)
             .then(d => { console.log("Testing download:"); return d })
             .then(_ => runNodeProcess(data.test.script))
-            .then(status => console.log(`Test existed with status: ${status}`))
+            .then(status => `Test existed with status: ${status}`)
     }).catch( e => {
         const shouldBuild = process.env.LIVE_ELEMENTS_COMPILER_BUILD
         if ( shouldBuild && shouldBuild.toLowerCase() === 'skip')
