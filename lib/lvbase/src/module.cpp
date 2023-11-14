@@ -114,7 +114,7 @@ Module::Ptr Module::createFromPath(const std::string &path){
         std::string name = Path::name(moduleDirPath);
         std::string package = Module::findPackageFrom(moduleDirPath);
         if ( package.empty() || !Path::exists(package))
-            THROW_EXCEPTION(lv::Exception, Utf8("Package not found for module: \'%\'.").format(moduleDirPath), Exception::toCode("~Keys"));
+            THROW_EXCEPTION(lv::Exception, Utf8("Package not found for module: \'%\'").format(moduleDirPath), Exception::toCode("~Keys"));
         if ( Path::isRelative(package) )
             package = Path::resolve(Path::join(path, package));
         if ( Path::isDir(package) )
