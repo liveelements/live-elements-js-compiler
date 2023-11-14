@@ -119,7 +119,7 @@ void compileWrap(const Napi::CallbackInfo& info){
             MLNode logOptions;
             convertToMLNode(logOptionsArg, logOptions);
 
-            vlog().configure("global", logOptions);
+            VisualLog().configure("global", logOptions);
             optionsArg.Delete("log");
         }
 
@@ -135,10 +135,19 @@ void compileWrap(const Napi::CallbackInfo& info){
         std::string scriptFile = Path::resolve(file);
         std::string pluginPath = Path::parent(scriptFile);
 
-        Module::Ptr module(nullptr);
         if ( Module::existsIn(pluginPath) ){
-            module = Module::createFromPath(pluginPath);
-            Package::Ptr package = Package::createFromPath(module->package());
+            Package::Ptr package(nullptr);
+            if ( Module::fileExistsIn(pluginPath) ){
+                Module::Ptr module = Module::createFromPath(pluginPath);
+                package = Package::createFromPath(module->package());
+            } else {
+                std::string packagePath = Module::findPackageFrom(pluginPath);
+                if ( !packagePath.empty() ){
+                    Module::Ptr module = Module::createFromPath(pluginPath);
+                    package = Package::createFromPath(module->package());
+                }
+            }
+
             if ( package ){
                 std::string current = package->path();
                 std::vector<std::string> importPaths;
@@ -155,6 +164,7 @@ void compileWrap(const Napi::CallbackInfo& info){
                 compiler->setPackageImportPaths(importPaths);
             }
         }
+
         lv::el::ElementsModule::Ptr elemMod = lv::el::Compiler::compile(compiler, scriptFile);
         lv::el::ModuleFile* mf = elemMod->moduleFileBypath(scriptFile);
 
@@ -208,7 +218,7 @@ void compileModuleWrap(const Napi::CallbackInfo &info){
             MLNode logOptions;
             convertToMLNode(logOptionsArg, logOptions);
 
-            vlog().configure("global", logOptions);
+            VisualLog().configure("global", logOptions);
             optionsArg.Delete("log");
         }
 
