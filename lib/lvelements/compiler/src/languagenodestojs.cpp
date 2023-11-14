@@ -1166,7 +1166,13 @@ void LanguageNodesToJs::convertFunctionDeclaration(
         returnType = slice(source, funcNode->returnType());
     }
 
-    *compose << "\n" << indent(indentValue + 2) << "function " << (funcNode->name() ? slice(source, funcNode->name()) : "") << "(" << paramList << ")" << returnType;
+    std::string annotations = "";
+    if ( funcNode->isAsync() )
+        annotations += "async ";
+
+    if ( newLinePrecedes(source, funcNode->startByte()) )
+        *compose << indent(indentValue + 2);
+    *compose << annotations << "function " << (funcNode->name() ? slice(source, funcNode->name()) : "") << "(" << paramList << ")" << returnType;
 
     if ( funcNode->body() ){
         JSSection* jssection = new JSSection;
@@ -1175,7 +1181,8 @@ void LanguageNodesToJs::convertFunctionDeclaration(
         convert(funcNode->body(), source, jssection->m_children, indentValue + 1, ctx);
         *compose << jssection;
     }
-    *compose << "\n";
+    if ( newLineFollows(source, funcNode->endByte()) )
+        *compose << "\n";
     
     sections.push_back(compose);
 }
@@ -1208,7 +1215,13 @@ void LanguageNodesToJs::convertArrowFunction(
         returnType = slice(source, arrowNode->returnType());
     }
 
-    *compose << "\n" << indent(indentValue + 2) << "(" << paramList << ")" << returnType << " => ";
+    std::string annotations = "";
+    if ( arrowNode->isAsync() )
+        annotations += "async ";
+
+    if ( newLinePrecedes(source, arrowNode->startByte()) )
+        *compose << indent(indentValue + 2);
+    *compose << annotations << "(" << paramList << ")" << returnType << " => ";
 
     if ( arrowNode->body() ){
         JSSection* jssection = new JSSection;
@@ -1217,7 +1230,8 @@ void LanguageNodesToJs::convertArrowFunction(
         convert(arrowNode->body(), source, jssection->m_children, indentValue + 1, ctx);
         *compose << jssection;
     }
-    *compose << "\n";
+    if ( newLineFollows(source, arrowNode->endByte()) )
+        *compose << "\n";
     
     sections.push_back(compose);
 }
@@ -1250,7 +1264,13 @@ void LanguageNodesToJs::convertFunction(
         returnType = slice(source, funcNode->returnType());
     }
 
-    *compose << "\n" << indent(indentValue + 2) << "function " << "(" << paramList << ")" << returnType;
+    std::string annotations = "";
+    if ( funcNode->isAsync() )
+        annotations += "async ";
+
+    if ( newLinePrecedes(source, funcNode->startByte()) )
+        *compose << indent(indentValue + 2);
+    *compose << annotations << "function " << "(" << paramList << ")" << returnType;
 
     if ( funcNode->body() ){
         JSSection* jssection = new JSSection;
@@ -1259,7 +1279,8 @@ void LanguageNodesToJs::convertFunction(
         convert(funcNode->body(), source, jssection->m_children, indentValue + 1, ctx);
         *compose << jssection;
     }
-    *compose << "\n";
+    if ( newLineFollows(source, funcNode->endByte()) )
+        *compose << "\n";
     
     sections.push_back(compose);
 }

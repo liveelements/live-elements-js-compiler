@@ -1354,6 +1354,15 @@ void BaseNode::visitFunction(BaseNode *parent, const TSNode &node){
     enode->m_body = new JsBlockNode(body);
     enode->addChild(enode->m_body);
     visitChildren(enode->m_body, body);
+    
+    // Function properties
+    uint32_t count = ts_node_child_count(node);
+    for ( uint32_t i = 0; i < count; ++i ){
+        TSNode child = ts_node_child(node, i);
+        if ( strcmp(ts_node_type(child), "async") == 0 ){
+            enode->m_async = true;
+        }
+    }
 
     if ( enode->m_parameters ){
         if (enode->m_body ){
@@ -1386,6 +1395,15 @@ void BaseNode::visitFunctionDeclaration(BaseNode *parent, const TSNode &node)
     if (!ts_node_is_null(returnType)) {
         enode->m_returnType = new TypeNode(returnType);
         enode->addChild(enode->m_returnType);
+    }
+
+    // Function properties
+    uint32_t count = ts_node_child_count(node);
+    for ( uint32_t i = 0; i < count; ++i ){
+        TSNode child = ts_node_child(node, i);
+        if ( strcmp(ts_node_type(child), "async") == 0 ){
+            enode->m_async = true;
+        }
     }
 
     // Function body
@@ -1556,6 +1574,15 @@ void BaseNode::visitArrowFunction(BaseNode *parent, const TSNode &node){
         enode->m_body = new JsBlockNode(body);
         enode->addChild(enode->m_body);
         visitChildren(enode->m_body, body);
+    }
+
+    // Function properties
+    uint32_t count = ts_node_child_count(node);
+    for ( uint32_t i = 0; i < count; ++i ){
+        TSNode child = ts_node_child(node, i);
+        if ( strcmp(ts_node_type(child), "async") == 0 ){
+            enode->m_async = true;
+        }
     }
 
 
@@ -2269,6 +2296,7 @@ FunctionNode::FunctionNode(const TSNode &node)
     , m_parameters(nullptr)
     , m_body(nullptr)
     , m_returnType(nullptr)
+    , m_async(false)
 {
 }
 
@@ -2277,6 +2305,7 @@ FunctionNode::FunctionNode(const TSNode &node, const LanguageNodeInfo::ConstPtr 
     , m_parameters(nullptr)
     , m_body(nullptr)
     , m_returnType(nullptr)
+    , m_async(false)
 {
 }
 

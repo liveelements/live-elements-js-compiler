@@ -20,5 +20,6 @@ export class X extends Element{
         const test3 = (s) => new Array(100)
 
        const simple = function(a: number):number{}
+       const annotated = async function(a:number):number {}
    }
 }

@@ -954,12 +954,14 @@ public:
     ParameterListNode* parameters() const{ return m_parameters; }
     JsBlockNode* body() const{ return m_body; }
     TypeNode* returnType() const{ return m_returnType; }
+    bool isAsync() const{ return m_async; }
 
 protected:
     FunctionNode(const TSNode& node, const LanguageNodeInfo::ConstPtr& ni);
     ParameterListNode* m_parameters;
     JsBlockNode*       m_body;
     TypeNode*          m_returnType;
+    bool               m_async;
 };
 
 class ArrowFunctionNode: public FunctionNode{
