@@ -222,7 +222,11 @@ void LanguageNodesToJs::convertComponentDeclaration(ComponentDeclarationNode *no
             *compose << "()";
         }
 
-        *compose << slice(source, node->componentBody()->constructor()->body()->startByte(), node->componentBody()->constructor()->body()->endByte()) << "\n";
+        JSSection* jssection = new JSSection;
+        jssection->from = node->componentBody()->constructor()->body()->startByte();
+        jssection->to   = node->componentBody()->constructor()->body()->endByte();
+        convert(node->componentBody()->constructor()->body(), source, jssection->m_children, indentValue + 1, ctx);
+        *compose << jssection << "\n";
 
     } else {
         *compose << indent(indentValue + 1) << "constructor(){\n"
@@ -454,7 +458,7 @@ void LanguageNodesToJs::convertComponentDeclaration(ComponentDeclarationNode *no
                 el::JSSection* section = new el::JSSection;
                 section->from = expr->startByte();
                 section->to = expr->endByte();
-                convert(expr, source, section->m_children, indentValue + 1, ctx);
+                convert(expr, source, section->m_children, indentValue + 2, ctx);
                 std::vector<std::string> flat;
                 section->flatten(source, flat);
                 for (auto s: flat){
@@ -961,7 +965,9 @@ void LanguageNodesToJs::convertNewComponentExpression(NewComponentExpressionNode
         *compose << ")(null)";
     }
 
-    *compose << ")\n";
+    *compose << ")";
+    if ( newLineFollows(source, node->endByte()) )
+        *compose << "\n";
 
     sections.push_back(compose);
 }
