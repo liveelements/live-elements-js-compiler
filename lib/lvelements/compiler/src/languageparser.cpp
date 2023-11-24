@@ -343,8 +343,8 @@ SyntaxException::SyntaxException(
 Utf8 SyntaxException::formatMessage(const Utf8& message, const SourceRangeLocation& location){
     if ( location.range().start().hasLine() && !location.filePath().empty() ){
         return location.range().start().hasColumn()
-            ? Utf8("%\n at %:%:%").format(message, location.filePath(), location.range().start().line(), location.range().start().column())
-            : Utf8("%\n at %:%").format(message, location.filePath(), location.range().start().line());
+            ? Utf8("% at %:%:%").format(message, location.filePath(), location.range().start().line(), location.range().start().column())
+            : Utf8("% at %:%").format(message, location.filePath(), location.range().start().line());
     }
     return message;
 }
