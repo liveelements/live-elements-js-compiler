@@ -17,7 +17,6 @@
 #define LVCOMPLETIONCONTEXT_H
 
 #include "live/elements/compiler/lvelcompilerglobal.h"
-#include "live/elements/compiler/sourcerange.h"
 #include "live/utf8.h"
 #include <set>
 #include <vector>
@@ -39,64 +38,64 @@ public:
 public:
     CursorContext(
         int context,
-        const std::vector<SourceRange>& expressionPath,
-        const std::vector<SourceRange> &propertyPath = std::vector<SourceRange>(),
-        const SourceRange& propertyDeclaredType = SourceRange(),
-        const SourceRange& objectType = SourceRange(),
-        const SourceRange& objectImportNamespace = SourceRange()
+        const std::vector<Utf8::Range>& expressionPath,
+        const std::vector<Utf8::Range> &propertyPath = std::vector<Utf8::Range>(),
+        const Utf8::Range& propertyDeclaredType = Utf8::Range(),
+        const Utf8::Range& objectType = Utf8::Range(),
+        const Utf8::Range& objectImportNamespace = Utf8::Range()
     );
     ~CursorContext();
 
     int context() const;
     Utf8 contextString() const;
 
-    const std::vector<SourceRange>& expressionPath() const;
-    const std::vector<SourceRange>& propertyPath() const;
-    SourceRange propertyName() const;
-    const SourceRange& propertyRange() const;
-    const SourceRange& propertyDeclaredType() const;
-    const SourceRange& objectType() const;
-    const SourceRange& objectImportNamespace() const;
+    const std::vector<Utf8::Range>& expressionPath() const;
+    const std::vector<Utf8::Range>& propertyPath() const;
+    Utf8::Range propertyName() const;
+    const Utf8::Range& propertyRange() const;
+    const Utf8::Range& propertyDeclaredType() const;
+    const Utf8::Range& objectType() const;
+    const Utf8::Range& objectImportNamespace() const;
 
 public:
     int                      m_context;
-    std::vector<SourceRange> m_expressionPath;
-    std::vector<SourceRange> m_propertyPath;
-    SourceRange              m_propertyRange;
-    SourceRange              m_propertyDeclaredType;
-    SourceRange              m_objectType;
-    SourceRange              m_objectImportNamespace;
+    std::vector<Utf8::Range> m_expressionPath;
+    std::vector<Utf8::Range> m_propertyPath;
+    Utf8::Range              m_propertyRange;
+    Utf8::Range              m_propertyDeclaredType;
+    Utf8::Range              m_objectType;
+    Utf8::Range              m_objectImportNamespace;
 
     static std::set<std::string> keywords;
 };
 
-inline const std::vector<SourceRange> &CursorContext::expressionPath() const{
+inline const std::vector<Utf8::Range> &CursorContext::expressionPath() const{
     return m_expressionPath;
 }
 
-inline const std::vector<SourceRange> &CursorContext::propertyPath() const{
+inline const std::vector<Utf8::Range> &CursorContext::propertyPath() const{
     return m_propertyPath;
 }
 
-inline SourceRange CursorContext::propertyName() const{
+inline Utf8::Range CursorContext::propertyName() const{
     if ( m_propertyPath.size() > 0 )
         return m_propertyPath.back();
-    return SourceRange();
+    return Utf8::Range();
 }
 
-inline const SourceRange &CursorContext::propertyRange() const{
+inline const Utf8::Range &CursorContext::propertyRange() const{
     return m_propertyRange;
 }
 
-inline const SourceRange &CursorContext::propertyDeclaredType() const{
+inline const Utf8::Range &CursorContext::propertyDeclaredType() const{
     return m_propertyDeclaredType;
 }
 
-inline const SourceRange &CursorContext::objectType() const{
+inline const Utf8::Range &CursorContext::objectType() const{
     return m_objectType;
 }
 
-inline const SourceRange &CursorContext::objectImportNamespace() const{
+inline const Utf8::Range &CursorContext::objectImportNamespace() const{
     return m_objectImportNamespace;
 }
 

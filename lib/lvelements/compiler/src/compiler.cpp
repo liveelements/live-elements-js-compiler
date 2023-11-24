@@ -376,6 +376,8 @@ std::shared_ptr<ElementsModule> Compiler::compileImportedModule(Compiler::Ptr co
             }
         } catch ( TracePointException& e ){
             throw e;
+        } catch ( SyntaxException& e ){
+            throw e;
         } catch ( lv::Exception& e ){
             throw TracePointException(e);
         }

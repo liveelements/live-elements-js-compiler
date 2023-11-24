@@ -203,15 +203,33 @@ std::string BaseNode::nodeSourceFilePath(BaseNode *p){
     return p && p->isNodeType<ProgramNode>() ? static_cast<ProgramNode*>(p)->m_filePath : "";
 }
 
+
+SourceRangeLocation BaseNode::nodeSourceLocation(BaseNode *p, const TSNode& node){
+    std::string fileName = BaseNode::nodeSourceFilePath(p);
+    if ( !ts_node_is_null(node) ){
+        SourcePoint startPoint = SourcePoint(
+            ts_node_start_point(node).row,
+            ts_node_start_point(node).column,
+            ts_node_start_byte(node)
+        );
+        SourcePoint endPoint = SourcePoint(
+            ts_node_end_point(node).row,
+            ts_node_end_point(node).column,
+            ts_node_end_byte(node)
+        );
+        return SourceRangeLocation(SourceRange(startPoint, endPoint), fileName);
+    }
+    return SourceRangeLocation(SourceRange(), fileName);
+}
+
 void BaseNode::assertValid(BaseNode *from, const TSNode &node, const std::string& message){
     if ( ts_node_is_null(node) ){
-        SyntaxException se = CREATE_EXCEPTION(SyntaxException, "Syntax error: " + message, Exception::toCode("~Language"));
-        std::string fileName = BaseNode::nodeSourceFilePath(from);
-        int line = from ? ts_node_start_point(from->current()).row : -2;
-        int column = from ? ts_node_start_point(from->current()).column : -2;
-        int startByte = from ? ts_node_start_byte(from->current()) : -1;
-
-        se.setParseLocation(line + 1, column + 1, startByte, fileName);
+        SyntaxException se = SyntaxException(
+            "Syntax error: " + message,
+            Exception::toCode("~Language"),
+            nodeSourceLocation(from, from ? from->current() : node),
+            SOURCE_TRACE()
+        );
         throw se;
     }
     assertError(from, node, message);
@@ -219,17 +237,23 @@ void BaseNode::assertValid(BaseNode *from, const TSNode &node, const std::string
 
 void BaseNode::assertError(BaseNode *from, const TSNode &node, const std::string &message){
     if ( strcmp(ts_node_type(node), "ERROR") == 0 ){
-        SyntaxException se = CREATE_EXCEPTION(SyntaxException, "Syntax error: " + message, Exception::toCode("~Language"));
-        std::string fileName = BaseNode::nodeSourceFilePath(from);
-        se.setParseLocation(ts_node_start_point(node).row + 1, ts_node_start_point(node).column + 1, ts_node_start_byte(node), fileName);
+        SyntaxException se = SyntaxException(
+            "Syntax error: " + message,
+            Exception::toCode("~Language"),
+            nodeSourceLocation(from, node),
+            SOURCE_TRACE()
+        );
         throw se;
     }
 }
 
 void BaseNode::throwError(BaseNode *from, const TSNode &node, const std::string &message){
-    SyntaxException se = CREATE_EXCEPTION(SyntaxException, "Syntax error: " + message, Exception::toCode("~LanguageNodes"));
-    std::string fileName = BaseNode::nodeSourceFilePath(from);
-    se.setParseLocation(ts_node_start_point(node).row + 1, ts_node_start_point(node).column + 1, ts_node_start_byte(node), fileName);
+    SyntaxException se = SyntaxException(
+        "Syntax error: " + message,
+        Exception::toCode("~Language"),
+        nodeSourceLocation(from, node),
+        SOURCE_TRACE()
+    );
     throw se;
 }
 
@@ -448,10 +472,13 @@ void BaseNode::visit(BaseNode *parent, const TSNode &node){
     } else if ( strcmp(ts_node_type(node), "try_statement") == 0 ){
         visitTryCatchBlock(parent, node);
     } else if ( strcmp(ts_node_type(node), "ERROR") == 0 ){
-        SyntaxException se = CREATE_EXCEPTION(SyntaxException, "Syntax error.", Exception::toCode("~Language"));
-        std::string fileName = BaseNode::nodeSourceFilePath(parent);
-        se.setParseLocation(ts_node_start_point(node).row + 1, ts_node_start_point(node).column + 1, ts_node_start_byte(node), fileName);
-
+        
+        SyntaxException se = SyntaxException(
+            "Syntax error",
+            Exception::toCode("~Language"),
+            nodeSourceLocation(parent, node),
+            SOURCE_TRACE()
+        );
         throw se;
     } else {
         visitChildren(parent, node);
@@ -1802,8 +1829,12 @@ void ProgramNode::addChild(BaseNode *child){
         m_exports.push_back(child);
         BaseNode::addChild(child);
     } else {
-        SyntaxException se = CREATE_EXCEPTION(SyntaxException, "Unexpected expression in file root of type '" + child->nodeName() + "'", lv::Exception::toCode("~Parse"));
-        se.setParseLocation(child->startPoint().first + 1, child->startPoint().second + 1, child->startByte(), filePath());
+        SyntaxException se = SyntaxException(
+            Utf8("Unexpected expression in file root of type '%'").format(child->nodeName()),
+            Exception::toCode("~Language"),
+            nodeSourceLocation(child, child->current()),
+            SOURCE_TRACE()
+        );
         throw se;
     }
 }

@@ -48,8 +48,8 @@ MLNode EnumInfo::toMLNode() const
     MLNode result(MLNode::Object);
     MLNode rhs(MLNode::Object);
 
-    int count = m_keys.size();
-    for (int i=0; i<count; ++i)
+    int count = static_cast<int>(m_keys.size());
+    for (int i=0; i < count; ++i)
     {
         rhs[m_keys.at(i).data()] = m_values.at(i);
     }

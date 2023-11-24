@@ -18,7 +18,7 @@
 
 #include "live/elements/compiler/lvelcompilerglobal.h"
 #include "live/elements/compiler/treesitterapi.h"
-#include "live/elements/compiler/sourcerange.h"
+#include "live/sourcelocation.h"
 #include "live/exception.h"
 
 #include <string>
@@ -35,23 +35,19 @@ class BaseNode;
 
 class LV_ELEMENTS_COMPILER_EXPORT SyntaxException: public lv::Exception{
 public:
-    /** Default contructor */
     SyntaxException(
-            const Utf8& message = "",
-            Exception::Code code = 0,
-            const lv::Exception::SourceTrace& st = lv::Exception::SourceTrace())
-        : lv::Exception(message, code, st){}
+        const Utf8& message = "",
+        Exception::Code code = 0,
+        const SourceRangeLocation& location = SourceRangeLocation(),
+        const lv::Exception::SourceTrace& st = lv::Exception::SourceTrace());
 
-    int parsedLine() const;
-    int parsedColumn() const;
-    int parsedOffset() const;
-    std::string parsedFile() const;
-    void setParseLocation(int, int, int, const std::string&);
+    SourceRangeLocation parsedLocation() const{ return m_parsedLocation; }
+
+
+    static Utf8 formatMessage(const Utf8& message, const SourceRangeLocation& location);
+
 private:
-    int m_parsedLine;
-    int m_parsedColumn;
-    int m_parsedOffset;
-    std::string m_parsedFile;
+    SourceRangeLocation m_parsedLocation;
 };
 
 
@@ -76,7 +72,7 @@ public:
 
         ASTRef& operator = (const ASTRef& other);
 
-        SourceRange range() const;
+        Utf8::Range range() const;
         uint32_t childCount() const;
         ASTRef childAt(uint32_t index) const;
         ASTRef parent() const;

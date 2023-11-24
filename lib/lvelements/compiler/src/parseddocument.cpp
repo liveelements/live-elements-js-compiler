@@ -79,20 +79,20 @@ CursorContext ParsedDocument::findCursorContext(LanguageParser::AST *ast, uint32
     treePath(ast, position, path);
 
     int context = 0;
-    std::vector<SourceRange> expressionPath;
-    std::vector<SourceRange> propertyPath;
-    SourceRange propertyDeclaredType;
-    SourceRange objectType;
-    SourceRange objectImportNamespace;
+    std::vector<Utf8::Range> expressionPath;
+    std::vector<Utf8::Range> propertyPath;
+    Utf8::Range propertyDeclaredType;
+    Utf8::Range objectType;
+    Utf8::Range objectImportNamespace;
 
-    for (int idx = path.size()-1; idx >= 0; --idx)
+    for (int idx = path.size() - 1; idx >= 0; --idx)
     {
         TSNode& curr = path[idx];
         auto type = ts_node_type(curr);
 
         if (CursorContext::keywords.find(type) != CursorContext::keywords.end())
         {
-            expressionPath.push_back(SourceRange(ts_node_start_byte(curr), position - ts_node_start_byte(curr)));
+            expressionPath.push_back(Utf8::Range(ts_node_start_byte(curr), position - ts_node_start_byte(curr)));
         }
 
         if (strcmp(type, "property_declaration") == 0 || strcmp(type, "property_assignment") == 0 || strcmp(type, "listener_declaration") == 0)
@@ -106,31 +106,31 @@ CursorContext ParsedDocument::findCursorContext(LanguageParser::AST *ast, uint32
 
             if (strcmp(type, "property_declaration") == 0 && position < delimiter_pos && strcmp(ts_node_type(path[idx+1]), "identifier") == 0)
             {
-                propertyDeclaredType = SourceRange(ts_node_start_byte(path[idx+1]), position - ts_node_start_byte(path[idx+1]));
+                propertyDeclaredType = Utf8::Range(ts_node_start_byte(path[idx+1]), position - ts_node_start_byte(path[idx+1]));
             }
 
             if (strcmp(type, "property_declaration") == 0 && position < delimiter_pos && strcmp(ts_node_type(path[idx+1]), "property_identifier") == 0)
             {
                 TSNode propType = ts_node_child(curr, 0);
-                propertyDeclaredType = SourceRange(ts_node_start_byte(propType), ts_node_end_byte(propType) - ts_node_start_byte(propType));
-                expressionPath.push_back(SourceRange(ts_node_start_byte(path[idx+1]), position - ts_node_start_byte(path[idx+1])));
+                propertyDeclaredType = Utf8::Range(ts_node_start_byte(propType), ts_node_end_byte(propType) - ts_node_start_byte(propType));
+                expressionPath.push_back(Utf8::Range(ts_node_start_byte(path[idx+1]), position - ts_node_start_byte(path[idx+1])));
             }
 
             if (strcmp(type, "listener_declaration") == 0 && position < delimiter_pos && strcmp(ts_node_type(path[idx+1]), "on") == 0)
             {
-                propertyDeclaredType = SourceRange(ts_node_start_byte(path[idx+1]), position - ts_node_start_byte(path[idx+1]));
+                propertyDeclaredType = Utf8::Range(ts_node_start_byte(path[idx+1]), position - ts_node_start_byte(path[idx+1]));
             }
 
             if (strcmp(type, "listener_declaration") == 0 && position < delimiter_pos && strcmp(ts_node_type(path[idx+1]), "property_identifier") == 0)
             {
                 TSNode propType = ts_node_child(curr, 0);
-                propertyDeclaredType = SourceRange(ts_node_start_byte(propType), 2);
-                expressionPath.push_back(SourceRange(ts_node_start_byte(path[idx+1]), position - ts_node_start_byte(path[idx+1])));
+                propertyDeclaredType = Utf8::Range(ts_node_start_byte(propType), 2);
+                expressionPath.push_back(Utf8::Range(ts_node_start_byte(path[idx+1]), position - ts_node_start_byte(path[idx+1])));
             }
 
             if (isAssign && position < delimiter_pos)
             {
-                expressionPath.push_back(SourceRange(ts_node_start_byte(path[idx+1]), position - ts_node_start_byte(path[idx+1])));
+                expressionPath.push_back(Utf8::Range(ts_node_start_byte(path[idx+1]), position - ts_node_start_byte(path[idx+1])));
             }
 
             if (position > delimiter_pos && strcmp(ts_node_type(ts_node_child(curr, isAssign? 2: 3)), "expression_statement") == 0)
@@ -138,11 +138,11 @@ CursorContext ParsedDocument::findCursorContext(LanguageParser::AST *ast, uint32
                 if (!isAssign)
                 {
                     TSNode propType = ts_node_child(curr, 0);
-                    propertyDeclaredType = SourceRange(ts_node_start_byte(propType), ts_node_end_byte(propType) - ts_node_start_byte(propType));
+                    propertyDeclaredType = Utf8::Range(ts_node_start_byte(propType), ts_node_end_byte(propType) - ts_node_start_byte(propType));
                 }
 
                 TSNode propPath = ts_node_child(curr, isAssign? 0: 1);
-                propertyPath.push_back(SourceRange(ts_node_start_byte(propPath), ts_node_end_byte(propPath) - ts_node_start_byte(propPath)));
+                propertyPath.push_back(Utf8::Range(ts_node_start_byte(propPath), ts_node_end_byte(propPath) - ts_node_start_byte(propPath)));
 
 
                 TSNode exp = ts_node_child(curr, isAssign? 2:3);
@@ -159,7 +159,7 @@ CursorContext ParsedDocument::findCursorContext(LanguageParser::AST *ast, uint32
                         auto mend = ts_node_end_byte(member);
 
                         if (mstart < position)
-                            expressionPath.push_back(SourceRange(mstart, (position < mend ? position : mend)-mstart));
+                            expressionPath.push_back(Utf8::Range(mstart, (position < mend ? position : mend)-mstart));
 
                         memberExp = ts_node_child(memberExp, 0);
                         memcount = ts_node_child_count(memberExp);
@@ -169,7 +169,7 @@ CursorContext ParsedDocument::findCursorContext(LanguageParser::AST *ast, uint32
                     auto mend = ts_node_end_byte(memberExp);
 
                     if (mstart < position)
-                        expressionPath.push_back(SourceRange(mstart, (position < mend ? position : mend)-mstart));
+                        expressionPath.push_back(Utf8::Range(mstart, (position < mend ? position : mend)-mstart));
 
                     std::reverse(expressionPath.begin(), expressionPath.end());
                 }
@@ -186,12 +186,12 @@ CursorContext ParsedDocument::findCursorContext(LanguageParser::AST *ast, uint32
                 TSNode heritage = ts_node_child(curr, 2);
                 auto heritage_count = ts_node_child_count(heritage);
                 TSNode objectTypeNode = ts_node_child(heritage, heritage_count-1);
-                objectType = SourceRange(ts_node_start_byte(objectTypeNode), ts_node_end_byte(objectTypeNode) - ts_node_start_byte(objectTypeNode));
+                objectType = Utf8::Range(ts_node_start_byte(objectTypeNode), ts_node_end_byte(objectTypeNode) - ts_node_start_byte(objectTypeNode));
 
                 if (heritage_count == 4)
                 {
                     TSNode importNode = ts_node_child(heritage, 1);
-                    objectImportNamespace = SourceRange(ts_node_start_byte(importNode), ts_node_end_byte(importNode) - ts_node_start_byte(importNode));
+                    objectImportNamespace = Utf8::Range(ts_node_start_byte(importNode), ts_node_end_byte(importNode) - ts_node_start_byte(importNode));
 
                 }
             }
@@ -213,15 +213,15 @@ CursorContext ParsedDocument::findCursorContext(LanguageParser::AST *ast, uint32
                     if (position >= name_pos)
                     {
                         auto import_length = ts_node_end_byte(ts_node_child(curr, 0)) - import_start;
-                        objectImportNamespace = SourceRange(import_start, import_length);
-                        objectType = SourceRange(name_pos, position - name_pos);
+                        objectImportNamespace = Utf8::Range(import_start, import_length);
+                        objectType = Utf8::Range(name_pos, position - name_pos);
                     } else {
-                        objectImportNamespace = SourceRange(import_start, position - import_start);
+                        objectImportNamespace = Utf8::Range(import_start, position - import_start);
                     }
 
                 } else { // ncec = 2
                     auto type_start = ts_node_start_byte(ts_node_child(curr, 0));
-                    objectType = SourceRange(type_start, position - type_start);
+                    objectType = Utf8::Range(type_start, position - type_start);
                 }
             } else {
                 if (ncec == 4)
@@ -229,16 +229,16 @@ CursorContext ParsedDocument::findCursorContext(LanguageParser::AST *ast, uint32
 
                     auto import_start =  ts_node_start_byte(ts_node_child(curr, 0));
                     auto import_length = ts_node_end_byte(ts_node_child(curr, 0)) - import_start;
-                    objectImportNamespace = SourceRange(import_start, import_length);
+                    objectImportNamespace = Utf8::Range(import_start, import_length);
                     auto type_start = ts_node_start_byte(ts_node_child(curr, 2));
                     auto type_length = ts_node_end_byte(ts_node_child(curr, 2)) - type_start;
-                    objectType = SourceRange(type_start, type_length);
+                    objectType = Utf8::Range(type_start, type_length);
 
 
                 } else { // ncec = 2
                     auto type_start = ts_node_start_byte(ts_node_child(curr, 0));
                     auto type_length = ts_node_end_byte(ts_node_child(curr, 0)) - type_start;
-                    objectType = SourceRange(type_start, type_length);
+                    objectType = Utf8::Range(type_start, type_length);
                 }
             }
 
@@ -267,10 +267,10 @@ CursorContext ParsedDocument::findCursorContext(LanguageParser::AST *ast, uint32
                 {
                     if (end < position)
                     {
-                        expressionPath.push_back(SourceRange(start, end - start));
+                        expressionPath.push_back(Utf8::Range(start, end - start));
                     }
                     else {
-                        expressionPath.push_back(SourceRange(start, position-start));
+                        expressionPath.push_back(Utf8::Range(start, position-start));
                         break;
                     }
                 }

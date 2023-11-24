@@ -50,9 +50,9 @@ LanguageParser::ASTRef &LanguageParser::ASTRef::operator =(const LanguageParser:
     return *this;
 }
 
-SourceRange LanguageParser::ASTRef::range() const{
+Utf8::Range LanguageParser::ASTRef::range() const{
     TSNode* node = reinterpret_cast<TSNode*>(m_node);
-    return SourceRange(ts_node_start_byte(*node), ts_node_end_byte((*node)));
+    return Utf8::Range(ts_node_start_byte(*node), ts_node_end_byte((*node)));
 }
 
 uint32_t LanguageParser::ASTRef::childCount() const{
@@ -331,32 +331,22 @@ LanguageParser::ComparisonResult::ComparisonResult(bool isEqual)
 {
 }
 
-int SyntaxException::parsedLine() const
-{
-    return m_parsedLine;
-}
+SyntaxException::SyntaxException(
+        const Utf8& message,
+        Exception::Code code,
+        const SourceRangeLocation& location,
+        const lv::Exception::SourceTrace& st)
+    : Exception(SyntaxException::formatMessage(message, location), code, st)
+    , m_parsedLocation(location)
+{}
 
-int SyntaxException::parsedColumn() const
-{
-    return m_parsedColumn;
-}
-
-int SyntaxException::parsedOffset() const
-{
-    return m_parsedOffset;
-}
-
-std::string SyntaxException::parsedFile() const
-{
-    return m_parsedFile;
-}
-
-void SyntaxException::setParseLocation(int line, int col, int offset, const std::string &file)
-{
-    m_parsedLine = line;
-    m_parsedColumn = col;
-    m_parsedOffset = offset;
-    m_parsedFile = file;
+Utf8 SyntaxException::formatMessage(const Utf8& message, const SourceRangeLocation& location){
+    if ( location.range().start().hasLine() && !location.filePath().empty() ){
+        return location.range().start().hasColumn()
+            ? Utf8("%\n at %:%:%").format(message, location.filePath(), location.range().start().line(), location.range().start().column())
+            : Utf8("%\n at %:%").format(message, location.filePath(), location.range().start().line());
+    }
+    return message;
 }
 
 }} // namespace lv, el

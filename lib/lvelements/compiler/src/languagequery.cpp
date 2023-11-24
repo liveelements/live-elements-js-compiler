@@ -51,14 +51,14 @@ uint16_t LanguageQuery::Cursor::matchPatternIndex() const{
     return currentMatch->pattern_index;
 }
 
-SourceRange LanguageQuery::Cursor::captureRange(uint16_t captureIndex){
+Utf8::Range LanguageQuery::Cursor::captureRange(uint16_t captureIndex){
     TSQueryMatch* currentMatch = reinterpret_cast<TSQueryMatch*>(m_currentMatch);
     TSNode node = currentMatch->captures[captureIndex].node;
 
     uint32_t start = ts_node_start_byte(node);
     uint32_t end   = ts_node_end_byte(node);
 
-    return SourceRange(start, end - start);
+    return Utf8::Range(start, end - start);
 }
 
 uint32_t LanguageQuery::Cursor::captureId(uint16_t captureIndex){

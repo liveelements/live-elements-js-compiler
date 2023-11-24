@@ -54,7 +54,7 @@ public:
 
         uint16_t totalMatchCaptures() const;
         uint16_t matchPatternIndex() const;
-        SourceRange captureRange(uint16_t captureIndex);
+        Utf8::Range captureRange(uint16_t captureIndex);
         uint32_t captureId(uint16_t captureIndex);
 
         void temp();
@@ -72,7 +72,7 @@ public:
 
     class LV_ELEMENTS_COMPILER_EXPORT PredicateData{
     public:
-        SourceRange m_range;
+        Utf8::Range m_range;
         Utf8        m_value;
     };
 
