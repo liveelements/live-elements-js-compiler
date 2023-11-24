@@ -112,7 +112,7 @@ ByteBuffer ByteBuffer::encodeBase64(const ByteBuffer::Byte *bytes, size_t size, 
     size_t resultMaxSize = ((size/3) + (size % 3 > 0)) * 4 + (nullTerminate ? 1 : 0);
     (*bf.m_data)->buffer = new ByteBuffer::Byte[resultMaxSize];
     ByteBuffer::Byte* c = (*bf.m_data)->buffer; // track of encoded position
-    int cnt = 0; // store the number of bytes encoded by a single call
+    size_t cnt = 0; // store the number of bytes encoded by a single call
     base64_encodestate s;
     base64_init_encodestate(&s); // initialize state
 
@@ -138,7 +138,7 @@ ByteBuffer ByteBuffer::decodeBase64(const ByteBuffer::Byte *bytes, size_t size, 
     ByteBuffer bf;
     (*bf.m_data)->buffer = new ByteBuffer::Byte[size + (nullTerminate ? 1 : 0)];
     ByteBuffer::Byte* c = (*bf.m_data)->buffer; // track of decoded position
-    int cnt = 0; // store the number of bytes encoded by a single call
+    size_t cnt = 0; // store the number of bytes encoded by a single call
     base64_decodestate s;
     base64_init_decodestate(&s); // initialize state
 

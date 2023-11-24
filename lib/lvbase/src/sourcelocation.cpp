@@ -43,4 +43,9 @@ SourceRange::SourceRange(const SourcePoint &start, const SourcePoint &end)
     : m_start(start), m_end(end)
 {}
 
+SourceRangeLocation::SourceRangeLocation(const SourceRange& range, const std::string& filePath)
+    : m_range(range)
+    , m_filePath(filePath)
+{}
+
 }// namespace
