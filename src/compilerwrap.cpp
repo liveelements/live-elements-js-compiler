@@ -87,10 +87,10 @@ void populateError(Napi::Env env, Napi::Object ob, lv::Exception* e){
 
 void populateSyntaxError(Napi::Env env, Napi::Object ob, lv::el::SyntaxException* e){
     Napi::Object source = Napi::Object::New(env);
-    source.Set("file", e->parsedFile());
-    source.Set("line", e->parsedLine());
-    source.Set("column", e->parsedColumn());
-    source.Set("offset", e->parsedOffset());
+    source.Set("file", e->parsedLocation().filePath());
+    source.Set("line", e->parsedLocation().range().start().line());
+    source.Set("column", e->parsedLocation().range().start().column());
+    source.Set("offset", e->parsedLocation().range().start().offset());
     ob.Set("source", source);
 
     populateError(env, ob, e);
