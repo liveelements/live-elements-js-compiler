@@ -19,6 +19,7 @@
 #include "live/path.h"
 #include "live/elements/compiler/compiler.h"
 #include "live/elements/compiler/modulefile.h"
+#include "live/elements/compiler/tracepointexception.h"
 #include "live/mlnodetojson.h"
 
 namespace lv{
@@ -176,6 +177,10 @@ void compileWrap(const Napi::CallbackInfo& info){
         Napi::Object ob = Napi::Object::New(env);
         populateSyntaxError(env, ob, &e);
         err = ob;
+    } catch ( lv::el::TracePointException& e ){
+        Napi::Object ob = Napi::Object::New(env);
+        populateError(env, ob, &e);
+        err = ob;
     } catch ( lv::Exception& e ){
         Napi::Object ob = Napi::Object::New(env);
         populateError(env, ob, &e);
@@ -262,6 +267,10 @@ void compileModuleWrap(const Napi::CallbackInfo &info){
     } catch ( lv::el::SyntaxException& e ){
         Napi::Object ob = Napi::Object::New(env);
         populateSyntaxError(env, ob, &e);
+        err = ob;
+    } catch ( lv::el::TracePointException& e ){
+        Napi::Object ob = Napi::Object::New(env);
+        populateError(env, ob, &e);
         err = ob;
     } catch ( lv::Exception& e ){
         Napi::Object ob = Napi::Object::New(env);
