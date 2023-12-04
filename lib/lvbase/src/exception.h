@@ -59,7 +59,7 @@ public:
 
     const SourceLocation& location() const;
 
-    virtual const char* what() const override;
+    virtual const char* what() const noexcept override;
 
     const std::string& message() const;
     Code code() const;

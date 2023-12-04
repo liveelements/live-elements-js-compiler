@@ -111,7 +111,7 @@ Exception &Exception::operator =(const Exception &other){
     return *this;
 }
 
- const char* Exception::what() const{
+ const char* Exception::what() const noexcept{
     return m_d->message.c_str();
 }
 
