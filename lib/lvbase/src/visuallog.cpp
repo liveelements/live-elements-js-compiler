@@ -283,7 +283,7 @@ int VisualLog::ConfigurationContainer::addConfiguration(const std::string &key, 
     m_configurations.push_back(configuration);
     m_configurationMap[key] = configuration;
 
-    return m_configurations.size();
+    return static_cast<int>(m_configurations.size());
 }
 
 VisualLog::Configuration *VisualLog::ConfigurationContainer::globalConfiguration(){
@@ -309,7 +309,7 @@ VisualLog::Configuration *VisualLog::ConfigurationContainer::configurationAtOrGl
 }
 
 int VisualLog::ConfigurationContainer::configurationCount() const{
-    return m_configurations.size();
+    return static_cast<int>(m_configurations.size());
 }
 
 // VisualLog

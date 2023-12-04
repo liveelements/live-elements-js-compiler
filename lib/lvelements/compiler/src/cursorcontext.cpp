@@ -155,11 +155,11 @@ std::set<std::string> CursorContext::keywords = {
     "with", "yield", "component", "fn", "constructor", "instance" };
 
 CursorContext::CursorContext(int context,
-        const std::vector<SourceRange> &expressionPath,
-        const std::vector<SourceRange> &propertyPath,
-        const SourceRange &propertyDeclaredType,
-        const SourceRange &objectType,
-        const SourceRange &objectImportNamespace)
+        const std::vector<Utf8::Range> &expressionPath,
+        const std::vector<Utf8::Range> &propertyPath,
+        const Utf8::Range &propertyDeclaredType,
+        const Utf8::Range &objectType,
+        const Utf8::Range &objectImportNamespace)
     : m_context(context)
     , m_expressionPath(expressionPath)
     , m_propertyPath(propertyPath)

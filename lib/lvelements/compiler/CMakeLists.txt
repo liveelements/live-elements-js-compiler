@@ -21,7 +21,6 @@ target_sources(lvelementscompiler PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/src/languageparser.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/modulefile.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/parseddocument.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/sourcerange.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/languagenodeinfo.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/propertybindingcontainer.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/languagequery.cpp"

@@ -19,6 +19,7 @@
 #include "live/path.h"
 #include "live/elements/compiler/compiler.h"
 #include "live/elements/compiler/modulefile.h"
+#include "live/elements/compiler/tracepointexception.h"
 #include "live/mlnodetojson.h"
 
 namespace lv{
@@ -81,16 +82,16 @@ void populateError(Napi::Env env, Napi::Object ob, lv::Exception* e){
     ob.Set("__internal", internal);
     ob.Set("message", e->message());
     ob.Set("code", e->code());
-    Napi::ObjectReference err = Napi::TypeError::New(env, e->message());
+    Napi::ObjectReference err = Napi::Error::New(env, e->message());
     ob.Set("error", err.Value());
 }
 
 void populateSyntaxError(Napi::Env env, Napi::Object ob, lv::el::SyntaxException* e){
     Napi::Object source = Napi::Object::New(env);
-    source.Set("file", e->parsedFile());
-    source.Set("line", e->parsedLine());
-    source.Set("column", e->parsedColumn());
-    source.Set("offset", e->parsedOffset());
+    source.Set("file", e->parsedLocation().filePath());
+    source.Set("line", e->parsedLocation().range().start().line());
+    source.Set("column", e->parsedLocation().range().start().column());
+    source.Set("offset", e->parsedLocation().range().start().offset());
     ob.Set("source", source);
 
     populateError(env, ob, e);
@@ -175,6 +176,10 @@ void compileWrap(const Napi::CallbackInfo& info){
     } catch ( lv::el::SyntaxException& e ){
         Napi::Object ob = Napi::Object::New(env);
         populateSyntaxError(env, ob, &e);
+        err = ob;
+    } catch ( lv::el::TracePointException& e ){
+        Napi::Object ob = Napi::Object::New(env);
+        populateError(env, ob, &e);
         err = ob;
     } catch ( lv::Exception& e ){
         Napi::Object ob = Napi::Object::New(env);
@@ -262,6 +267,10 @@ void compileModuleWrap(const Napi::CallbackInfo &info){
     } catch ( lv::el::SyntaxException& e ){
         Napi::Object ob = Napi::Object::New(env);
         populateSyntaxError(env, ob, &e);
+        err = ob;
+    } catch ( lv::el::TracePointException& e ){
+        Napi::Object ob = Napi::Object::New(env);
+        populateError(env, ob, &e);
         err = ob;
     } catch ( lv::Exception& e ){
         Napi::Object ob = Napi::Object::New(env);

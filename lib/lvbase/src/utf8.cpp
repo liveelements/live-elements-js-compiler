@@ -26,6 +26,24 @@
 
 namespace lv{
 
+
+/**
+ * \class lv::Utf8::Range
+ * \brief Encapsulates an Utf8 string range
+ */
+
+Utf8 Utf8::Range::slice(const Utf8 &str) const{
+    if ( length() > 0 )
+        return str.substr(m_from, m_length);
+    return Utf8();
+}
+
+std::string Utf8::Range::slice(const std::string &str) const{
+    if ( length() > 0 )
+        return str.substr(m_from, m_length);
+    return std::string();
+}
+
 /**
  * \class lv::Utf8
  * \brief Encapsulates an Utf8 string

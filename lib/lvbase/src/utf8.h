@@ -27,12 +27,34 @@
 #include <vector>
 
 #include "lvbaseglobal.h"
+#include "inttypes.h"
 
 namespace lv{
 
 class VisualLog;
 
 class LV_BASE_EXPORT Utf8{
+
+public:
+    class LV_BASE_EXPORT Range{
+    public:
+        Range() : m_from(0), m_length(0){}
+        Range(uint32_t from, uint32_t len) 
+            : m_from(static_cast<size_t>(from)), m_length(static_cast<size_t>(len)){}
+        Range(size_t from, size_t len) : m_from(from), m_length(len){}
+
+        size_t from() const{ return m_from; }
+        size_t length() const{ return m_length; }
+        size_t to() const{ return m_from + m_length; }
+        bool isValid() const{ return m_length > 0; }
+
+        Utf8 slice(const Utf8& str) const;
+        std::string slice(const std::string& str) const;
+
+    private:
+        size_t m_from;
+        size_t m_length;
+    };
 
 public:
     Utf8();

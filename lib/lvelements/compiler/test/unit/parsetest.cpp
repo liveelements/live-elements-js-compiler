@@ -69,7 +69,7 @@ void testFileParse(const std::string& name){
 
 
     } catch ( lv::el::SyntaxException& e ){
-        FAIL(Utf8("SyntaxException: % at %:%").format(e.message(), e.parsedFile(), e.parsedLine()).data().c_str());
+        FAIL(Utf8("SyntaxException: % at %:%").format(e.message(), e.parsedLocation().filePath(), e.parsedLocation().range().start().line()).data().c_str());
     } catch ( lv::Exception& e ){
         FAIL(("Exception triggered: " + e.message()).c_str());
     }
@@ -137,7 +137,7 @@ TEST_CASE( "Parse Test", "[Parse]" ) {
 
             REQUIRE(compare.isEqual());
         } catch ( lv::el::SyntaxException& e ){
-            FAIL(Utf8("SyntaxException: % at %:%").format(e.message(), e.parsedFile(), e.parsedLine()).data().c_str());
+            FAIL(Utf8("SyntaxException: % at %:%").format(e.message(), e.parsedLocation().filePath(), e.parsedLocation().range().start().line()).data().c_str());
         } catch ( lv::Exception& e ){
             FAIL(("Exception triggered: " + e.message()).c_str());
         }
