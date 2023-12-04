@@ -37,12 +37,10 @@ class ExceptionPrivate;
 class LV_BASE_EXPORT Exception : public std::exception{
 
 public:
-    class SourceTrace{
+    class LV_BASE_EXPORT SourceTrace{
     public:
-        SourceTrace(const SourceLocation& l = SourceLocation(), StackTrace::Ptr t = nullptr)
-            : location(l), trace(t){}
-        SourceTrace(int line, const std::string& filePath, const std::string& functionName, StackTrace::Ptr t = nullptr)
-            : location(SourceLocation(SourcePoint::createFromLine(line), filePath, functionName)), trace(t){}
+        SourceTrace(const SourceLocation& l = SourceLocation(), StackTrace::Ptr t = nullptr);
+        SourceTrace(int line, const std::string& filePath, const std::string& functionName, StackTrace::Ptr t = nullptr);
 
         SourceLocation  location;
         StackTrace::Ptr trace;
@@ -60,6 +58,8 @@ public:
     bool hasStackTrace() const;
 
     const SourceLocation& location() const;
+
+    virtual const char* what() const override;
 
     const std::string& message() const;
     Code code() const;

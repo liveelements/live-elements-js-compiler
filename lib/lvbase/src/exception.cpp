@@ -35,6 +35,19 @@ Exception::Code encodeSingle(char c){
 
 }
 
+/**
+ * \class lv::Exception::SourceTrace
+ *
+ * \brief Source location and stack trace for Exception
+ */
+Exception::SourceTrace::SourceTrace(const SourceLocation& l, StackTrace::Ptr t)
+    : location(l), trace(t)
+{}
+
+Exception::SourceTrace::SourceTrace(int line, const std::string& filePath, const std::string& functionName, StackTrace::Ptr t)
+    : location(SourceLocation(SourcePoint::createFromLine(line), filePath, functionName)), trace(t)
+{}
+
 
 /**
  * \class lv::Exception
@@ -96,6 +109,10 @@ Exception &Exception::operator =(const Exception &other){
     m_d->code         = other.code();
     m_d->stackTrace   = other.stackTrace();
     return *this;
+}
+
+ const char* Exception::what() const{
+    return m_d->message.c_str();
 }
 
 /**
