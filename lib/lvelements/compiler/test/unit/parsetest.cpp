@@ -98,7 +98,6 @@ TEST_CASE( "Parse Test", "[Parse]" ) {
     SECTION("TodoList Item Small Sample"){ testFileParse("ParserTest17"); }
     SECTION("TodoList Sample"){ testFileParse("ParserTest18"); }
     SECTION("TodoList Item Sample"){ testFileParse("ParserTest19"); }
-
     SECTION("Todo Form Sample"){ testFileParse("ParserTest20"); }
     SECTION("TodoApp Sample"){ testFileParse("ParserTest21"); }
     SECTION("Complex Ternary Operator"){ testFileParse("ParserTest22"); }

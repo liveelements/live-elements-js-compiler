@@ -46,7 +46,6 @@ bool LanguageNodesToJs::newLinePrecedes(const std::string& source, size_t endPos
     return false;
 }
 
-
 void LanguageNodesToJs::convert(BaseNode* node, const std::string &source, std::vector<ElementsInsertion *> &sections, int indentValue, BaseNode::ConversionContext *ctx){
     if ( node->isNodeType<ProgramNode>() ){
         convertProgram(node->as<ProgramNode>(), source, sections, indentValue, ctx);
@@ -1229,11 +1228,12 @@ void LanguageNodesToJs::convertArrowFunction(
         *compose << indent(indentValue + 2);
     *compose << annotations << "(" << paramList << ")" << returnType << " => ";
 
-    if ( arrowNode->body() ){
+    BaseNode* body = arrowNode->body() ? arrowNode->body() : arrowNode->expression();
+    if ( body ){
         JSSection* jssection = new JSSection;
-        jssection->from = arrowNode->body()->startByte();
-        jssection->to   = arrowNode->body()->endByte();
-        convert(arrowNode->body(), source, jssection->m_children, indentValue + 1, ctx);
+        jssection->from = body->startByte();
+        jssection->to   = body->endByte();
+        convert(body, source, jssection->m_children, indentValue + 1, ctx);
         *compose << jssection;
     }
     if ( newLineFollows(source, arrowNode->endByte()) )

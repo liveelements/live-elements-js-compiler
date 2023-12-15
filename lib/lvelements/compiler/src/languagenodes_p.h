@@ -40,6 +40,7 @@ class ImportPathNode;
 class ImportNode;
 class JsImportNode;
 class PropertyDeclarationNode;
+class StaticPropertyDeclarationNode;
 class PropertyAssignmentNode;
 class ParameterNode;
 class ParameterListNode;
@@ -54,9 +55,28 @@ class BindableExpressionNode;
 class MemberExpressionNode;
 class SubscriptExpressionNode;
 class ArgumentsNode;
+class TaggedStringNode;
+class TrippleTaggedStringNode;
 class ObjectNode;
 class RootNewComponentExpressionNode;
 class PropertyAccessorDeclarationNode;
+class FunctionNode;
+class FunctionDeclarationNode;
+class ArrowFunctionNode;
+class ComponentBodyNode;
+class VariableDeclarationNode;
+class NumberNode;
+class ExpressionStatementNode;
+class CallExpressionNode;
+class NewTaggedComponentExpressionNode;
+class NewTrippleTaggedComponentExpressionNode;
+class ClassDeclarationNode;
+class ConstructorDefinitionNode;
+class ComponentInstanceStatementNode;
+class NewExpressionNode;
+class ReturnStatementNode;
+class TryCatchBlockNode;
+class AssignmentExpressionNode;
 
 class BaseNode{
 
@@ -137,53 +157,54 @@ protected:
     virtual void addChild(BaseNode *child);
 
 private:
-    static void visit(BaseNode* parent, const TSNode& node);
+    static BaseNode* visit(BaseNode* parent, const TSNode& node);
     static void visitChildren(BaseNode* parent, const TSNode& node);
-    static void visitImport(BaseNode* parent, const TSNode& node);
-    static void visitJsImport(BaseNode* parent, const TSNode& node);
-    static void visitIdentifier(BaseNode* parent, const TSNode& node);
-    static void visitPropertyIdentifier(BaseNode* parent, const TSNode& node);
-    static void visitImportPath(BaseNode* parent, const TSNode& node);
-    static void visitComponentDeclaration(BaseNode* parent, const TSNode& node);
-    static void visitComponentBody(BaseNode* parent, const TSNode& node);
-    static void visitNewComponentExpression(BaseNode* parent, const TSNode& node);
-    static void visitComponentInstanceStatement(BaseNode* parent, const TSNode& node);
-    static void visitPropertyDeclaration(BaseNode* parent, const TSNode& node);
-    static void visitStaticPropertyDeclaration(BaseNode* parent, const TSNode& node);
-    static void visitBindableExpression(BaseNode* parent, const TSNode& node);
-    static void visitMemberExpression(BaseNode* parent, const TSNode& node);
-    static void visitSubscriptExpression(BaseNode* parent, const TSNode& node);
-    static void visitPropertyAssignment(BaseNode* parent, const TSNode& node);
-    static void visitIdentifierAssignment(BaseNode* parent, const TSNode& node);
-    static void visitPublicFieldDeclaration(BaseNode* parent, const TSNode& node);
-    static void visitEventDeclaration(BaseNode* parent, const TSNode& node);
-    static void visitListenerDeclaration(BaseNode* parent, const TSNode& node);
-    static void visitMethodDefinition(BaseNode* parent, const TSNode& node);
-    static void visitTypedMethodDeclaration(BaseNode* parent, const TSNode& node);
-    static void visitPropertyAccessorDeclaration(BaseNode* parent, const TSNode& node);
-    static void visitJsScope(BaseNode* parent, const TSNode& node);
-    static void visitNumber(BaseNode* parent, const TSNode& node);
-    static void visitConstructorDefinition(BaseNode* parent, const TSNode& node);
-    static void visitExpressionStatement(BaseNode* parent, const TSNode& node);
-    static void visitAssignmentExpression(BaseNode* parent, const TSNode& node);
-    static void visitCallExpression(BaseNode* parent, const TSNode& node);
-    static void visitNewTaggedComponentExpression(BaseNode* parent, const TSNode& node);
-    static void visitNewTrippleTaggedComponentExpression(BaseNode* parent, const TSNode& node);
-    static void visitTaggedString(BaseNode* parent, const TSNode& node);
-    static void visitTrippleTaggedString(BaseNode* parent, const TSNode& node);
-    static void visitFunctionDeclaration(BaseNode* parent, const TSNode& node);
-    static void visitFunction(BaseNode* parent, const TSNode& node);
-    static void visitClassDeclaration(BaseNode* parent, const TSNode& node);
-    static void visitVariableDeclaration(BaseNode* parent, const TSNode& node);
-    static void visitLexicalDeclaration(BaseNode* parent, const TSNode& node);
-    static void visitDestructuringPattern(BaseNode* parent, const TSNode& node);
-    static void visitNewExpression(BaseNode* parent, const TSNode& node);
-    static void visitReturnStatement(BaseNode* parent, const TSNode& node);
-    static void visitArrowFunction(BaseNode* parent, const TSNode& node);
-    static void visitObject(BaseNode* parent, const TSNode& node);
-    static void visitTryCatchBlock(BaseNode* parent, const TSNode& node);
 
-    static void visitDeclarationForm(BaseNode * parent, const TSNode & node, int form);
+    static ImportNode*                     visitImport(BaseNode* parent, const TSNode& node);
+    static JsImportNode*                   visitJsImport(BaseNode* parent, const TSNode& node);
+    static IdentifierNode*                 visitIdentifier(BaseNode* parent, const TSNode& node);
+    static IdentifierNode*                 visitPropertyIdentifier(BaseNode* parent, const TSNode& node);
+    static ImportPathNode*                 visitImportPath(BaseNode* parent, const TSNode& node);
+    static ComponentDeclarationNode*       visitComponentDeclaration(BaseNode* parent, const TSNode& node);
+    static ComponentBodyNode*              visitComponentBody(BaseNode* parent, const TSNode& node);
+    static NewComponentExpressionNode*     visitNewComponentExpression(BaseNode* parent, const TSNode& node);
+    static ComponentInstanceStatementNode* visitComponentInstanceStatement(BaseNode* parent, const TSNode& node);
+    static PropertyDeclarationNode*        visitPropertyDeclaration(BaseNode* parent, const TSNode& node);
+    static StaticPropertyDeclarationNode*  visitStaticPropertyDeclaration(BaseNode* parent, const TSNode& node);
+    static BindableExpressionNode*         visitBindableExpression(BaseNode* parent, const TSNode& node);
+    static MemberExpressionNode*           visitMemberExpression(BaseNode* parent, const TSNode& node);
+    static SubscriptExpressionNode*        visitSubscriptExpression(BaseNode* parent, const TSNode& node);
+    static PropertyAssignmentNode*         visitPropertyAssignment(BaseNode* parent, const TSNode& node);
+    static IdentifierNode*                 visitIdentifierAssignment(BaseNode* parent, const TSNode& node);
+    static PublicFieldDeclarationNode*     visitPublicFieldDeclaration(BaseNode* parent, const TSNode& node);
+    static EventDeclarationNode*           visitEventDeclaration(BaseNode* parent, const TSNode& node);
+    static ListenerDeclarationNode*        visitListenerDeclaration(BaseNode* parent, const TSNode& node);
+    static MethodDefinitionNode*           visitMethodDefinition(BaseNode* parent, const TSNode& node);
+    static TypedMethodDeclarationNode*     visitTypedMethodDeclaration(BaseNode* parent, const TSNode& node);
+    static PropertyAccessorDeclarationNode*visitPropertyAccessorDeclaration(BaseNode* parent, const TSNode& node);
+    static JsBlockNode*                    visitJsScope(BaseNode* parent, const TSNode& node);
+    static NumberNode*                     visitNumber(BaseNode* parent, const TSNode& node);
+    static ConstructorDefinitionNode*      visitConstructorDefinition(BaseNode* parent, const TSNode& node);
+    static ExpressionStatementNode*        visitExpressionStatement(BaseNode* parent, const TSNode& node);
+    static AssignmentExpressionNode*       visitAssignmentExpression(BaseNode* parent, const TSNode& node);
+    static CallExpressionNode*             visitCallExpression(BaseNode* parent, const TSNode& node);
+    static NewTaggedComponentExpressionNode* visitNewTaggedComponentExpression(BaseNode* parent, const TSNode& node);
+    static NewTrippleTaggedComponentExpressionNode* visitNewTrippleTaggedComponentExpression(BaseNode* parent, const TSNode& node);
+    static TaggedStringNode*               visitTaggedString(BaseNode* parent, const TSNode& node);
+    static TrippleTaggedStringNode*        visitTrippleTaggedString(BaseNode* parent, const TSNode& node);
+    static FunctionDeclarationNode*        visitFunctionDeclaration(BaseNode* parent, const TSNode& node);
+    static FunctionNode*                   visitFunction(BaseNode* parent, const TSNode& node);
+    static ClassDeclarationNode*           visitClassDeclaration(BaseNode* parent, const TSNode& node);
+    static VariableDeclarationNode*        visitVariableDeclaration(BaseNode* parent, const TSNode& node);
+    static VariableDeclarationNode*        visitLexicalDeclaration(BaseNode* parent, const TSNode& node);
+    static void                            visitDestructuringPattern(BaseNode* parent, const TSNode& node);
+    static NewExpressionNode*              visitNewExpression(BaseNode* parent, const TSNode& node);
+    static ReturnStatementNode*            visitReturnStatement(BaseNode* parent, const TSNode& node);
+    static ArrowFunctionNode*              visitArrowFunction(BaseNode* parent, const TSNode& node);
+    static ObjectNode*                     visitObject(BaseNode* parent, const TSNode& node);
+    static TryCatchBlockNode*              visitTryCatchBlock(BaseNode* parent, const TSNode& node);
+
+    static VariableDeclarationNode* visitDeclarationForm(BaseNode * parent, const TSNode & node, int form);
 
     BaseNode*                  m_parent;
     TSNode                     m_node;
@@ -970,8 +991,12 @@ class ArrowFunctionNode: public FunctionNode{
     LANGUAGE_NODE_INFO(ArrowFunctionNode);
 public:
     ArrowFunctionNode(const TSNode& node);
-
     virtual std::string toString(int indent = 0) const;
+
+    BaseNode* expression() const{ return m_expression; }
+
+protected:    
+    BaseNode* m_expression;
 };
 
 
