@@ -405,6 +405,8 @@ void BaseNode::visit(BaseNode *parent, const TSNode &node){
         visitNewComponentExpression(parent, node);
     } else if ( strcmp(ts_node_type(node), "nested_new_component_expression") == 0 ){
         visitNewComponentExpression(parent, node);
+    } else if ( strcmp(ts_node_type(node), "constructor_initializer") == 0 ){
+        visitConstructorInitializer(parent, node);
     } else if ( strcmp(ts_node_type(node), "arrow_function") == 0 ){
         visitArrowFunction(parent, node);
     } else if ( strcmp(ts_node_type(node), "component_body") == 0 ){
@@ -761,6 +763,57 @@ void BaseNode::visitComponentInstanceStatement(BaseNode *parent, const TSNode &n
             enode->addChild(enode->m_name);
         } else if ( strcmp(ts_node_type(child), "new_component_expression") == 0 ){
             visitNewComponentExpression(enode, child);
+        }
+    }
+}
+
+ConstructorInitializerAssignmentNode::ConstructorInitializerAssignmentNode(const TSNode& node)
+    : BaseNode(node, ConstructorInitializerAssignmentNode::nodeInfo())
+    , m_name(nullptr)
+    , m_expression(nullptr)
+{}
+
+void BaseNode::visitConstructorInitializer(BaseNode* parent, const TSNode& node){
+    ConstructorInitializerNode* enode = new ConstructorInitializerNode(node);
+    parent->addChild(enode);
+
+    BaseNode* p = parent;
+    ConstructorDefinitionNode* constructorDefinition = nullptr;
+    while ( p ){
+        if (
+            p->isNodeType<ExpressionStatementNode>() ||
+            p->isNodeType<JsBlockNode>()
+        ){
+            p = p->parent();
+        } else if ( p->isNodeType<ConstructorDefinitionNode>() ){
+            constructorDefinition = p->as<ConstructorDefinitionNode>();
+            break;
+        } else {
+            throwError(parent, node, "Constructor initializer must be called directly from the constructor body.");
+        }
+    }
+
+    constructorDefinition->m_initializer = enode;
+
+    uint32_t count = ts_node_child_count(node);
+    for ( uint32_t i = 0; i < count; ++i ){
+        TSNode child = ts_node_child(node, i);
+        assertError(parent, child, "Constructor initializer not declared properly.");
+        if ( strcmp(ts_node_type(child), "constructor_initializer_assignment") == 0 ){
+            TSNode assignmentName = BaseNode::nodeChildByFieldName(child, "name");
+            BaseNode::assertValid(enode, assignmentName, "Constructor initializer assignment name missing.");
+            TSNode assignmentExpression = BaseNode::nodeChildByFieldName(child, "value");
+            BaseNode::assertValid(enode, assignmentExpression, "Constructor initializer assignment value not set.");
+
+            auto assignment = new ConstructorInitializerAssignmentNode(child);
+            assignment->m_name = new IdentifierNode(assignmentName);
+            assignment->addChild(assignment->m_name);
+            assignment->m_expression = new BindableExpressionNode(assignmentExpression);
+            assignment->addChild(assignment->m_expression);
+            enode->m_assignments.push_back(assignment);
+            enode->addChild(assignment);
+
+            visit(assignment->m_expression, assignmentExpression);
         }
     }
 }

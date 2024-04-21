@@ -1,6 +1,22 @@
+component Y{
+    constructor(x:any){
+        super()
+        this{a = x}
+    }
+
+    any a
+    b: 1
+
+    Child{
+        id: child
+        any ca: 2
+        cd: 3
+    }
+}
+
 component X < Y{
     constructor(x:any, y:any){
         super(x, y)
-        X.prototype.__initialize.call(this)
+        this{x = (10 + 20 / 3); y = 20}
     }
 }

@@ -1,0 +1,9 @@
+component X{
+  constructor(){
+    super()
+    this{
+        x = (S"")
+        y = 200
+    }
+  }
+}

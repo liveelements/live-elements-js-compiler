@@ -39,6 +39,14 @@ public:
         BaseNode::ConversionContext *ctx
     );
 
+    void convertConstructorInitializer(
+        ConstructorInitializerNode* node,
+        const std::string &source,
+        std::vector<ElementsInsertion *> &sections,
+        int indentValue,
+        BaseNode::ConversionContext *ctx
+    );
+
     void convertNewComponentExpression(
         NewComponentExpressionNode* node,
         const std::string &source,

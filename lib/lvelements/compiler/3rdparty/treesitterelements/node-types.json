@@ -280,6 +280,10 @@
         "named": true
       },
       {
+        "type": "constructor_initializer",
+        "named": true
+      },
+      {
         "type": "false",
         "named": true
       },
@@ -1969,6 +1973,58 @@
         "types": [
           {
             "type": "formal_type_parameters",
+            "named": true
+          }
+        ]
+      }
+    }
+  },
+  {
+    "type": "constructor_initializer",
+    "named": true,
+    "fields": {
+      "property_assignment": {
+        "multiple": true,
+        "required": false,
+        "types": [
+          {
+            "type": "constructor_initializer_assignment",
+            "named": true
+          }
+        ]
+      }
+    },
+    "children": {
+      "multiple": false,
+      "required": true,
+      "types": [
+        {
+          "type": "this",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "constructor_initializer_assignment",
+    "named": true,
+    "fields": {
+      "name": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      },
+      "value": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "property_assignment_expression",
             "named": true
           }
         ]

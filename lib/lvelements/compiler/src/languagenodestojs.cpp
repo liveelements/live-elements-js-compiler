@@ -4,7 +4,6 @@
 
 namespace lv{ namespace el{
 
-
 std::string LanguageNodesToJs::indent(int i){
     std::string res;
     res.append(4 * i, ' ');
@@ -52,6 +51,8 @@ void LanguageNodesToJs::convert(BaseNode* node, const std::string &source, std::
         convertProgram(node->as<ProgramNode>(), source, sections, indentValue, ctx);
     } else if ( node->isNodeType<ComponentDeclarationNode>() ){
         convertComponentDeclaration(node->as<ComponentDeclarationNode>(), source, sections, indentValue, ctx);
+    } else if ( node->isNodeType<ConstructorInitializerNode>() ){
+        convertConstructorInitializer(node->as<ConstructorInitializerNode>(), source, sections, indentValue, ctx);
     } else if ( node->isNodeType<NewComponentExpressionNode>() ){
         convertNewComponentExpression(node->as<NewComponentExpressionNode>(), source, sections, indentValue, ctx);
     } else if ( node->isNodeType<RootNewComponentExpressionNode>() ){
@@ -227,7 +228,6 @@ void LanguageNodesToJs::convertComponentDeclaration(ComponentDeclarationNode *no
         jssection->to   = node->componentBody()->constructor()->body()->endByte();
         convert(node->componentBody()->constructor()->body(), source, jssection->m_children, indentValue + 1, ctx);
         *compose << jssection << "\n";
-
     } else {
         *compose << indent(indentValue + 1) << "constructor(){\n"
                  << indent(indentValue + 2) << "super()\n"
@@ -235,7 +235,18 @@ void LanguageNodesToJs::convertComponentDeclaration(ComponentDeclarationNode *no
                  << indent(indentValue + 1) << "}\n";
     }
 
-    *compose << indent(indentValue + 1) << "__initialize(){\n";
+    *compose << indent(indentValue + 1) << "__initialize(";
+    if ( node->componentBody()->constructor() ){
+        if ( node->componentBody()->constructor()->initializer() ){
+            ConstructorInitializerNode* cinit = node->componentBody()->constructor()->initializer();
+            for ( auto it = cinit->assignments().begin(); it != cinit->assignments().end(); ++it ){
+                if ( it != cinit->assignments().begin() )
+                    *compose << ",";
+                *compose << "__" << slice(source, (*it)->name()) << "__";
+            }
+        }
+    }
+    *compose << "){\n";
 
     if (node->componentId() || !node->idComponents().empty())
         *compose << indent(indentValue + 2) << "this.ids = {}\n\n";
@@ -313,6 +324,16 @@ void LanguageNodesToJs::convertComponentDeclaration(ComponentDeclarationNode *no
             jssection->to   = node->listeners()[i]->bodyExpression()->endByte();
             convert(node->listeners()[i]->bodyExpression(), source, jssection->m_children, indentValue + 1, ctx);
             *compose << "{" << jssection << "}.bind(this));\n";
+        }
+    }
+
+    if ( node->componentBody()->constructor() ){ //constructor initializer
+        if ( node->componentBody()->constructor()->initializer() ){
+            ConstructorInitializerNode* cinit = node->componentBody()->constructor()->initializer();
+            for ( auto it = cinit->assignments().begin(); it != cinit->assignments().end(); ++it ){
+                std::string propertyName = slice(source, (*it)->name());
+                *compose << indent(indentValue + 2) << "this." << propertyName << " = " << "__" << propertyName << "__" << "\n";
+            }
         }
     }
 
@@ -599,6 +620,45 @@ void LanguageNodesToJs::convertComponentDeclaration(ComponentDeclarationNode *no
         }
         *compose << indent(indentValue) << "}";
     }
+
+    sections.push_back(compose);
+}
+
+void LanguageNodesToJs::convertConstructorInitializer(ConstructorInitializerNode *node, const std::string &source, std::vector<ElementsInsertion *> &sections, int indentValue, BaseNode::ConversionContext *ctx){
+    ElementsInsertion* compose = new ElementsInsertion;
+    compose->from = node->startByte();
+    compose->to = node->endByte();
+
+    BaseNode* parent = node->parent();
+    ComponentDeclarationNode* componentDeclaration = nullptr;
+    while ( parent ){
+        if ( parent->isNodeType<ComponentDeclarationNode>() ){
+            componentDeclaration = parent->as<ComponentDeclarationNode>();
+            break;
+        }
+        parent = parent->parent();
+    }
+
+    if ( !componentDeclaration ){
+        THROW_EXCEPTION(lv::Exception, Utf8("Internal: Could not find component declaration for constructor initializer: %.").format(slice(source, node)), lv::Exception::toCode("~Enabled"));
+    }
+
+    *compose << indent(indentValue) << componentDeclaration->name(source) << ".prototype.__initialize.call";
+    *compose << "(this";
+
+    for ( auto it = node->assignments().begin(); it != node->assignments().end(); ++it ){
+        *compose << ",";
+        JSSection* jssection = new JSSection;
+        jssection->from = (*it)->expression()->startByte();
+        jssection->to   = (*it)->expression()->endByte();
+        convert(*it, source, jssection->m_children, indentValue + 1, ctx);
+        *compose << jssection;
+    }
+
+    *compose << ")";
+
+    if ( newLineFollows(source, node->endByte()) )
+        *compose << "\n";
 
     sections.push_back(compose);
 }

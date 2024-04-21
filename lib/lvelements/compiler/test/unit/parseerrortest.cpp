@@ -102,5 +102,49 @@ TEST_CASE( "Parse Error Test", "[ParseError]" ) {
         }
         REQUIRE(hadException);
     }
+
+    SECTION("Constructor initializer outside constructor"){
+        std::string name = "ParserErrorTest04";
+        std::string filePath = scriptPath() + "/" + name + ".lv";
+        std::string contents = fileIO().readFromFile(scriptPath() + "/" + name + ".lv");
+
+        Compiler::Config compilerConfig;
+        compilerConfig.allowUnresolvedTypes(false);
+        Compiler::Ptr compiler = Compiler::create(compilerConfig);
+        compiler->configureImplicitType("console");
+        compiler->configureImplicitType("vlog");
+
+        bool hadException = false;
+
+        try {
+            compiler->compileToJs(filePath, contents);
+        } catch (lv::Exception& e) {
+            REQUIRE(e.code() == lv::Exception::toCode("~Language"));
+            hadException = true;
+        }
+        REQUIRE(hadException);
+    }
+
+    SECTION("Constructor initializer with error"){
+        std::string name = "ParserErrorTest05";
+        std::string filePath = scriptPath() + "/" + name + ".lv";
+        std::string contents = fileIO().readFromFile(scriptPath() + "/" + name + ".lv");
+
+        Compiler::Config compilerConfig;
+        compilerConfig.allowUnresolvedTypes(false);
+        Compiler::Ptr compiler = Compiler::create(compilerConfig);
+        compiler->configureImplicitType("console");
+        compiler->configureImplicitType("vlog");
+
+        bool hadException = false;
+
+        try {
+            compiler->compileToJs(filePath, contents);
+        } catch (lv::Exception& e) {
+            REQUIRE(e.code() == lv::Exception::toCode("~Language"));
+            hadException = true;
+        }
+        REQUIRE(hadException);
+    }
 }
 

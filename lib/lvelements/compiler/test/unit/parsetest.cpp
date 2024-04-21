@@ -76,7 +76,6 @@ void testFileParse(const std::string& name){
 }
 
 
-
 TEST_CASE( "Parse Test", "[Parse]" ) {
     SECTION("Constructor"){ testFileParse("ParserTest01"); }
     SECTION("Function"){ testFileParse("ParserTest02"); }

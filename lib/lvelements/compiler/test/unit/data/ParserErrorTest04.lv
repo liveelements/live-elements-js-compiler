@@ -1,0 +1,5 @@
+component X{
+  fn completed(){
+    this{}
+  }
+}

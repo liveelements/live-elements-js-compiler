@@ -57,6 +57,7 @@ class ArgumentsNode;
 class ObjectNode;
 class RootNewComponentExpressionNode;
 class PropertyAccessorDeclarationNode;
+class ConstructorInitializerNode;
 
 class BaseNode{
 
@@ -148,6 +149,7 @@ private:
     static void visitComponentBody(BaseNode* parent, const TSNode& node);
     static void visitNewComponentExpression(BaseNode* parent, const TSNode& node);
     static void visitComponentInstanceStatement(BaseNode* parent, const TSNode& node);
+    static void visitConstructorInitializer(BaseNode* parent, const TSNode& node);
     static void visitPropertyDeclaration(BaseNode* parent, const TSNode& node);
     static void visitStaticPropertyDeclaration(BaseNode* parent, const TSNode& node);
     static void visitBindableExpression(BaseNode* parent, const TSNode& node);
@@ -499,6 +501,7 @@ public:
         , m_body(nullptr)
         , m_superCall(nullptr)
         , m_parameters(nullptr)
+        , m_initializer(nullptr)
     {}
 
     virtual std::string toString(int indent = 0) const;
@@ -507,11 +510,13 @@ public:
     JsBlockNode* body() const{ return m_body; }
     CallExpressionNode* superCall() const{ return m_superCall; }
     ParameterListNode* parameters() const{ return m_parameters; }
+    ConstructorInitializerNode* initializer() const{ return m_initializer; }
 
 private:
-    JsBlockNode*        m_body;
-    CallExpressionNode* m_superCall;
-    ParameterListNode*  m_parameters;
+    JsBlockNode*                m_body;
+    CallExpressionNode*         m_superCall;
+    ParameterListNode*          m_parameters;
+    ConstructorInitializerNode* m_initializer;
 
 };
 
@@ -818,6 +823,30 @@ public:
 
 private:
     IdentifierNode* m_name;
+};
+
+class ConstructorInitializerAssignmentNode : public BaseNode{
+    friend class BaseNode;
+    LANGUAGE_NODE_INFO(ConstructorInitializerAssignmentNode);
+public:
+    ConstructorInitializerAssignmentNode(const TSNode& node);
+    BindableExpressionNode* expression() const{ return m_expression; }
+    IdentifierNode* name() const{ return m_name; }
+
+private:
+    IdentifierNode*         m_name;
+    BindableExpressionNode* m_expression;
+};
+
+class ConstructorInitializerNode : public BaseNode{
+    friend class BaseNode;
+    LANGUAGE_NODE_INFO(ConstructorInitializerNode);
+public:
+    ConstructorInitializerNode(const TSNode node) : BaseNode(node, ConstructorInitializerNode::nodeInfo()){}
+    const std::vector<ConstructorInitializerAssignmentNode*>& assignments() const{ return m_assignments; }
+
+private:
+    std::vector<ConstructorInitializerAssignmentNode*> m_assignments;
 };
 
 class ExpressionStatementNode : public BaseNode{
