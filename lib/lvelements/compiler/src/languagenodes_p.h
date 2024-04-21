@@ -159,6 +159,7 @@ protected:
 
 private:
     static BaseNode* visit(BaseNode* parent, const TSNode& node);
+    static void visitChildren(BaseNode* parent, const TSNode& node);
 
     static ImportNode*                     visitImport(BaseNode* parent, const TSNode& node);
     static JsImportNode*                   visitJsImport(BaseNode* parent, const TSNode& node);
@@ -170,6 +171,7 @@ private:
     static NewComponentExpressionNode*     visitNewComponentExpression(BaseNode* parent, const TSNode& node);
     static ComponentInstanceStatementNode* visitComponentInstanceStatement(BaseNode* parent, const TSNode& node);
     static PropertyDeclarationNode*        visitPropertyDeclaration(BaseNode* parent, const TSNode& node);
+    static ConstructorInitializerNode*     visitConstructorInitializer(BaseNode* parent, const TSNode& node);
     static StaticPropertyDeclarationNode*  visitStaticPropertyDeclaration(BaseNode* parent, const TSNode& node);
     static BindableExpressionNode*         visitBindableExpression(BaseNode* parent, const TSNode& node);
     static MemberExpressionNode*           visitMemberExpression(BaseNode* parent, const TSNode& node);

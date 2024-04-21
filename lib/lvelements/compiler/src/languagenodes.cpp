@@ -787,7 +787,7 @@ ConstructorInitializerAssignmentNode::ConstructorInitializerAssignmentNode(const
     , m_expression(nullptr)
 {}
 
-void BaseNode::visitConstructorInitializer(BaseNode* parent, const TSNode& node){
+ConstructorInitializerNode* BaseNode::visitConstructorInitializer(BaseNode* parent, const TSNode& node){
     ConstructorInitializerNode* enode = new ConstructorInitializerNode(node);
     parent->addChild(enode);
 
@@ -830,6 +830,8 @@ void BaseNode::visitConstructorInitializer(BaseNode* parent, const TSNode& node)
             visit(assignment->m_expression, assignmentExpression);
         }
     }
+
+    return enode;
 }
 
 PropertyDeclarationNode* BaseNode::visitPropertyDeclaration(BaseNode *parent, const TSNode &node){
