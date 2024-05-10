@@ -14,4 +14,11 @@ component ParserTest49{
             let a = &X.Y{}
         }
     }
+
+    var v = &V{
+        constructor(){
+            super()
+            this{ x = 2 }
+        }
+    }
 }

@@ -594,6 +594,15 @@ void LanguageNodesToJs::convertComponentDeclaration(ComponentDeclarationNode *no
         *compose << jssection << "\n";
     }
 
+    if ( ctx->outputComponentMeta && node->isAnonymous() ){ // Meta for anonymous components
+        *compose << indent(indentValue + 1)  << "static get Meta(){ return {\n";
+        *compose << indent(indentValue + 2) << "get sourceFileName(){ return \'" << Path::name(ctx->componentPath) << "\' },\n";
+        if ( !ctx->currentImportUri.empty() ){
+            *compose << indent(indentValue + 2) << "get module(){ return \'" << ctx->currentImportUri << "\' }\n";
+        }
+        *compose << indent(indentValue + 1) << "}}\n";
+    }
+
     *compose << indent(indentValue) << "}\n";
 
     for ( auto it = node->staticProperties().begin(); it != node->staticProperties().end(); ++it ){
@@ -611,7 +620,7 @@ void LanguageNodesToJs::convertComponentDeclaration(ComponentDeclarationNode *no
         }
     }
 
-    if ( ctx->outputComponentMeta ){
+    if ( ctx->outputComponentMeta && !node->isAnonymous() ){
         *compose << indent(indentValue)  << componentName << ".Meta = {\n";
         *compose << indent(indentValue + 1) << "get sourceFileName(){ return \'" << Path::name(ctx->componentPath) << "\' },\n";
         if ( !ctx->currentImportUri.empty() ){
@@ -642,7 +651,9 @@ void LanguageNodesToJs::convertConstructorInitializer(ConstructorInitializerNode
         THROW_EXCEPTION(lv::Exception, Utf8("Internal: Could not find component declaration for constructor initializer: %.").format(slice(source, node)), lv::Exception::toCode("~Enabled"));
     }
 
-    *compose << indent(indentValue) << componentDeclaration->name(source) << ".prototype.__initialize.call";
+    std::string initObject = (componentDeclaration->isAnonymous() ? "new.target" : componentDeclaration->name(source));
+
+    *compose << indent(indentValue) << initObject << ".prototype.__initialize.call";
     *compose << "(this";
 
     for ( auto it = node->assignments().begin(); it != node->assignments().end(); ++it ){
