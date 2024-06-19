@@ -13,7 +13,7 @@ async function setupScriptData(){
     const packageJson = JSON.parse(fs.readFileSync(path.join(currentDir, '..', 'package.json')))
     const packageVersion = packageJson.version
     const [nodeVersionMajor, nodeVersionMinor] = process.versions.node.split('.').map(Number)
-    const baseUrl = 'https://github.com/live-keys/live-elements-js-compiler/releases/download'
+    const baseUrl = 'https://github.com/liveelements/live-elements-js-compiler/releases/download'
     const tarballs = [
         `live-elements-js-compiler-v${packageVersion}-${os.platform()}-${os.arch()}-nv${nodeVersionMajor}.tar.gz`,
         `live-elements-js-compiler-v${packageVersion}-${os.platform()}-${os.arch()}.tar.gz`
