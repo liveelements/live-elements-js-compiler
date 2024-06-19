@@ -53,6 +53,7 @@ class ComponentDeclarationNode;
 class NewComponentExpressionNode;
 class BindableExpressionNode;
 class MemberExpressionNode;
+class ExpressionNode;
 class SubscriptExpressionNode;
 class ArgumentsNode;
 class TaggedStringNode;
@@ -159,6 +160,7 @@ protected:
 
 private:
     static BaseNode* visit(BaseNode* parent, const TSNode& node);
+    static BaseNode* visitRecognized(BaseNode* parent, const TSNode& node);
     static void visitChildren(BaseNode* parent, const TSNode& node);
 
     static ImportNode*                     visitImport(BaseNode* parent, const TSNode& node);

@@ -208,12 +208,12 @@ SourceRangeLocation BaseNode::nodeSourceLocation(BaseNode *p, const TSNode& node
     std::string fileName = BaseNode::nodeSourceFilePath(p);
     if ( !ts_node_is_null(node) ){
         SourcePoint startPoint = SourcePoint(
-            ts_node_start_point(node).row,
+            ts_node_start_point(node).row + 1,
             ts_node_start_point(node).column,
             ts_node_start_byte(node)
         );
         SourcePoint endPoint = SourcePoint(
-            ts_node_end_point(node).row,
+            ts_node_end_point(node).row + 1,
             ts_node_end_point(node).column,
             ts_node_end_byte(node)
         );
@@ -380,7 +380,7 @@ std::string BaseNode::toString(int indent) const{
     return result;
 }
 
-BaseNode* BaseNode::visit(BaseNode *parent, const TSNode &node){
+BaseNode *BaseNode::visitRecognized(BaseNode *parent, const TSNode &node){
     if ( strcmp(ts_node_type(node), "import_statement") == 0 ){
         return visitImport(parent, node);
     } else if ( strcmp(ts_node_type(node), "js_import_statement") == 0 ){
@@ -483,6 +483,14 @@ BaseNode* BaseNode::visit(BaseNode *parent, const TSNode &node){
             SOURCE_TRACE()
         );
         throw se;
+    }
+    return nullptr;
+}
+
+BaseNode* BaseNode::visit(BaseNode *parent, const TSNode &node){
+    BaseNode* recognized = visitRecognized(parent, node);
+    if ( recognized ){
+        return recognized;
     } else {
         visitChildren(parent, node);
     }
@@ -1725,11 +1733,11 @@ ArrowFunctionNode* BaseNode::visitArrowFunction(BaseNode *parent, const TSNode &
             enode->addChild(enode->m_body);
             visitChildren(enode->m_body, body);
         } else {
-            enode->m_expression = visit(enode, body);
+            enode->m_expression = visitRecognized(enode, body);
             if ( !enode->m_expression ){
-                ExpressionNode* exprNode = new ExpressionNode(body);
-                parent->addChild(exprNode);
-                enode->m_expression = exprNode;
+                enode->m_expression = new ExpressionNode(body);
+                enode->addChild(enode->m_expression);
+                visitChildren(enode->m_expression, body);
             }
         }
     }
