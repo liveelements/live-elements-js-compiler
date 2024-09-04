@@ -18,6 +18,8 @@
 
 #include "live/module.h"
 #include "live/package.h"
+#include "live/visuallog.h"
+#include "exception.h"
 
 namespace lv{
 
@@ -38,7 +40,7 @@ public:
     /** Package graph */
     PackageGraph* packageGraph;
     /** Package */
-    Package::Ptr package;
+    Package::WeakPtr package;
 
     /** Import id */
     Utf8 importId;
@@ -46,6 +48,10 @@ public:
     std::list<Module::Ptr> localDependencies;
     /** Local dependents */
     std::list<Module::Ptr> localDependents;
+
+    Package::Ptr packageUnwrapped(){
+        return package.lock();
+    }
 
 private:
     DISABLE_COPY(Context);

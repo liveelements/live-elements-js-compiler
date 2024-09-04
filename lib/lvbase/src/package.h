@@ -39,6 +39,8 @@ public:
     typedef std::shared_ptr<Package> Ptr;
     /** Const shared pointer to the Package */
     typedef std::shared_ptr<Package> ConstPtr;
+    /** Weak pointer to the Package */
+    typedef std::weak_ptr<Package> WeakPtr;
 
     class Context;
 

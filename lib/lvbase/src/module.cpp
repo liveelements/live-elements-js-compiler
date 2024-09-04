@@ -31,7 +31,6 @@
 #include <istream>
 #include <sstream>
 
-
 /**
   \class lv::Module
   \brief Manages a Livekeys module.
@@ -60,6 +59,7 @@ public:
 
 /** Default destructor */
 Module::~Module(){
+    delete m_d->context;
     delete m_d;
 }
 

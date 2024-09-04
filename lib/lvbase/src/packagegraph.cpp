@@ -49,6 +49,8 @@ public:
     std::vector<std::string> packageImportPaths;
     std::map<std::string, Package::Ptr> packages;
     std::map<std::string, PackageGraph::LibraryNode*> libraries;
+
+    std::list<Package::Ptr> runningPackages;
     PaletteContainer* paletteContainer;
 };
 
@@ -563,6 +565,8 @@ Module::Ptr PackageGraph::createRunningModule(const std::string &modulePath){
     module->context()->package = package;
     package->context()->modules["."] = module;
 
+    m_d->runningPackages.push_back(package);
+
     return module;
 }
 
@@ -577,6 +581,17 @@ void PackageGraph::loadRunningPackageAndModule(const Package::Ptr &package, cons
     Utf8::replaceAll(uriFromPackage, "/",  ".");
     Utf8::replaceAll(uriFromPackage, "\\", ".");
     module->context()->importId = uriFromPackage.empty() ? package->name() : package->name() + "." + uriFromPackage;
+
+    if ( package->name() != "." ){
+        auto it = m_d->packages.find(package->name());
+        if ( it == m_d->packages.end() ){
+            m_d->packages[package->name()] = package;
+        } else if ( it->second->path() != package->path() ){
+            m_d->runningPackages.push_back(package);
+        }
+    } else {
+        m_d->runningPackages.push_back(package);
+    }
 }
 
 /**
@@ -600,7 +615,7 @@ Module::Ptr PackageGraph::loadModule(const std::vector<std::string> &importSegme
     Package::Ptr foundPackage = nullptr;
 
     if ( requestingModule ){
-        Package::Ptr requestingPackage = requestingModule->context() ? requestingModule->context()->package : nullptr;
+        Package::Ptr requestingPackage = requestingModule->context() ? requestingModule->context()->packageUnwrapped() : nullptr;
 
         if ( requestingPackage ){
             if ( requestingPackage->name() == packageName || (requestingPackage->name() == "." && packageName.empty() )){
@@ -688,7 +703,7 @@ void PackageGraph::addDependency(const Module::Ptr& module, const Module::Ptr& d
     if ( module == nullptr )
         return;
 
-    if ( module->context()->package.get() == dependsOn->context()->package.get() ){ // within the same package
+    if ( module->context()->packageUnwrapped().get() == dependsOn->context()->packageUnwrapped().get() ){ // within the same package
 
         if ( !hasDependency(module, dependsOn) ){
             module->context()->localDependencies.push_back(dependsOn);
@@ -723,7 +738,7 @@ void PackageGraph::addDependency(const Module::Ptr& module, const Module::Ptr& d
         }
 
     } else { // add package dependency instead
-        addDependency(module->context()->package, dependsOn->context()->package);
+        addDependency(module->context()->packageUnwrapped(), dependsOn->context()->packageUnwrapped());
     }
 }
 
