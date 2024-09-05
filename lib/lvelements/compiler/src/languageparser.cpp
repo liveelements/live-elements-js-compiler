@@ -122,7 +122,7 @@ LanguageParser::AST *LanguageParser::parse(const std::string &source) const{
     return reinterpret_cast<LanguageParser::AST*>(ts_parser_parse_string(m_parser, nullptr, source.c_str(), static_cast<uint32_t>(source.size())));
 }
 
-void LanguageParser::destroy(LanguageParser::AST *ast) const{
+void LanguageParser::destroy(LanguageParser::AST *ast){
     if ( ast )
         ts_tree_delete(reinterpret_cast<TSTree*>(ast));
 }

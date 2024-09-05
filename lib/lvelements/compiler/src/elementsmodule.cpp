@@ -34,9 +34,9 @@ public:
     ElementsModulePrivate(Engine* e)
         : engine(e), typesResolved(false), isCompiled(false){}
 
-    Module::Ptr   module;
-    Compiler::Ptr compiler;
-    Engine*       engine;
+    Module::Ptr       module;
+    Compiler::WeakPtr compiler;
+    Engine*           engine;
     std::map<std::string, ModuleFile*> fileModules;
     std::list<ModuleLibrary*>          libraries;
 
@@ -61,6 +61,10 @@ ElementsModule::~ElementsModule(){
 //        delete *it;
 //    }
 #endif
+    for ( auto it = m_d->fileModules.begin(); it != m_d->fileModules.end(); ++it ){
+        ModuleFile* mf = it->second;
+        delete mf;
+    }
     delete m_d;
 }
 
@@ -110,7 +114,11 @@ ModuleFile *ElementsModule::addModuleFile(ElementsModule::Ptr &epl, const std::s
         return it->second;
     }
 
-    Compiler::Ptr compiler = epl->m_d->compiler;
+    Compiler::WeakPtr wcompiler = epl->m_d->compiler;
+    Compiler::Ptr compiler = wcompiler.lock();
+    if ( !compiler ){
+        THROW_EXCEPTION(lv::Exception, Utf8("Compiler has been released."), Exception::toCode("~Compiler"));
+    }
 
     std::string filePath = Path::join(epl->module()->path(), name);
     if ( !Path::exists(filePath) ){
@@ -121,7 +129,6 @@ ModuleFile *ElementsModule::addModuleFile(ElementsModule::Ptr &epl, const std::s
         );
     }
     std::string content = compiler->fileIO()->readFromFile(filePath);
-    LanguageParser::AST* ast = compiler->parser()->parse(content);
 
     std::string componentName = name;
     size_t i = componentName.find(".lv");
@@ -129,9 +136,10 @@ ModuleFile *ElementsModule::addModuleFile(ElementsModule::Ptr &epl, const std::s
         componentName = name.substr(0, i);
     }
 
+    LanguageParser::AST* ast = compiler->parser()->parse(content);
     ProgramNode* pn = compiler->parseProgramNodes(filePath, componentName, ast);
 
-    ModuleFile* mf = new ModuleFile(epl, name, content, pn);
+    ModuleFile* mf = new ModuleFile(epl.get(), name, content, pn, ast);
     epl->m_d->fileModules[name] = mf;
 
     auto mfExports = mf->exports();
@@ -152,14 +160,14 @@ ModuleFile *ElementsModule::addModuleFile(ElementsModule::Ptr &epl, const std::s
         ModuleFile::Import& imp = *it;
 
         if ( imp.isRelative ){
-            if ( epl->module()->context()->package == nullptr ){
+            if ( epl->module()->context()->packageUnwrapped() == nullptr ){
                 THROW_EXCEPTION(TracePointException, Utf8("Cannot import relative path withouth package: \'%\' in \'%\'").format(imp.uri, currentUriName), Exception::toCode("~Import"));
             }
-            if ( epl->module()->context()->package->name() == "." ){
+            if ( epl->module()->context()->packageUnwrapped()->name() == "." ){
                 THROW_EXCEPTION(TracePointException, Utf8("Cannot import relative path withouth package: \'%\' in \'%\'").format(imp.uri, currentUriName), Exception::toCode("~Import"));
             }
 
-            std::string importUri = epl->module()->context()->package->name() + (imp.uri == "." ? "" : imp.uri);
+            std::string importUri = epl->module()->context()->packageUnwrapped()->name() + (imp.uri == "." ? "" : imp.uri);
             if ( importUri == epl->module()->context()->importId.data() ){
                 THROW_EXCEPTION(
                     TracePointException,
@@ -169,7 +177,7 @@ ModuleFile *ElementsModule::addModuleFile(ElementsModule::Ptr &epl, const std::s
             }
 
             try{
-                ElementsModule::Ptr ep = Compiler::compileImportedModule(epl->m_d->compiler, importUri, epl->module(), epl->engine());
+                ElementsModule::Ptr ep = Compiler::compileImportedModule(epl->compiler(), importUri, epl->module(), epl->engine());
                 if ( !ep ){
                     THROW_EXCEPTION(TracePointException, Utf8("Failed to find module \'%\' imported in \'%\'").format(imp.uri, currentUriName), Exception::toCode("~Import"));
                 }
@@ -187,7 +195,7 @@ ModuleFile *ElementsModule::addModuleFile(ElementsModule::Ptr &epl, const std::s
                 );
             }
             try{
-                ElementsModule::Ptr ep = Compiler::compileImportedModule(epl->m_d->compiler, it->uri, epl->module(), epl->engine());
+                ElementsModule::Ptr ep = Compiler::compileImportedModule(epl->compiler(), it->uri, epl->module(), epl->engine());
                 if ( !ep ){
                     THROW_EXCEPTION(lv::Exception, Utf8("Failed to find module \'%\' imported in \'%\'").format(imp.uri, currentUriName), Exception::toCode("~Import"));
                 }
@@ -252,7 +260,7 @@ void ElementsModule::compile(){
     }
 
     auto assets = m_d->module->assets();
-    std::string moduleBuildPath = m_d->compiler->moduleBuildPath(m_d->module);
+    std::string moduleBuildPath = compiler()->moduleBuildPath(m_d->module);
 
     for ( auto it = assets.begin(); it != assets.end(); ++it ){
         std::string assetPath = Path::join(m_d->module->path(), *it);
@@ -266,7 +274,11 @@ void ElementsModule::compile(){
 }
 
 Compiler::Ptr ElementsModule::compiler() const{
-    return m_d->compiler;
+    Compiler::Ptr compiler = m_d->compiler.lock();
+    if ( !compiler ){
+        THROW_EXCEPTION(lv::Exception, Utf8("Compiler has been released."), Exception::toCode("~Compiler"));
+    }
+    return compiler;
 }
 
 Engine *ElementsModule::engine() const{

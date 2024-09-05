@@ -83,7 +83,6 @@ public:
     std::string jsFileName() const;
     std::string jsFilePath() const;
     std::string filePath() const;
-    const ElementsModule::Ptr& module() const;
     const std::list<Export>& exports() const;
     const std::list<Import>& imports() const;
     void resolveImport(const std::string& uri, ElementsModule::Ptr epl);
@@ -97,7 +96,7 @@ private:
     static PackageGraph::CyclesResult<ModuleFile*> checkCycles(ModuleFile* mf, ModuleFile* current, std::list<ModuleFile*> path);
 
 
-    ModuleFile(ElementsModule::Ptr plugin, const std::string& name, const std::string& content, ProgramNode* node);
+    ModuleFile(ElementsModule* plugin, const std::string& name, const std::string& content, ProgramNode* node, LanguageParser::AST* ast);
 
     ModuleFilePrivate* m_d;
 

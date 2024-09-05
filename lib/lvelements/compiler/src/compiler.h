@@ -36,6 +36,7 @@ class CompilerPrivate;
 class LV_ELEMENTS_COMPILER_EXPORT Compiler{
 
 public:
+    typedef std::weak_ptr<Compiler>         WeakPtr;
     typedef std::shared_ptr<Compiler>       Ptr;
     typedef std::shared_ptr<const Compiler> ConstPtr;
 

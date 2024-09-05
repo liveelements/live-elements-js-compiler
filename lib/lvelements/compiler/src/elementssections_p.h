@@ -34,9 +34,9 @@ public:
         Js
     };
     InsertionSection(): type(Insertion){}
-
     virtual ~InsertionSection(){}
-    virtual std::string toString() const{return content + "\n";}
+
+    virtual std::string toString() const{ return content + "\n"; }
     virtual void flatten(const std::string&, std::vector<std::string>& parts){
         if ( content.size() > 0 )
             parts.push_back(content);
@@ -46,6 +46,8 @@ protected:
     InsertionSection(Type t) : type(t){}
 
 public:
+    DISABLE_COPY(InsertionSection);
+
     Type        type;
     std::string content;
 };
@@ -57,10 +59,11 @@ public:
     std::vector<ElementsInsertion*> m_children;
 
     JSSection(int pFrom = 0, int pTo = 0): InsertionSection(Js), from(pFrom), to(pTo){}
+    virtual ~JSSection();
 
-    virtual std::string toString() const;
+    virtual std::string toString() const override;
 
-    virtual void flatten(const std::string& source, std::vector<std::string>& parts);
+    virtual void flatten(const std::string& source, std::vector<std::string>& parts) override;
 };
 
 class ElementsInsertion : public InsertionSection{
@@ -70,6 +73,11 @@ public:
     std::vector<InsertionSection*> m_children;
 
     ElementsInsertion(): InsertionSection(Elements){}
+    virtual ~ElementsInsertion(){
+        for ( auto it = m_children.begin(); it != m_children.end(); ++it ){
+            delete *it;
+        }
+    }
 
     ElementsInsertion& operator<<(const std::string& content){
         if ( m_children.empty() ){
@@ -91,14 +99,14 @@ public:
         return *this;
     }
 
-    virtual void flatten(const std::string& source, std::vector<std::string>& parts){
+    virtual void flatten(const std::string& source, std::vector<std::string>& parts) override{
         for ( auto it = m_children.begin(); it != m_children.end(); ++it ){
             InsertionSection* ei = *it;
             ei->flatten(source, parts);
         }
     }
 
-    std::string toString() const{
+    std::string toString() const override{
         std::string base = "[ELEMENTSSCOPE]\n";
         for ( InsertionSection const* child : m_children ){
             base += child->toString();
@@ -108,6 +116,12 @@ public:
     }
 
 };
+
+inline JSSection::~JSSection(){
+    for ( auto it = m_children.begin(); it != m_children.end(); ++it ){
+        delete *it;
+    }
+}
 
 inline std::string JSSection::toString() const{
     std::string base = "[JSSCOPE " + std::to_string(from) + " -> " + std::to_string(to) + "]\n";

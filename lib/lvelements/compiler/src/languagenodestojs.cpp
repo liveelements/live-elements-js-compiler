@@ -341,40 +341,29 @@ void LanguageNodesToJs::convertComponentDeclaration(ComponentDeclarationNode *no
         std::string bindingsInJs = node->properties()[i]->bindingIdentifiersToJs(source);
 
         if (bindingsInJs.size() > 0 && node->properties()[i]->isBindingsAssignment() ){
-            std::string comp = indent(indentValue + 1) + BaseNode::ConversionContext::baseComponentName(ctx) + ".assignPropertyExpression(this,\n"
-                             + indent(indentValue + 1) + "'" + slice(source, node->properties()[i]->name()) + "',\n";
+            *compose << indent(indentValue + 1) << BaseNode::ConversionContext::baseComponentName(ctx) << ".assignPropertyExpression(this,\n"
+                             << indent(indentValue + 1) << "'" << slice(source, node->properties()[i]->name()) << "',\n";
             if (node->properties()[i]->expression()){
                 auto expr = node->properties()[i]->expression();
-                comp += indent(indentValue + 1) + "function(){ return ";
-                el::JSSection* section = new el::JSSection;
+                *compose << indent(indentValue + 1) + "function(){ return ";
+                el::JSSection* section = new JSSection;
                 section->from = expr->startByte();
                 section->to = expr->endByte();
                 convert(expr, source, section->m_children, indentValue + 1, ctx);
-
-                std::vector<std::string> flat;
-                section->flatten(source, flat);
-                for (auto s: flat)
-                    comp += s;
-                delete section;
-                comp += "}.bind(this),\n";
+                *compose << section;
+                *compose << "}.bind(this),\n";
             } else if (node->properties()[i]->statementBlock()){
                 auto block = node->properties()[i]->statementBlock();
-                comp += indent(indentValue + 1) + "(function()";
-                el::JSSection* section = new el::JSSection;
+                *compose << indent(indentValue + 1) + "(function()";
+                el::JSSection* section = new JSSection;
                 section->from = block->startByte();
                 section->to = block->endByte();
                 convert(block, source, section->m_children, indentValue + 1, ctx);
-
-                std::vector<std::string> flat;
-                section->flatten(source, flat);
-                for (auto s: flat)
-                    comp += s;
-                delete section;
-                comp += ".bind(this)\n),\n";
+                *compose << section;
+                *compose << ".bind(this)\n),\n";
             }
-            comp += indent(indentValue + 1) + bindingsInJs + "\n";
-            comp += indent(indentValue + 1) + ")\n";
-            *compose << comp;
+            *compose << indent(indentValue + 1) + bindingsInJs + "\n";
+            *compose << indent(indentValue + 1) + ")\n";
         } else if ( node->properties()[i]->hasAssignment() ){
             *compose << indent(indentValue + 2) << "this." << slice(source,node->properties()[i]->name())
                      << " = ";
@@ -385,25 +374,16 @@ void LanguageNodesToJs::convertComponentDeclaration(ComponentDeclarationNode *no
                 expressionSection->from = expr->startByte();
                 expressionSection->to   = expr->endByte();
                 convert(expr, source, expressionSection->m_children, indentValue + 2, ctx);
-                std::vector<std::string> flat;
-                expressionSection->flatten(source, flat);
-                for (auto s: flat)
-                    *compose << s;
-                delete expressionSection;
-
+                *compose << expressionSection;
                 *compose << "\n";
             } else if (node->properties()[i]->statementBlock()){
                 auto block = node->properties()[i]->statementBlock();
                 *compose << "(function()" ;
-                el::JSSection* section = new el::JSSection;
+                el::JSSection* section = new JSSection;
                 section->from = block->startByte();
                 section->to = block->endByte();
                 convert(block, source, section->m_children, indentValue + 1, ctx);
-                std::vector<std::string> flat;
-                section->flatten(source, flat);
-                for (auto s: flat)
-                    *compose << s;
-                delete section;
+                *compose << section;
                 *compose << ".bind(this))()\n";
             }
         }
@@ -430,11 +410,7 @@ void LanguageNodesToJs::convertComponentDeclaration(ComponentDeclarationNode *no
                 expressionSection->from = expr->startByte();
                 expressionSection->to   = expr->endByte();
                 convert(expr, source, expressionSection->m_children, indentValue + 4, ctx);
-                std::vector<std::string> flat;
-                expressionSection->flatten(source, flat);
-                for (auto s: flat)
-                    *compose << s;
-                delete expressionSection;
+                *compose << expressionSection;
 
                 *compose << "}.bind(" << object << "),\n"
                          << indent(indentValue + 3) << bindingsInJs << "\n"
@@ -455,11 +431,7 @@ void LanguageNodesToJs::convertComponentDeclaration(ComponentDeclarationNode *no
                 expressionSection->from = expr->startByte();
                 expressionSection->to   = expr->endByte();
                 convert(expr, source, expressionSection->m_children, indentValue + 4, ctx);
-                std::vector<std::string> flat;
-                expressionSection->flatten(source, flat);
-                for (auto s: flat)
-                    *compose << s;
-                delete expressionSection;
+                *compose << expressionSection;
 
                 *compose << ".bind(" << object << "),\n"
                          << indent(indentValue + 2) << bindingsInJs << "\n"
@@ -474,19 +446,11 @@ void LanguageNodesToJs::convertComponentDeclaration(ComponentDeclarationNode *no
                 }
 
                 auto expr = node->assignments()[i]->expression();
-                std::string comp = "" ;
-                el::JSSection* section = new el::JSSection;
+                el::JSSection* section = new JSSection;
                 section->from = expr->startByte();
                 section->to = expr->endByte();
                 convert(expr, source, section->m_children, indentValue + 2, ctx);
-                std::vector<std::string> flat;
-                section->flatten(source, flat);
-                for (auto s: flat){
-                    comp += s;
-                }
-                delete section;
-
-                *compose << " = " << comp << "\n"; //slice(source, m_assignments[i]->m_expression) << "\n\n";
+                *compose << " = " << section << "\n"; //slice(source, m_assignments[i]->m_expression) << "\n\n";
             }
             else if (node->assignments()[i]->statementBlock() ) {
                 std::string propName = "this";
@@ -498,16 +462,11 @@ void LanguageNodesToJs::convertComponentDeclaration(ComponentDeclarationNode *no
 
                 auto block = node->assignments()[i]->statementBlock();
 
-                el::JSSection* section = new el::JSSection;
+                el::JSSection* section = new JSSection;
                 section->from = block->startByte();
                 section->to = block->endByte();
                 convert(block, source, section->m_children, indentValue + 3, ctx);
-                std::vector<std::string> flat;
-                section->flatten(source, flat);
-                for (auto s: flat) {
-                    *compose << s;
-                }
-                delete section;
+                *compose << section;
 
                 *compose << ".bind(this)())\n\n";
             }
@@ -520,15 +479,11 @@ void LanguageNodesToJs::convertComponentDeclaration(ComponentDeclarationNode *no
         {
             if (i != 0)
                 *compose << indent(indentValue + 3) << ",\n";
-            el::JSSection* section = new el::JSSection;
+            el::JSSection* section = new JSSection;
             section->from = node->nestedComponents()[i]->startByte();
             section->to = node->nestedComponents()[i]->endByte();
             convert(node->nestedComponents()[i], source, section->m_children, indentValue + 3, ctx);
-            std::vector<std::string> flat;
-            section->flatten(source, flat);
-            for (auto s: flat)
-                *compose << s;
-            delete section;
+            *compose << section;
         }
         *compose << indent(indentValue + 2) << "])\n";
     }
@@ -558,12 +513,7 @@ void LanguageNodesToJs::convertComponentDeclaration(ComponentDeclarationNode *no
             jssection->from = pa->body()->startByte();
             jssection->to   = pa->body()->endByte();
             convert(pa->body(), source, jssection->m_children, indentValue + 1, ctx);
-            std::vector<std::string> flat;
-            jssection->flatten(source, flat);
-            for (auto s: flat){
-                *compose << s << "\n";
-            }
-            delete jssection;
+            *compose << jssection;
             *compose << "\n";
         }
     }
@@ -740,43 +690,30 @@ void LanguageNodesToJs::convertNewComponentExpression(NewComponentExpressionNode
 
         std::string bindingsInJs = node->properties()[i]->bindingIdentifiersToJs(source);
         if (bindingsInJs.size() > 0 && node->properties()[i]->isBindingsAssignment() ){
-            std::string comp = "";
             if (node->properties()[i]->expression()){
-                comp += indent(indt + 1) + BaseNode::ConversionContext::baseComponentName(ctx) + ".assignPropertyExpression(this,\n"
-                      + indent(indt + 2) + "'" + slice(source, node->properties()[i]->name()) + "',\n"
-                      + indent(indt + 2) + "function(){ return ";
+                *compose << indent(indt + 1) << BaseNode::ConversionContext::baseComponentName(ctx) << ".assignPropertyExpression(this,\n"
+                      << indent(indt + 2) << "'" + slice(source, node->properties()[i]->name()) + "',\n"
+                      << indent(indt + 2) << "function(){ return ";
 
                 JSSection* expressionSection = new JSSection;
                 expressionSection->from = node->properties()[i]->expression()->startByte();
                 expressionSection->to   = node->properties()[i]->expression()->endByte();
                 convert(node->properties()[i], source, expressionSection->m_children, indt + 1, ctx);
-                std::vector<std::string> flat;
-                expressionSection->flatten(source, flat);
-                for (auto s: flat)
-                    comp += s;
-
-                comp += "}.bind(this),\n"
-                      + indent(indt + 2) + bindingsInJs + "\n";
-                comp += indent(indt + 1) +  + ")\n";
+                *compose << expressionSection;
+                *compose << "}.bind(this),\n" << indent(indt + 2) + bindingsInJs + "\n";
+                *compose << indent(indt + 1) +  + ")\n";
             } else {
-                comp += indent(indt + 1) + BaseNode::ConversionContext::baseComponentName(ctx) + ".assignPropertyExpression(this,\n"
-                      + indent(indt + 2) + "'" + slice(source, node->properties()[i]->name()) + "',\n" + indent(indt + 2) + "function()";
-                el::JSSection* section = new el::JSSection;
+                *compose << indent(indt + 1) << BaseNode::ConversionContext::baseComponentName(ctx) << ".assignPropertyExpression(this,\n"
+                      << indent(indt + 2) << "'" << slice(source, node->properties()[i]->name()) << "',\n" << indent(indt + 2) << "function()";
+                el::JSSection* section = new JSSection;
                 auto block = node->properties()[i]->statementBlock();
                 section->from = block->startByte();
                 section->to = block->endByte();
                 convert(block, source, section->m_children, indt + 1, ctx);
-                std::vector<std::string> flat;
-                section->flatten(source, flat);
-                for (auto s: flat)
-                    comp += s;
-                delete section;
-                comp += ".bind(this),\n"
-                      + indent(indt + 1) + bindingsInJs + "\n";
-                comp += indent(indt + 1) + ")\n";
+                *compose << section;
+                *compose << ".bind(this),\n" << indent(indt + 1) + bindingsInJs + "\n";
+                *compose << indent(indt + 1) + ")\n";
             }
-
-            *compose << comp;
         } else if ( node->properties()[i]->hasAssignment() ){
             if (node->properties()[i]->expression()){
                 auto expr = node->properties()[i]->expression();
@@ -787,26 +724,16 @@ void LanguageNodesToJs::convertNewComponentExpression(NewComponentExpressionNode
                 expressionSection->from = expr->startByte();
                 expressionSection->to   = expr->endByte();
                 convert(expr, source, expressionSection->m_children, indt + 1, ctx);
-                std::vector<std::string> flat;
-                expressionSection->flatten(source, flat);
-                for (auto s: flat)
-                    *compose << s;
-
-                *compose << "\n";
+                *compose << expressionSection << "\n";
             } else if (node->properties()[i]->statementBlock()) {
                 *compose << indent(indt + 1) << "this." << slice(source, node->properties()[i]->name()) << " = " << "(function()";
-                el::JSSection* section = new el::JSSection;
+                el::JSSection* section = new JSSection;
                 auto block = node->properties()[i]->statementBlock();
                 section->from = block->startByte();
                 section->to = block->endByte();
                 convert(block, source, section->m_children, indt + 2, ctx);
-
-                std::vector<std::string> flat;
-                section->flatten(source, flat);
-                for (auto s: flat)
-                    *compose <<  s;
-                delete section;
-
+                *compose << section;
+                
                 *compose << ".bind(this)())\n\n";
             }
         }
@@ -829,17 +756,12 @@ void LanguageNodesToJs::convertNewComponentExpression(NewComponentExpressionNode
                          << indent(indt + 2) << "'" << slice(source, property[property.size()-1]) << "',\n"
                          << indent(indt + 2) << "function(){ return ";
 
-                el::JSSection* section = new el::JSSection;
+                el::JSSection* section = new JSSection;
                 auto expr = assignment->expression();
                 section->from = expr->startByte();
                 section->to = expr->endByte();
                 convert(expr, source, section->m_children, indt + 2, ctx);
-
-                std::vector<std::string> flat;
-                section->flatten(source, flat);
-                for (auto s: flat)
-                    *compose <<  s;
-                delete section;
+                *compose << section;
 
                 *compose << "}.bind(" << object << "),\n"
                          << indent(indt + 2) << bindingsInJs << "\n"
@@ -854,17 +776,12 @@ void LanguageNodesToJs::convertNewComponentExpression(NewComponentExpressionNode
                          << indent(indt + 2) << "'" << slice(source, property[property.size()-1]) << "',\n"
                          << indent(indt + 2) << "function()";
 
-                el::JSSection* section = new el::JSSection;
+                el::JSSection* section = new JSSection;
                 auto block = assignment->statementBlock();
                 section->from = block->startByte();
                 section->to = block->endByte();
                 convert(block, source, section->m_children, indt + 2, ctx);
-
-                std::vector<std::string> flat;
-                section->flatten(source, flat);
-                for (auto s: flat)
-                    *compose <<  s;
-                delete section;
+                *compose << section;
 
                 *compose << ".bind(" << object << "),\n"
                          << indent(indt + 2) << bindingsInJs << "\n"
@@ -884,31 +801,21 @@ void LanguageNodesToJs::convertNewComponentExpression(NewComponentExpressionNode
                 expressionSection->from = expr->startByte();
                 expressionSection->to   = expr->endByte();
                 convert(expr, source, expressionSection->m_children, indt + 1, ctx);
-                std::vector<std::string> flat;
-                expressionSection->flatten(source, flat);
-                for (auto s: flat)
-                    *compose << s;
-
-                *compose << "\n";
+                *compose << expressionSection << "\n";
 
             } else if (assignment->statementBlock() ) {
                 std::string propName = "this";
-                for (size_t prop = 0; prop <assignment->property().size(); ++prop){
+                for (size_t prop = 0; prop < assignment->property().size(); ++prop){
                     propName += "." + slice(source, assignment->property()[prop]);
                 }
                 *compose << indent(indt + 1) << propName << " = " << "(function()";
 
-                el::JSSection* section = new el::JSSection;
+                el::JSSection* section = new JSSection;
                 auto block = assignment->statementBlock();
                 section->from = block->startByte();
                 section->to = block->endByte();
                 convert(block, source, section->m_children, indt + 2, ctx);
-
-                std::vector<std::string> flat;
-                section->flatten(source, flat);
-                for (auto s: flat)
-                    *compose <<  s;
-                delete section;
+                *compose << section;
 
                 *compose << ".bind(this)())\n";
             }
@@ -985,16 +892,13 @@ void LanguageNodesToJs::convertNewComponentExpression(NewComponentExpressionNode
     if (!node->nestedComponents().empty()){
         *compose << indent(indt + 1) << BaseNode::ConversionContext::baseComponentName(ctx) << ".assignChildrenAndComplete(this, [\n";
         for (unsigned i = 0; i < node->nestedComponents().size(); ++i){
-            if (i != 0) *compose << ",\n";
-            el::JSSection* section = new el::JSSection;
+            if (i != 0) 
+                *compose << ",\n";
+            el::JSSection* section = new JSSection;
             section->from = node->nestedComponents()[i]->startByte();
             section->to = node->nestedComponents()[i]->endByte();
             convert(node->nestedComponents()[i], source, section->m_children, indt + 2, ctx);
-            std::vector<std::string> flat;
-            section->flatten(source, flat);
-            for (auto s: flat)
-                *compose << s << "\n";
-            delete section;
+            *compose << section;
         }
         *compose << indent(indt + 1) << "])\n";
     } else {
@@ -1374,12 +1278,7 @@ void LanguageNodesToJs::convertPropertyDeclaration(PropertyDeclarationNode *node
         jssection->from = propertyAccess.getter->body()->startByte();
         jssection->to   = propertyAccess.getter->body()->endByte();
         convert(propertyAccess.getter->body(), source, jssection->m_children, indt + 1, ctx);
-        std::vector<std::string> flat;
-        jssection->flatten(source, flat);
-        for (auto s: flat){
-            *compose << s << "\n";
-        }
-        delete jssection;
+        *compose << jssection;
     }
     if ( propertyAccess.setter ){
         *compose << ", set: function(" << (propertyAccess.setter->firstParameterName() ? slice(source, propertyAccess.setter->firstParameterName()) : "") << ")";
@@ -1387,12 +1286,7 @@ void LanguageNodesToJs::convertPropertyDeclaration(PropertyDeclarationNode *node
         jssection->from = propertyAccess.setter->body()->startByte();
         jssection->to   = propertyAccess.setter->body()->endByte();
         convert(propertyAccess.setter->body(), source, jssection->m_children, indt + 1, ctx);
-        std::vector<std::string> flat;
-        jssection->flatten(source, flat);
-        for (auto s: flat){
-            *compose << s << "\n";
-        }
-        delete jssection;
+        *compose << jssection;
     }
 
 

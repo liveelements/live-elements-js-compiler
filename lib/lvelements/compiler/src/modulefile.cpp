@@ -30,8 +30,9 @@ class ModuleFilePrivate{
 public:
     std::string name;
     std::string content;
-    ElementsModule::Ptr elementsModule;
+    ElementsModule* elementsModule;
     ProgramNode* rootNode;
+    LanguageParser::AST* ast;
     ModuleFile::CompilationData* compilationData;
 
     ModuleFile::State state;
@@ -44,6 +45,8 @@ public:
 
 ModuleFile::~ModuleFile(){
     delete m_d->compilationData;
+    LanguageParser::destroy(m_d->ast);
+    delete m_d->rootNode;
     delete m_d;
 }
 
@@ -104,7 +107,7 @@ void ModuleFile::resolveTypes(){
 
                                 std::string configPackageBuildPath = m_d->elementsModule->compiler()->packageBuildPath();
                                 std::string packageBuildPath =
-                                    impIt->module->module()->context()->package->name() +
+                                    impIt->module->module()->context()->packageUnwrapped()->name() +
                                     (configPackageBuildPath.empty() ? "" : "/" + configPackageBuildPath);
                                 std::string packageToPluginStr = Utf8::join(packageToPlugin, "/").data();
                                 std::string importPath = packageBuildPath + (packageToPluginStr.empty() ? "" : "/" + packageToPluginStr) + "/" + foundExp.file->jsFileName();
@@ -146,10 +149,6 @@ std::string ModuleFile::jsFilePath() const{
 
 std::string ModuleFile::filePath() const{
     return Path::join(m_d->elementsModule->module()->path(), fileName());
-}
-
-const ElementsModule::Ptr &ModuleFile::module() const{
-    return m_d->elementsModule;
 }
 
 const std::list<ModuleFile::Export> &ModuleFile::exports() const{
@@ -242,7 +241,7 @@ PackageGraph::CyclesResult<ModuleFile*> ModuleFile::checkCycles(
     return PackageGraph::CyclesResult<ModuleFile*>(PackageGraph::CyclesResult<ModuleFile*>::NotFound);
 }
 
-ModuleFile::ModuleFile(ElementsModule::Ptr plugin, const std::string &name, const std::string &content, ProgramNode *node)
+ModuleFile::ModuleFile(ElementsModule* plugin, const std::string &name, const std::string &content, ProgramNode *node, LanguageParser::AST* ast)
     : m_d(new ModuleFilePrivate)
 {
     std::string componentName = name;
@@ -255,6 +254,7 @@ ModuleFile::ModuleFile(ElementsModule::Ptr plugin, const std::string &name, cons
     m_d->state = ModuleFile::Initiaized;
     m_d->content = content;
     m_d->rootNode = node;
+    m_d->ast = ast;
     m_d->compilationData = nullptr;
 
     std::vector<BaseNode*> exports = m_d->elementsModule->compiler()->collectProgramExports(content, node);

@@ -154,8 +154,8 @@ public:
     static void assertError(BaseNode* from, const TSNode& node, const std::string& message);
     static void throwError(BaseNode* from, const TSNode& node, const std::string& message);
 
-
 protected:
+    template<typename T> T* addCreatedChild(T* child){ addChild(child); return child; }
     virtual void addChild(BaseNode *child);
 
 private:

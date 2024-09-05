@@ -33,6 +33,7 @@ public:
     LanguageParser::Ptr parser;
 
     PackageGraph* packageGraph;
+    bool          packageGraphOwn;
     std::map<std::string, ElementsModule::Ptr> loadedModules;
     std::map<std::string, ElementsModule::Ptr> loadedModulesByPath;
 
@@ -74,10 +75,13 @@ Compiler::Compiler(const Config &opt, PackageGraph* pg)
     : m_d(new CompilerPrivate(opt))
 {
     m_d->packageGraph = (pg == nullptr) ? new PackageGraph : pg;
+    m_d->packageGraphOwn = (pg == nullptr) ? true : false;
     m_d->parser = LanguageParser::createForElements();
 }
 
 Compiler::~Compiler(){
+    if ( m_d->packageGraphOwn )
+        delete m_d->packageGraph;
     delete m_d;
 }
 
@@ -96,7 +100,7 @@ const std::list<std::string> &Compiler::importPaths() const{
 std::string Compiler::compileToJs(const std::string &path, const std::string &contents){
     LanguageParser::AST* ast = m_d->parser->parse(contents);
     std::string result = compileToJs(path, contents, ast);
-    m_d->parser->destroy(ast);
+    LanguageParser::destroy(ast);
     return result;
 }
 
@@ -132,7 +136,6 @@ std::string Compiler::compileToJs(const std::string &path, const std::string &co
 
     std::vector<std::string> flatten;
     section->flatten(contents, flatten);
-
     for ( const std::string& s : flatten ){
         result += s;
     }
@@ -210,7 +213,7 @@ std::string Compiler::compileModuleFileToJs(const Module::Ptr &module, const std
             shouldWrite = outputModifiedStamp < sourceModifiedStamp;
         }
         if ( shouldWrite && module->context() ){
-            auto package = module->context()->package;
+            auto package = module->context()->packageUnwrapped();
             if ( !package->release().empty() ){
                 shouldWrite = false;
                 if ( !Path::exists(outputPath.data()) ){
