@@ -18,6 +18,16 @@ jobs:
         include:
         - os: macos-latest
           NAME: macos
+          TARGET: arm64-apple-darwin
+          COMPILER: clang
+          LINKER: clang
+          platform: darwin
+          arch: arm64
+          binaryrelease: true
+          nodeversion: 20
+          nodeversionmain: true
+        - os: macos-13
+          NAME: macos
           TARGET: x86_64-apple-darwin
           COMPILER: clang
           LINKER: clang
