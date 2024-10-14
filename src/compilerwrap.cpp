@@ -127,7 +127,7 @@ void compileWrap(const Napi::CallbackInfo& info){
         convertToMLNode(optionsArg, compilerOptions);
 
         if ( !Path::exists(file) ){
-            THROW_EXCEPTION(lv::Exception, "Error: Script file not found.", lv::Exception::toCode("~File"));
+            THROW_EXCEPTION(lv::Exception, Utf8("Compiler: Script file not found: \'%\'.").format(file), lv::Exception::toCode("~File"));
         }
 
         lv::el::Compiler::Config config;
@@ -230,10 +230,10 @@ void compileModuleWrap(const Napi::CallbackInfo &info){
         convertToMLNode(optionsArg, compilerOptions);
 
         if ( !Path::exists(modulePath) ){
-            THROW_EXCEPTION(lv::Exception, "Error: Module path not found.", lv::Exception::toCode("~Path"));
+            THROW_EXCEPTION(lv::Exception, Utf8("Compiler: Module path not found: \'%\'.").format(modulePath), lv::Exception::toCode("~Path"));
         }
         if ( !Module::existsIn(modulePath) ){
-            THROW_EXCEPTION(lv::Exception, Utf8("Error: Module path not found: %").format(modulePath), lv::Exception::toCode("~Path"));
+            THROW_EXCEPTION(lv::Exception, Utf8("Compiler: Module path not found: \'%\'.").format(modulePath), lv::Exception::toCode("~Path"));
         }
 
 
