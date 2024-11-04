@@ -139,13 +139,13 @@ jobs:
         if: (startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/master') && (matrix.binaryrelease) && (matrix.nodeversionmain)
         run: cp "${{ steps.get_archive_name.outputs.ARCHIVE_NODE_FILENAME }}" "${{ steps.get_archive_name.outputs.ARCHIVE_FILENAME }}"
         
-      - uses: actions/upload-artifact@v1
+      - uses: actions/upload-artifact@v2
         if: (startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/master') && (matrix.binaryrelease)
         with:
           name: ${{ steps.get_archive_name.outputs.ARCHIVE_NODE_FILENAME }}
           path: ${{ steps.get_archive_name.outputs.ARCHIVE_NODE_FILENAME }}
           
-      - uses: actions/upload-artifact@v1
+      - uses: actions/upload-artifact@v2
         if: (startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/master') && (matrix.binaryrelease) && (matrix.nodeversionmain)
         with:
           name: ${{ steps.get_archive_name.outputs.ARCHIVE_FILENAME }}
