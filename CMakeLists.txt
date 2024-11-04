@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.11)
 project (live_elements_js_compiler)
 set(CMAKE_CXX_STANDARD 17)
 
-add_library(live_elements_js_compiler SHARED src/compilerwrap.cpp ${CMAKE_JS_SRC})
+add_library(live_elements_js_compiler SHARED src/compilerwrap.cpp src/compilerhandle.cpp ${CMAKE_JS_SRC})
 
 include(${CMAKE_CURRENT_SOURCE_DIR}/project/functions.cmake)
 
