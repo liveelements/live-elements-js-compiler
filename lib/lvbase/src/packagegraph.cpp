@@ -459,7 +459,7 @@ Package::Ptr PackageGraph::findPackage(const std::string &packageName) const{
             }
         }
     }
-
+    
     return foundPackage;
 }
 
@@ -565,7 +565,7 @@ Module::Ptr PackageGraph::createRunningModule(const std::string &modulePath){
     module->context()->package = package;
     package->context()->modules["."] = module;
 
-    m_d->runningPackages.push_back(package);
+    addRunningPackage(package);
 
     return module;
 }
@@ -587,10 +587,10 @@ void PackageGraph::loadRunningPackageAndModule(const Package::Ptr &package, cons
         if ( it == m_d->packages.end() ){
             m_d->packages[package->name()] = package;
         } else if ( it->second->path() != package->path() ){
-            m_d->runningPackages.push_back(package);
+            addRunningPackage(package);
         }
     } else {
-        m_d->runningPackages.push_back(package);
+        addRunningPackage(package);
     }
 }
 
@@ -746,7 +746,17 @@ PaletteContainer *PackageGraph::paletteContainer() const{
     return m_d->paletteContainer;
 }
 
-bool PackageGraph::hasDependency(const Package::Ptr &package, const Package::Ptr &dependency){
+void PackageGraph::addRunningPackage(const Package::Ptr &p){
+    for ( auto it = m_d->runningPackages.begin(); it != m_d->runningPackages.end(); ++it ){
+        if ( *it == p ){
+            return;
+        }
+    }
+    m_d->runningPackages.push_back(p);
+}
+
+bool PackageGraph::hasDependency(const Package::Ptr &package, const Package::Ptr &dependency)
+{
     for ( auto it = package->context()->dependencies.begin(); it != package->context()->dependencies.end(); ++it ){
         if ( *it == dependency )
             return true;

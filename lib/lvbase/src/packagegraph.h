@@ -119,6 +119,8 @@ public:
     PaletteContainer* paletteContainer() const;
 
 private:
+    void addRunningPackage(const Package::Ptr& p);
+
     bool hasDependency(const Package::Ptr& package, const Package::Ptr& dependency);
     bool hasDependency(const Module::Ptr& plugin, const Module::Ptr& dependency);
 
