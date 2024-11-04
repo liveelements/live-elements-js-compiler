@@ -3,16 +3,9 @@
 
 namespace lv{
 
-Napi::FunctionReference CompilerHandle::constructor;
-
-Napi::Object CompilerHandle::Init(Napi::Env env, Napi::Object exports) {
+Napi::Function CompilerHandle::Init(Napi::Env env, Napi::Object exports) {
     Napi::Function func = DefineClass(env, "CompilerHandle", {});
-
-    constructor = Napi::Persistent(func);
-    constructor.SuppressDestruct();
-
-    exports.Set("CompilerHandle", func);
-    return exports;
+    return func;
 }
 
 CompilerHandle::CompilerHandle(const Napi::CallbackInfo& info) 

@@ -25,6 +25,12 @@
 
 namespace lv{
 
+class CompilerAddonData{
+public:
+    Napi::FunctionReference CompilerHandleConstructor;
+};
+
+
 void convertToMLNode(const Napi::Value& v, MLNode& n){
     if ( v.IsArray() ){
         n = MLNode(MLNode::Type::Array);
@@ -322,7 +328,6 @@ Napi::Value createCompilerWrap(const Napi::CallbackInfo &info){
         lv::el::Compiler::Config config;
         config.initialize(compilerOptions);
         lv::el::Compiler::Ptr compiler = lv::el::Compiler::create(config);
-
         
         auto externalCompilerPtr = Napi::External<lv::el::Compiler::Ptr>::New(
             env, 
@@ -332,8 +337,9 @@ Napi::Value createCompilerWrap(const Napi::CallbackInfo &info){
             }
         );
 
+        CompilerAddonData* compilerData = info.Env().GetInstanceData<CompilerAddonData>();
         
-        Napi::Object obj = CompilerHandle::constructor.New({ externalCompilerPtr });
+        Napi::Object obj = compilerData->CompilerHandleConstructor.New({ externalCompilerPtr });
         Napi::Object result = Napi::Object::New(env);
         result.Set("value", obj);
         return result;
@@ -458,12 +464,22 @@ void runCompilerWrap(const Napi::CallbackInfo &info){
 }
 
 Napi::Object Init(Napi::Env env, Napi::Object exports) {
-    CompilerHandle::Init(env, exports);
+    auto addonData = new CompilerAddonData();
 
+    // Export CompilerHandle
+    Napi::Function funcCompilerHandle = CompilerHandle::Init(env, exports);
+    addonData->CompilerHandleConstructor = Napi::Persistent(funcCompilerHandle);
+    exports.Set("CompilerHandle", funcCompilerHandle);
+
+    // Export functions
     exports.Set("compile", Napi::Function::New(env, lv::compileWrap));
     exports.Set("compileModule", Napi::Function::New(env, lv::compileModuleWrap));
     exports.Set("createCompiler", Napi::Function::New(env, lv::createCompilerWrap));
     exports.Set("runCompiler", Napi::Function::New(env, lv::runCompilerWrap));
+
+    // Set AddonData to instance data
+    env.SetInstanceData<CompilerAddonData>(addonData);
+
     return exports;
 }
 
