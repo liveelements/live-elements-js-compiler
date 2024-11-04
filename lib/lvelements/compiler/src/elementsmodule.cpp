@@ -20,6 +20,7 @@
 #include "live/fileio.h"
 #include "live/path.h"
 #include "live/visuallog.h"
+#include "live/mlnodetojson.h"
 #include "live/elements/compiler/tracepointexception.h"
 
 namespace lv{ namespace el{
@@ -32,7 +33,7 @@ namespace lv{ namespace el{
 class ElementsModulePrivate{
 public:
     ElementsModulePrivate(Engine* e)
-        : engine(e), typesResolved(false), isCompiled(false){}
+        : engine(e), status(ElementsModule::Initialized){}
 
     Module::Ptr       module;
     Compiler::WeakPtr compiler;
@@ -40,18 +41,20 @@ public:
     std::map<std::string, ModuleFile*> fileModules;
     std::list<ModuleLibrary*>          libraries;
 
-    std::map<std::string, ElementsModule::Export> exports;
+    std::string            buildLocation;
+    ElementsModule::Status status;
 
-    bool typesResolved;
-    bool isCompiled;
+    ModuleDescriptor::Ptr  descriptor;
 };
 
 
-ElementsModule::ElementsModule(Module::Ptr plugin, Compiler::Ptr compiler, Engine *engine)
+ElementsModule::ElementsModule(Module::Ptr module, Compiler::Ptr compiler, ModuleDescriptor::Ptr descriptor, Engine *engine)
     : m_d(new ElementsModulePrivate(engine))
 {
+    m_d->descriptor = descriptor;
+    m_d->buildLocation = compiler->moduleBuildPath(module);
     m_d->compiler = compiler;
-    m_d->module = plugin;
+    m_d->module = module;
 }
 
 
@@ -83,12 +86,47 @@ ElementsModule::Ptr ElementsModule::create(Module::Ptr module, Compiler::Ptr com
 }
 
 ElementsModule::Ptr ElementsModule::createImpl(Module::Ptr module, Compiler::Ptr compiler, Engine *engine){
-    ElementsModule::Ptr epl(new ElementsModule(module, compiler, engine));
 
-    for ( auto it = module->fileModules().begin(); it != module->fileModules().end(); ++it ){
-        ElementsModule::addModuleFile(epl, *it + ".lv");
+    ModuleDescriptor::Ptr descriptor;
+
+    auto package = module->context()->packageUnwrapped();
+    if ( !package ){
+        THROW_EXCEPTION(lv::Exception, Utf8("Assertion: Package null for module: \'%\'").format(module->path()), Exception::toCode("~NullPtr"));
+    }
+    if ( !package->release().empty() ){
+        auto buildLocation = compiler->moduleBuildPath(module);
+        if ( Path::exists(Path::join(buildLocation, ModuleDescriptor::buildFileName) ) ){
+            std::string descriptorContent = compiler->fileIO()->readFromFile(
+                Path::join(buildLocation, ModuleDescriptor::buildFileName)
+            );
+
+            MLNode descriptorNode;
+            ml::fromJson(descriptorContent, descriptorNode);
+
+            descriptor = ModuleDescriptor::createFromMlNode(descriptorNode);
+        }
     }
 
+    if ( descriptor ){ // read the descriptor and load files based on the descriptor
+        ElementsModule::Ptr epl(new ElementsModule(module, compiler, descriptor, engine));
+        for ( auto it = module->fileModules().begin(); it != module->fileModules().end(); ++it ){
+            auto fileName = *it + ".lv";
+            ModuleFileDescriptor::Ptr mfd = descriptor->findFile(fileName);
+            if ( mfd ){
+                ElementsModule::loadModuleFile(epl, fileName, mfd);
+            }
+        }
+        epl->initializeLibraries(module->libraryModules());
+        epl->m_d->status = ElementsModule::Compiled;
+        return epl;
+    }
+
+    // no descriptor, create one
+    descriptor = ModuleDescriptor::create(module->context()->importId);
+    ElementsModule::Ptr epl(new ElementsModule(module, compiler, descriptor, engine));
+    for ( auto it = module->fileModules().begin(); it != module->fileModules().end(); ++it ){
+        ElementsModule::parseModuleFile(epl, *it + ".lv");
+    }
     epl->initializeLibraries(module->libraryModules());
 
     return epl;
@@ -104,11 +142,52 @@ void ElementsModule::initializeLibraries(const std::list<std::string> &libs){
 //    }
 #else
     if ( !libs.empty() )
-        THROW_EXCEPTION(lv::Exception, "Module contains libraries that cannot be loaded in this build", lv::Exception::toCode("~Build"));
+        THROW_EXCEPTION(lv::Exception, Utf8("Module '%' contains libraries that cannot be loaded in this build.").format(m_d->module->name()), lv::Exception::toCode("~Build"));
 #endif
 }
 
-ModuleFile *ElementsModule::addModuleFile(ElementsModule::Ptr &epl, const std::string &name){
+ModuleFile *ElementsModule::loadModuleFile(ElementsModule::Ptr &epl, const std::string &name, const ModuleFileDescriptor::Ptr &mfd){
+    auto it = epl->m_d->fileModules.find(name);
+    if ( it != epl->m_d->fileModules.end() ){
+        return it->second;
+    }
+
+    ModuleFile* mf = ModuleFile::createFromDescriptor(epl.get(), name, mfd);
+    epl->m_d->fileModules[name] = mf;
+
+    std::string currentUriName = epl->module()->context()->importId.data() + "." + name;
+
+    auto mfdDependencies = mfd->dependencies();
+    for ( auto dep : mfdDependencies ){
+        Utf8 importUri = dep.importUri();
+        Utf8 importUriFull;
+        if ( importUri.startsWith('.') ){
+            if ( epl->module()->context()->packageUnwrapped() == nullptr ){
+                THROW_EXCEPTION(TracePointException, Utf8("Cannot import relative path withouth package: \'%\' in \'%\'").format(importUri, currentUriName), Exception::toCode("~Import"));
+            }
+            if ( epl->module()->context()->packageUnwrapped()->name() == "." ){
+                THROW_EXCEPTION(TracePointException, Utf8("Cannot import relative path withouth package: \'%\' in \'%\'").format(importUri, currentUriName), Exception::toCode("~Import"));
+            }
+
+            importUriFull = epl->module()->context()->packageUnwrapped()->name() + (importUri == "." ? "" : importUri.data());
+        } else {
+            importUriFull = importUri;
+        }
+
+        try{
+            ElementsModule::Ptr ep = Compiler::createAndResolveImportedModule(epl->compiler(), importUriFull.data(), epl->module(), epl->engine());
+            if ( !ep ){
+                THROW_EXCEPTION(TracePointException, Utf8("Failed to find module \'%\' imported in \'%\'").format(importUriFull, currentUriName), Exception::toCode("~Import"));
+            }
+        } catch ( TracePointException& e ){
+            throw TracePointException(e, Utf8(" - Imported \'%\' from \'%\'").format(importUri, currentUriName));
+        }
+    }
+
+    return mf;
+}
+
+ModuleFile *ElementsModule::parseModuleFile(ElementsModule::Ptr &epl, const std::string &name){
     auto it = epl->m_d->fileModules.find(name);
     if ( it != epl->m_d->fileModules.end() ){
         return it->second;
@@ -117,7 +196,7 @@ ModuleFile *ElementsModule::addModuleFile(ElementsModule::Ptr &epl, const std::s
     Compiler::WeakPtr wcompiler = epl->m_d->compiler;
     Compiler::Ptr compiler = wcompiler.lock();
     if ( !compiler ){
-        THROW_EXCEPTION(lv::Exception, Utf8("Compiler has been released."), Exception::toCode("~Compiler"));
+        THROW_EXCEPTION(lv::Exception, Utf8("Assertion: Compiler has been released."), Exception::toCode("~Compiler"));
     }
 
     std::string filePath = Path::join(epl->module()->path(), name);
@@ -128,6 +207,7 @@ ModuleFile *ElementsModule::addModuleFile(ElementsModule::Ptr &epl, const std::s
             lv::Exception::toCode("~Module")
         );
     }
+
     std::string content = compiler->fileIO()->readFromFile(filePath);
 
     std::string componentName = name;
@@ -139,25 +219,16 @@ ModuleFile *ElementsModule::addModuleFile(ElementsModule::Ptr &epl, const std::s
     LanguageParser::AST* ast = compiler->parser()->parse(content);
     ProgramNode* pn = compiler->parseProgramNodes(filePath, componentName, ast);
 
-    ModuleFile* mf = new ModuleFile(epl.get(), name, content, pn, ast);
+    ModuleFile* mf = ModuleFile::createFromProgramNode(epl.get(), name, content, pn, ast);
     epl->m_d->fileModules[name] = mf;
-
-    auto mfExports = mf->exports();
-
-    for ( auto it = mfExports.begin(); it != mfExports.end(); ++it ){
-        ElementsModule::Export exp;
-        exp.name = it->name;
-        exp.type = it->type == ModuleFile::Export::Element ? ElementsModule::Export::Element : ElementsModule::Export::Component;
-        exp.file = mf;
-        epl->m_d->exports.insert(std::make_pair(exp.name, exp));
-    }
+    epl->m_d->descriptor->addModuleFileDescriptor(mf->descriptor());
 
     std::string currentUriName = epl->module()->context()->importId.data() + "." + name;
 
     auto mfImports = mf->imports();
     for ( auto it = mfImports.begin(); it != mfImports.end(); ++it ){
 
-        ModuleFile::Import& imp = *it;
+        ModuleFile::ModuleImport& imp = *it;
 
         if ( imp.isRelative ){
             if ( epl->module()->context()->packageUnwrapped() == nullptr ){
@@ -177,7 +248,7 @@ ModuleFile *ElementsModule::addModuleFile(ElementsModule::Ptr &epl, const std::s
             }
 
             try{
-                ElementsModule::Ptr ep = Compiler::compileImportedModule(epl->compiler(), importUri, epl->module(), epl->engine());
+                ElementsModule::Ptr ep = Compiler::createAndResolveImportedModule(epl->compiler(), importUri, epl->module(), epl->engine());
                 if ( !ep ){
                     THROW_EXCEPTION(TracePointException, Utf8("Failed to find module \'%\' imported in \'%\'").format(imp.uri, currentUriName), Exception::toCode("~Import"));
                 }
@@ -195,7 +266,7 @@ ModuleFile *ElementsModule::addModuleFile(ElementsModule::Ptr &epl, const std::s
                 );
             }
             try{
-                ElementsModule::Ptr ep = Compiler::compileImportedModule(epl->compiler(), it->uri, epl->module(), epl->engine());
+                ElementsModule::Ptr ep = Compiler::createAndResolveImportedModule(epl->compiler(), it->uri, epl->module(), epl->engine());
                 if ( !ep ){
                     THROW_EXCEPTION(lv::Exception, Utf8("Failed to find module \'%\' imported in \'%\'").format(imp.uri, currentUriName), Exception::toCode("~Import"));
                 }
@@ -231,15 +302,15 @@ const Module::Ptr& ElementsModule::module() const{
 }
 
 void ElementsModule::compile(){
-    if ( m_d->isCompiled )
+    if ( m_d->status == ElementsModule::Compiled || m_d->status == ElementsModule::Compiling )
         return;
 
     // resolve types
-    if ( !m_d->typesResolved ){
+    if ( m_d->status != ElementsModule::Resolved && m_d->status != ElementsModule::Parsed){
         for ( auto it = m_d->fileModules.begin(); it != m_d->fileModules.end(); ++it ){
             it->second->resolveTypes();
         }
-        m_d->typesResolved = true;
+        m_d->status = ElementsModule::Resolved;
     }
 
     // compile dependencies
@@ -270,13 +341,29 @@ void ElementsModule::compile(){
         Path::copyFile(assetPath, resultPath, Path::OverwriteExisting);
     }
 
-    m_d->isCompiled = true;
+    // write compile info
+    MLNode descriptorData = m_d->descriptor->toMLNode();
+    std::string descriptorContent;
+    ml::toJson(descriptorData, descriptorContent);
+
+    std::string descriptorPath = Path::join(m_d->buildLocation, ModuleDescriptor::buildFileName);
+
+    Compiler::Ptr compiler = m_d->compiler.lock();
+    if ( !compiler ){
+        THROW_EXCEPTION(lv::Exception, Utf8("Assertion: ElementsModule: Compiler pointer has been released."), Exception::toCode("~Compiler"));
+    }
+
+    vlog().v() << "ElementsModule: Saving descriptor:" << descriptorPath;
+
+    compiler->fileIO()->writeToFile(descriptorPath, descriptorContent);
+    
+    m_d->status = ElementsModule::Compiled;
 }
 
 Compiler::Ptr ElementsModule::compiler() const{
     Compiler::Ptr compiler = m_d->compiler.lock();
     if ( !compiler ){
-        THROW_EXCEPTION(lv::Exception, Utf8("Compiler has been released."), Exception::toCode("~Compiler"));
+        THROW_EXCEPTION(lv::Exception, Utf8("ElementsModule: Compiler has been released."), Exception::toCode("~Compiler"));
     }
     return compiler;
 }
@@ -285,12 +372,24 @@ Engine *ElementsModule::engine() const{
     return m_d->engine;
 }
 
-ElementsModule::Export ElementsModule::findExport(const std::string &name) const{
-    auto exp = m_d->exports.find(name);
-    if ( exp == m_d->exports.end() ){
-        return ElementsModule::Export();
+ModuleDescriptor::ExportLink ElementsModule::findExport(const std::string &name) const{
+    return m_d->descriptor->findExportByName(name);
+}
+
+ModuleFile *ElementsModule::moduleFileByName(const std::string &fileName) const{
+    auto it = m_d->fileModules.find(fileName);
+    if ( it != m_d->fileModules.end() ){
+        return it->second;
     }
-    return exp->second;
+    return nullptr;
+}
+
+const std::string &ElementsModule::buildLocation() const{
+    return m_d->buildLocation;
+}
+
+ElementsModule::Status ElementsModule::status() const{
+    return m_d->status;
 }
 
 const std::list<ModuleLibrary *> &ElementsModule::libraryModules() const{

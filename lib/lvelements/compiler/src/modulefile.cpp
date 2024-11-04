@@ -35,12 +35,13 @@ public:
     LanguageParser::AST* ast;
     ModuleFile::CompilationData* compilationData;
 
-    ModuleFile::State state;
+    ModuleFile::Status status;
 
-    std::list<ModuleFile::Export> exports;
-    std::list<ModuleFile::Import> imports;
+    std::list<ModuleFile::ModuleImport> imports;
     std::list<ModuleFile*> dependencies;
     std::list<ModuleFile*> dependents;
+
+    ModuleFileDescriptor::Ptr descriptor;
 };
 
 ModuleFile::~ModuleFile(){
@@ -50,7 +51,13 @@ ModuleFile::~ModuleFile(){
     delete m_d;
 }
 
+/**
+ * Resolve programNode imports to js imports.
+ */
 void ModuleFile::resolveTypes(){
+    if ( !m_d->rootNode ){
+        return;
+    }
     auto impTypes = m_d->rootNode->importTypes();
     for ( auto nsit = impTypes.begin(); nsit != impTypes.end(); ++nsit ){
         for ( auto it = nsit->second.begin(); it != nsit->second.end(); ++it ){
@@ -58,10 +65,14 @@ void ModuleFile::resolveTypes(){
             bool foundLocalExport = false;
             if ( impType.importNamespace.empty() ){
                 auto foundExp = m_d->elementsModule->findExport(impType.name);
-                if ( foundExp.isValid() ){
-                    addDependency(foundExp.file);
+                if ( foundExp.isValid() && foundExp.file() ){
+                    auto foundFile = m_d->elementsModule->findModuleFileByName(foundExp.file()->fileName().data());
+                    if ( !foundFile ){
+                        THROW_EXCEPTION(Exception, Utf8("Assertion: File not found: %").format(foundExp.file()->fileName()), Exception::toCode("NullPtr"));
+                    }
+                    addDependency(foundFile);
 
-                    m_d->rootNode->resolveImport(impType.importNamespace, impType.name, "./" + foundExp.file->jsFileName());
+                    m_d->rootNode->resolveImport(impType.importNamespace, impType.name, "./" + foundFile->jsFileName());
                     foundLocalExport = true;
                 }
             }
@@ -71,6 +82,10 @@ void ModuleFile::resolveTypes(){
                     if ( impIt->as == impType.importNamespace ){
                         auto foundExp = impIt->module->findExport(impType.name);
                         if ( foundExp.isValid() ){
+                            auto foundFile = impIt->module->findModuleFileByName(foundExp.file()->fileName().data());
+                            if ( !foundFile ){
+                                THROW_EXCEPTION(Exception, Utf8("Assertion: File not found: %").format(foundExp.file()->fileName()), Exception::toCode("NullPtr"));
+                            }
                             if ( impIt->isRelative ){
                                 // this plugin to package
                                 std::vector<Utf8> parts = Utf8(m_d->elementsModule->module()->context()->importId).split(".");
@@ -99,7 +114,7 @@ void ModuleFile::resolveTypes(){
                                 if ( !packageToNewPlugin.empty() )
                                     packageToNewPlugin += "/";
 
-                                m_d->rootNode->resolveImport(impType.importNamespace, impType.name, pluginToPackage + "/" + packageToNewPlugin + foundExp.file->jsFileName());
+                                m_d->rootNode->resolveImport(impType.importNamespace, impType.name, pluginToPackage + "/" + packageToNewPlugin + foundFile->jsFileName());
 
                             } else {
                                 std::vector<Utf8> packageToPlugin = impIt->module->module()->context()->importId.split(".");
@@ -110,7 +125,7 @@ void ModuleFile::resolveTypes(){
                                     impIt->module->module()->context()->packageUnwrapped()->name() +
                                     (configPackageBuildPath.empty() ? "" : "/" + configPackageBuildPath);
                                 std::string packageToPluginStr = Utf8::join(packageToPlugin, "/").data();
-                                std::string importPath = packageBuildPath + (packageToPluginStr.empty() ? "" : "/" + packageToPluginStr) + "/" + foundExp.file->jsFileName();
+                                std::string importPath = packageBuildPath + (packageToPluginStr.empty() ? "" : "/" + packageToPluginStr) + "/" + foundFile->jsFileName();
 
                                 m_d->rootNode->resolveImport(impType.importNamespace, impType.name, importPath);
                             }
@@ -121,14 +136,23 @@ void ModuleFile::resolveTypes(){
             }
         }
     }
+    if ( m_d->status != ModuleFile::Compiled ){
+        m_d->status = ModuleFile::Resolved;
+    }
 }
 
 void ModuleFile::compile(){
-    m_d->elementsModule->compiler()->compileModuleFileToJs(m_d->elementsModule->module(), filePath(), m_d->content, m_d->rootNode);
+    if ( m_d->status != ModuleFile::Compiled ){
+        if ( !m_d->rootNode ){
+            THROW_EXCEPTION(lv::Exception, Utf8("Assertion: ModuleFile being compiled without parsed node."), Exception::toCode("~NullPtr"));
+        }
+        m_d->elementsModule->compiler()->compileModuleFileToJs(m_d->elementsModule->module(), filePath(), m_d->content, m_d->rootNode);
+        m_d->status = ModuleFile::Compiled;
+    }
 }
 
-ModuleFile::State ModuleFile::state() const{
-    return m_d->state;
+ModuleFile::Status ModuleFile::status() const{
+    return m_d->status;
 }
 
 const std::string &ModuleFile::name() const{
@@ -151,11 +175,7 @@ std::string ModuleFile::filePath() const{
     return Path::join(m_d->elementsModule->module()->path(), fileName());
 }
 
-const std::list<ModuleFile::Export> &ModuleFile::exports() const{
-    return m_d->exports;
-}
-
-const std::list<ModuleFile::Import> &ModuleFile::imports() const{
+const std::list<ModuleFile::ModuleImport> &ModuleFile::imports() const{
     return m_d->imports;
 }
 
@@ -164,6 +184,10 @@ void ModuleFile::resolveImport(const std::string &uri, ElementsModule::Ptr epl){
         if ( it->uri == uri )
             it->module = epl;
     }
+}
+
+const ModuleFileDescriptor::Ptr &ModuleFile::descriptor() const{
+    return m_d->descriptor;
 }
 
 void ModuleFile::addDependency(ModuleFile *dependency){
@@ -241,7 +265,55 @@ PackageGraph::CyclesResult<ModuleFile*> ModuleFile::checkCycles(
     return PackageGraph::CyclesResult<ModuleFile*>(PackageGraph::CyclesResult<ModuleFile*>::NotFound);
 }
 
-ModuleFile::ModuleFile(ElementsModule* plugin, const std::string &name, const std::string &content, ProgramNode *node, LanguageParser::AST* ast)
+ModuleFile *ModuleFile::createFromProgramNode(ElementsModule *module, const std::string &name, const std::string &content, ProgramNode *node, LanguageParser::AST *ast){
+    auto descriptor = ModuleFileDescriptor::create(name);
+
+    std::vector<BaseNode*> exports = module->compiler()->collectProgramExports(content, node);
+    for ( auto val : exports ){
+        if ( val->isNodeType<ComponentInstanceStatementNode>() ){
+            auto expression = val->as<ComponentInstanceStatementNode>();
+            ExportDescriptor expt(expression->name(content), ExportDescriptor::Element);
+            descriptor->addExport(expt);
+
+        } else if ( val->isNodeType<ComponentDeclarationNode>() ){
+            auto expression = val->as<ComponentDeclarationNode>();
+            ExportDescriptor expt(expression->name(content), ExportDescriptor::Component);
+            descriptor->addExport(expt);
+        }
+    }
+
+    auto mf = new ModuleFile(module, name, content, node, ast, descriptor);
+    std::vector<ImportNode*> imports = node->imports();
+
+    for ( auto val : imports ){
+        ModuleFile::ModuleImport imp;
+        imp.uri = val->path(content);
+        imp.as = val->as(content);
+        imp.isRelative = val->isRelative();
+
+        descriptor->addDependency(ModuleFileDescriptor::ImportDependency(imp.uri));
+
+        mf->m_d->imports.push_back(imp);
+    }
+
+    return mf;
+}
+
+ModuleFile *ModuleFile::createFromDescriptor(ElementsModule *module, const std::string &name, const ModuleFileDescriptor::Ptr &descriptor)
+{
+    auto mf = new ModuleFile(module, name, "", nullptr, nullptr, descriptor);
+    mf->m_d->status = ModuleFile::Compiled;
+    return mf;
+}
+
+ModuleFile::ModuleFile(
+    ElementsModule *plugin, 
+    const std::string &name, 
+    const std::string &content, 
+    ProgramNode *node, 
+    LanguageParser::AST *ast,
+    const ModuleFileDescriptor::Ptr& mfd)
+
     : m_d(new ModuleFilePrivate)
 {
     std::string componentName = name;
@@ -251,40 +323,12 @@ ModuleFile::ModuleFile(ElementsModule* plugin, const std::string &name, const st
 
     m_d->elementsModule = plugin;
     m_d->name = componentName;
-    m_d->state = ModuleFile::Initiaized;
+    m_d->status = ModuleFile::Initiaized;
     m_d->content = content;
     m_d->rootNode = node;
     m_d->ast = ast;
+    m_d->descriptor = mfd;
     m_d->compilationData = nullptr;
-
-    std::vector<BaseNode*> exports = m_d->elementsModule->compiler()->collectProgramExports(content, node);
-
-    for ( auto val : exports ){
-        if ( val->isNodeType<ComponentInstanceStatementNode>() ){
-            auto expression = val->as<ComponentInstanceStatementNode>();
-            ModuleFile::Export expt;
-            expt.type = ModuleFile::Export::Element;
-            expt.name = expression->name(content);
-            m_d->exports.push_back(expt);
-
-        } else if ( val->isNodeType<ComponentDeclarationNode>() ){
-            auto expression = val->as<ComponentDeclarationNode>();
-            ModuleFile::Export expt;
-            expt.type = ModuleFile::Export::Component;
-            expt.name = expression->name(content);
-            m_d->exports.push_back(expt);
-        }
-    }
-
-    std::vector<ImportNode*> imports = node->imports();
-
-    for ( auto val : imports ){
-        ModuleFile::Import imp;
-        imp.uri = val->path(content);
-        imp.as = val->as(content);
-        imp.isRelative = val->isRelative();
-        m_d->imports.push_back(imp);
-    }
 }
 
 }} // namespace lv, el

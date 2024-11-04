@@ -18,6 +18,7 @@
 
 #include "live/elements/compiler/lvelcompilerglobal.h"
 #include "live/elements/compiler/compiler.h"
+#include "live/elements/compiler/languagedescriptors.h"
 #include "live/module.h"
 
 #include <memory>
@@ -34,25 +35,16 @@ class LV_ELEMENTS_COMPILER_EXPORT ElementsModule{
     DISABLE_COPY(ElementsModule);
 
 public:
-    typedef std::shared_ptr<ElementsModule> Ptr;
-
-    class Export{
-    public:
-        enum Type{
-            Component,
-            Element
-        };
-
-        Export() : file(nullptr), library(nullptr){}
-
-        bool isValid(){ return !name.empty(); }
-
-    public:
-        std::string    name;
-        Type           type;
-        ModuleFile*    file;
-        ModuleLibrary* library;
+    enum Status{
+        Initialized,
+        Resolved,
+        Parsed,
+        Compiling,
+        Compiled
     };
+
+public:
+    typedef std::shared_ptr<ElementsModule> Ptr;
 
 public:
     ~ElementsModule();
@@ -60,7 +52,7 @@ public:
     static ElementsModule::Ptr create(Module::Ptr module, Compiler::Ptr compiler, Engine* engine);
     static ElementsModule::Ptr create(Module::Ptr module, Compiler::Ptr compiler);
 
-    static ModuleFile *addModuleFile(ElementsModule::Ptr& epl, const std::string& name);
+    static ModuleFile *parseModuleFile(ElementsModule::Ptr& epl, const std::string& name);
 
     ModuleFile* findModuleFileByName(const std::string& name) const;
     ModuleFile* moduleFileBypath(const std::string& path) const;
@@ -72,7 +64,11 @@ public:
     Compiler::Ptr compiler() const;
     Engine* engine() const;
 
-    Export findExport(const std::string& name) const;
+    ModuleDescriptor::ExportLink findExport(const std::string& name) const;
+    ModuleFile* moduleFileByName(const std::string& fileName) const;
+
+    const std::string& buildLocation() const;
+    Status status() const;
 
     const std::map<std::string, ModuleFile*>& fileExports() const;
     const std::list<ModuleLibrary*>& libraryModules() const;
@@ -80,8 +76,10 @@ public:
 private:
     void initializeLibraries(const std::list<std::string>& libs);
 
+    static ModuleFile *loadModuleFile(ElementsModule::Ptr& epl, const std::string& name, const ModuleFileDescriptor::Ptr& mfd);
+
     static ElementsModule::Ptr createImpl(Module::Ptr module, Compiler::Ptr compiler, Engine* engine);
-    ElementsModule(Module::Ptr module, Compiler::Ptr compiler, Engine* engine);
+    ElementsModule(Module::Ptr module, Compiler::Ptr compiler, ModuleDescriptor::Ptr descriptor, Engine* engine);
 
     ElementsModulePrivate* m_d;
 };

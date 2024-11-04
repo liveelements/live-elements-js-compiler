@@ -18,6 +18,7 @@
 
 #include "live/elements/compiler/lvelcompilerglobal.h"
 #include "live/elements/compiler/elementsmodule.h"
+#include "live/elements/compiler/languagedescriptors.h"
 #include "live/packagegraph.h"
 
 #include <memory>
@@ -42,27 +43,17 @@ public:
     friend class ElementsModule;
     friend class Engine;
 
-    enum State{
+    enum Status{
         Initiaized = 0,
+        Resolved,
         Parsed,
-        Loading,
-        Ready
+        Compiling,
+        Compiled
     };
 
-    class Export{
+    class ModuleImport{
     public:
-        enum Type{
-            Component,
-            Element
-        };
-    public:
-        std::string name;
-        Type        type;
-    };
-
-    class Import{
-    public:
-        Import() : isRelative(false){}
+        ModuleImport() : isRelative(false){}
 
     public:
         std::string uri;
@@ -77,15 +68,16 @@ public:
     void resolveTypes();
     void compile();
 
-    State state() const;
+    Status status() const;
     const std::string& name() const;
     std::string fileName() const;
     std::string jsFileName() const;
     std::string jsFilePath() const;
     std::string filePath() const;
-    const std::list<Export>& exports() const;
-    const std::list<Import>& imports() const;
+    const std::list<ModuleImport>& imports() const;
     void resolveImport(const std::string& uri, ElementsModule::Ptr epl);
+
+    const ModuleFileDescriptor::Ptr& descriptor() const;
 
 private:
     void addDependency(ModuleFile* to);
@@ -96,7 +88,27 @@ private:
     static PackageGraph::CyclesResult<ModuleFile*> checkCycles(ModuleFile* mf, ModuleFile* current, std::list<ModuleFile*> path);
 
 
-    ModuleFile(ElementsModule* plugin, const std::string& name, const std::string& content, ProgramNode* node, LanguageParser::AST* ast);
+    static ModuleFile* createFromProgramNode(
+        ElementsModule* plugin, 
+        const std::string& name, 
+        const std::string& content, 
+        ProgramNode* node, 
+        LanguageParser::AST* ast
+    );
+    static ModuleFile* createFromDescriptor(
+        ElementsModule* module, 
+        const std::string& name, 
+        const ModuleFileDescriptor::Ptr& descriptor
+    );
+
+    ModuleFile(
+        ElementsModule* plugin, 
+        const std::string& name, 
+        const std::string& content, 
+        ProgramNode* node, 
+        LanguageParser::AST* ast,
+        const ModuleFileDescriptor::Ptr& descriptor
+    );
 
     ModuleFilePrivate* m_d;
 

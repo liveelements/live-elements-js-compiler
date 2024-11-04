@@ -16,6 +16,7 @@
 #include "compiler.h"
 #include "live/visuallog.h"
 #include "live/packagegraph.h"
+#include "live/packagecontext.h"
 #include "live/modulecontext.h"
 #include "languagenodes_p.h"
 #include "languagenodestojs_p.h"
@@ -305,17 +306,49 @@ std::shared_ptr<ElementsModule> Compiler::compile(Ptr compiler, const std::strin
 
     Module::Ptr module(nullptr);
     if ( Module::fileExistsIn(modulePath) ){ // package is now relative to the module
-        module = Module::createFromPath(modulePath);
-        Package::Ptr package = Package::createFromPath(module->package());
-        compiler->m_d->packageGraph->loadRunningPackageAndModule(package, module);
+        std::string packagePath = Module::findPackageFrom(modulePath);
+        // if there's a package, create the package and module if they are not loaded already
+        auto packageName = Path::name(packagePath);
+        Package::Ptr package = compiler->m_d->packageGraph->findLoadedPackage(packageName);
+        if ( package ){
+            for ( auto it = package->context()->modules.begin(); it != package->context()->modules.end(); ++it ){
+                if ( it->second->path() == modulePath ){
+                    module = it->second;
+                    break;
+                }
+            }
+            if ( !module ){
+                module = Module::createFromPath(modulePath);
+            }
+            compiler->m_d->packageGraph->loadRunningPackageAndModule(package, module);
+        } else {
+            module = Module::createFromPath(modulePath);
+            package = Package::createFromPath(module->package());
+            compiler->m_d->packageGraph->loadRunningPackageAndModule(package, module);
+        }
     } else {
         // find package
         std::string packagePath = Module::findPackageFrom(modulePath);
         if ( !packagePath.empty() ){
-            // if there's a package, create module normally, it will scan the files and find the package
-            module = Module::createFromPath(modulePath);
-            Package::Ptr package = Package::createFromPath(module->package());
-            compiler->m_d->packageGraph->loadRunningPackageAndModule(package, module);
+            // if there's a package, create the package and module if they are not loaded already
+            auto packageName = Path::name(packagePath);
+            Package::Ptr package = compiler->m_d->packageGraph->findLoadedPackage(packageName);
+            if ( package ){
+                for ( auto it = package->context()->modules.begin(); it != package->context()->modules.end(); ++it ){
+                    if ( it->second->path() == modulePath ){
+                        module = it->second;
+                        break;
+                    }
+                }
+                if ( !module ){
+                    module = Module::createFromPath(modulePath);
+                }
+                compiler->m_d->packageGraph->loadRunningPackageAndModule(package, module);
+            } else {
+                module = Module::createFromPath(modulePath);
+                package = Package::createFromPath(module->package());
+                compiler->m_d->packageGraph->loadRunningPackageAndModule(package, module);
+            }
         } else {
             // if there's no package, create a running module
             module = compiler->m_d->packageGraph->createRunningModule(modulePath);
@@ -323,7 +356,7 @@ std::shared_ptr<ElementsModule> Compiler::compile(Ptr compiler, const std::strin
     }
 
     auto epl = engine ? ElementsModule::create(module, compiler, engine) : ElementsModule::create(module, compiler);
-    ElementsModule::addModuleFile(epl, fileName); // add file if it's not there
+    ElementsModule::parseModuleFile(epl, fileName); // add file if it's not there
     epl->compile();
 
     return epl;
@@ -366,13 +399,15 @@ std::vector<std::shared_ptr<ElementsModule> > Compiler::compilePackage(Compiler:
     return result;
 }
 
-std::shared_ptr<ElementsModule> Compiler::compileImportedModule(Compiler::Ptr compiler, const std::string &importKey, const Module::Ptr& requestingModule, Engine *engine){
+std::shared_ptr<ElementsModule> Compiler::createAndResolveImportedModule(Compiler::Ptr compiler, const std::string &importKey, const Module::Ptr& requestingModule, Engine *engine){
     auto foundEp = compiler->m_d->loadedModules.find(importKey);
     if ( foundEp == compiler->m_d->loadedModules.end() ){
         try{
             Module::Ptr module = compiler->m_d->packageGraph->loadModule(importKey, requestingModule);
             if ( module  ){
-                auto ep = engine ? ElementsModule::create(module , compiler, engine) : ElementsModule::create(module , compiler);
+                auto ep = engine 
+                    ? ElementsModule::create(module , compiler, engine) 
+                    : ElementsModule::create(module , compiler);
                 compiler->m_d->loadedModules[importKey] = ep;
                 compiler->m_d->loadedModulesByPath[ep->module()->path()] = ep;
                 return ep;
