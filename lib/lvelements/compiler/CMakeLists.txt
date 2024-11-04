@@ -15,6 +15,7 @@ target_sources(lvelementscompiler PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/src/cursorcontext.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/elementsmodule.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/languageinfo.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/languagedescriptors.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/elementssections.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/languagenodes.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/languagenodestojs.cpp"
