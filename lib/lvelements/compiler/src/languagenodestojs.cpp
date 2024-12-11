@@ -577,6 +577,8 @@ void LanguageNodesToJs::convertComponentDeclaration(ComponentDeclarationNode *no
             *compose << indent(indentValue + 1) << "get module(){ return \'" << ctx->currentImportUri << "\' }\n";
         }
         *compose << indent(indentValue) << "}";
+        if ( newLineFollows(source, node->endByte()) )
+            *compose << "\n";
     }
 
     sections.push_back(compose);
