@@ -86,7 +86,7 @@ jobs:
             nodeversionmain: false
 
           # Ubuntu 22.04 (Arm64)
-          - os: ubuntu-22.04
+          - os: ubuntu-22.04-arm
             NAME: ubuntu
             TARGET: aarch64-linux
             COMPILER: g++
@@ -97,7 +97,7 @@ jobs:
             nodeversion: 22
             nodeversionmain: true
 
-          - os: ubuntu-22.04
+          - os: ubuntu-22.04-arm
             NAME: ubuntu
             TARGET: aarch64-linux
             COMPILER: g++
