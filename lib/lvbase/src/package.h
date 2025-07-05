@@ -139,6 +139,10 @@ public:
 
     const std::string& name() const;
     const std::string& path() const;
+    const std::string& scope() const;
+    std::string nameScope() const;
+    std::string nameScopeAsPath() const;
+    bool hasScope() const;
     const std::string& filePath() const;
     const std::string& documentation() const;
     const std::string& release() const;
@@ -160,7 +164,7 @@ public:
 private:
     static std::vector<std::string> findModules(const std::string& path);
 
-    Package(const std::string& path, const std::string& filePath, const std::string& name, const Version& version);
+    Package(const std::string& path, const std::string& filePath, const std::string& scope, const std::string& name, const Version& version);
 
     PackagePrivate* m_d;
 

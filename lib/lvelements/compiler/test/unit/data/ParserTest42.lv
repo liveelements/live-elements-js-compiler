@@ -1,5 +1,5 @@
 instance elem Element{
-    on remove: (index) => {
+    on remove: async (index) => {
         this.items.remove(index)
     }
     on add: (item) => this.items.push(item)
@@ -13,7 +13,7 @@ instance elem Element{
 }
 
 component X < Element{
-    on remove: (index) => {
+    on remove: async (index) => {
         this.items.remove(index)
     }
     on add: (item) => this.items.push(item)

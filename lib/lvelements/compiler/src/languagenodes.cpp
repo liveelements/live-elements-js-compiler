@@ -128,14 +128,14 @@ int BaseNode::endByte() const{
     return ts_node_end_byte(m_node);
 }
 
-std::pair<int, int> BaseNode::startPoint() const{
+SourcePoint BaseNode::startPoint() const{
     TSPoint tpnt = ts_node_start_point(m_node);
-    return std::make_pair(tpnt.row, tpnt.column);
+    return SourcePoint(tpnt.row + 1, tpnt.column, ts_node_start_byte(m_node));
 }
 
-std::pair<int, int> BaseNode::endPoint() const{
+SourcePoint BaseNode::endPoint() const{
     TSPoint tpnt = ts_node_end_point(m_node);
-    return std::make_pair(tpnt.row, tpnt.column);
+    return SourcePoint(tpnt.row + 1, tpnt.column, ts_node_end_byte(m_node));
 }
 
 std::string BaseNode::rangeString() const{
@@ -145,7 +145,7 @@ std::string BaseNode::rangeString() const{
 std::string BaseNode::pointRangeString() const{
     auto sp = startPoint();
     auto ep = endPoint();
-    return std::string("[") + std::to_string(sp.first) + ":" + std::to_string(sp.second) + ", " + std::to_string(ep.first) + ":" + std::to_string(ep.second) + "]";
+    return std::string("[") + std::to_string(sp.line()) + ":" + std::to_string(sp.column()) + ", " + std::to_string(ep.line()) + ":" + std::to_string(ep.column()) + "]";
 }
 
 int BaseNode::nodeType() const{
@@ -266,14 +266,16 @@ std::vector<IdentifierNode *> BaseNode::fromNestedIdentifier(BaseNode *parent, c
     std::vector<IdentifierNode *> result;
     if ( strcmp(ts_node_type(node), "identifier") == 0 ){
         result.push_back(new IdentifierNode(node));
-    } else if ( strcmp(ts_node_type(node), "nested_identifier") == 0 ){
+    } else if ( strcmp(ts_node_type(node), "nested_identifier") == 0 || strcmp(ts_node_type(node), "member_expression") == 0 ){
         uint32_t count = ts_node_child_count(node);
         for ( uint32_t i = 0; i < count; ++i ){
             TSNode child = ts_node_child(node, i);
             assertError(parent, child, "Expected identifier.");
             if ( strcmp(ts_node_type(child), "identifier") == 0 ){
                 result.push_back(new IdentifierNode(child));
-            } else if ( strcmp(ts_node_type(child), "nested_identifier") == 0 ){
+            } else if ( strcmp(ts_node_type(child), "property_identifier") == 0 ){
+                result.push_back(new IdentifierNode(child));
+            } else if ( strcmp(ts_node_type(child), "nested_identifier") == 0 || strcmp(ts_node_type(child), "member_expression") == 0 ){
                 auto nestedResult = fromNestedIdentifier(parent, child);
                 result.insert( result.end(), nestedResult.begin(), nestedResult.end() );
             } else if ( (strcmp(ts_node_type(child), ".") != 0) ){
@@ -439,7 +441,7 @@ BaseNode *BaseNode::visitRecognized(BaseNode *parent, const TSNode &node){
         return visitPropertyAccessorDeclaration(parent, node);
     } else if ( strcmp(ts_node_type(node), "function_declaration") == 0 ){
         return visitFunctionDeclaration(parent, node);
-    } else if ( strcmp(ts_node_type(node), "function") == 0 ){
+    } else if ( strcmp(ts_node_type(node), "function_expression") == 0 ){
         return visitFunction(parent, node);
     } else if ( strcmp(ts_node_type(node), "number") == 0 ){
         return visitNumber(parent, node);
@@ -510,6 +512,7 @@ ImportNode* BaseNode::visitImport(BaseNode *parent, const TSNode &node){
     uint32_t count = ts_node_child_count(node);
     for ( uint32_t i = 0; i < count; ++i ){
         TSNode child = ts_node_child(node, i);
+        assertError(importNode, child, "Import segment error.");
         if ( strcmp(ts_node_type(child), "import_as" ) == 0 ){
             TSNode aliasChild = ts_node_child(child, 1);
             IdentifierNode* in = importNode->addCreatedChild(new IdentifierNode(aliasChild));
@@ -567,6 +570,10 @@ ImportPathNode* BaseNode::visitImportPath(BaseNode *parent, const TSNode &node){
     for ( uint32_t i = 0; i < count; ++i ){
         TSNode child = ts_node_child(node, i);
         if ( strcmp(ts_node_type(child), "import_path_segment") == 0 ){
+            ImportPathSegmentNode* in = ipnode->addCreatedChild(new ImportPathSegmentNode(child));
+            ipnode->m_segments.push_back(in);
+        } else if ( strcmp(ts_node_type(child), "import_path_scope_segment") == 0 ){
+            ipnode->m_hasScope = true;
             ImportPathSegmentNode* in = ipnode->addCreatedChild(new ImportPathSegmentNode(child));
             ipnode->m_segments.push_back(in);
         }
@@ -1034,7 +1041,7 @@ EventDeclarationNode* BaseNode::visitEventDeclaration(BaseNode *parent, const TS
     EventDeclarationNode* enode = parent->addCreatedChild(new EventDeclarationNode(node));
 
     TSNode name = nodeChildByFieldName(node, "name");
-    assertValid(parent, name, "Function name is null.");
+    assertValid(parent, name, "Event name is null.");
     enode->m_name = parent->addCreatedChild(new IdentifierNode(name));
 
     TSNode parameters = nodeChildByFieldName(node, "parameters");
@@ -1055,12 +1062,13 @@ EventDeclarationNode* BaseNode::visitEventDeclaration(BaseNode *parent, const TS
 
 ListenerDeclarationNode* BaseNode::visitListenerDeclaration(BaseNode *parent, const TSNode &node){
     ListenerDeclarationNode* enode = parent->addCreatedChild(new ListenerDeclarationNode(node));
-
     uint32_t count = ts_node_child_count(node);
     for ( uint32_t i = 0; i < count; ++i ){
         TSNode child = ts_node_child(node, i);
         if ( strcmp(ts_node_type(child), "property_identifier") == 0 ){
             enode->m_name = enode->addCreatedChild(new IdentifierNode(child));
+        } else if ( strcmp(ts_node_type(child), "async") == 0 ){
+            enode->m_async = true;
         } else if ( strcmp(ts_node_type(child), "formal_parameters") == 0 ){
             enode->m_parameters = scanFormalParameters(parent, child);
             enode->addChild(enode->m_parameters);
@@ -1398,10 +1406,12 @@ TrippleTaggedStringNode* BaseNode::visitTrippleTaggedString(BaseNode *parent, co
 }
 
 FunctionNode* BaseNode::visitFunction(BaseNode *parent, const TSNode &node){
+
     FunctionNode* enode = parent->addCreatedChild(new FunctionNode(node));
 
     // Function parameters
     const TSNode parameters = BaseNode::nodeChildByFieldName(node, "parameters");
+
     assertValid(parent, parameters, "Function parameters are null.");
     enode->m_parameters = BaseNode::scanFormalParameters(parent, parameters);
     enode->addChild(enode->m_parameters);
@@ -1783,6 +1793,7 @@ void ProgramNode::collectImportTypes(const std::string &source, ConversionContex
                             ProgramNode::ImportType impt;
                             impt.importNamespace = idName;
                             impt.name = slice(source, parentCast->heritage()[1]);
+                            impt.location = identifier->startPoint();
                             addImportType(impt);
                         }
                     } else if ( parent->isNodeType<MemberExpressionNode>() ){
@@ -1791,6 +1802,7 @@ void ProgramNode::collectImportTypes(const std::string &source, ConversionContex
                             ProgramNode::ImportType impt;
                             impt.importNamespace = idName;
                             impt.name = slice(source, parentCast->children()[1]);
+                            impt.location = identifier->startPoint();
                             addImportType(impt);
                         }
                     } else if ( parent->isNodeType<NewComponentExpressionNode>() ||
@@ -1801,6 +1813,7 @@ void ProgramNode::collectImportTypes(const std::string &source, ConversionContex
                             ProgramNode::ImportType impt;
                             impt.importNamespace = idName;
                             impt.name = slice(source, parentCast->name()[1]);
+                            impt.location = identifier->startPoint();
                             addImportType(impt);
                         }
                     }
@@ -1811,6 +1824,7 @@ void ProgramNode::collectImportTypes(const std::string &source, ConversionContex
         if ( !isNamespaceIdentifier ){
             ProgramNode::ImportType impt;
             impt.name = idName;
+            impt.location = identifier->startPoint();
             addImportType(impt);
         }
     }
@@ -2266,6 +2280,7 @@ ListenerDeclarationNode::ListenerDeclarationNode(const TSNode &node)
     , m_parameters(nullptr)
     , m_body(nullptr)
     , m_bodyExpression(nullptr)
+    , m_async(false)
 {}
 
 std::string ListenerDeclarationNode::toString(int indent) const{

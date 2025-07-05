@@ -81,7 +81,7 @@ PackageGraph::~PackageGraph(){
 
 /** Loads package in the graph and makes necessary checks */
 void PackageGraph::loadPackage(const Package::Ptr &p, bool addLibraries){
-    auto it = m_d->packages.find(p->name());
+    auto it = m_d->packages.find(p->nameScope());
     if ( it == m_d->packages.end() ){
         p->assignContext(this);
 
@@ -92,9 +92,9 @@ void PackageGraph::loadPackage(const Package::Ptr &p, bool addLibraries){
             }
         }
 
-        m_d->packages[p->name()] = p;
+        m_d->packages[p->nameScope()] = p;
 
-        vlog("lvbase-packagegraph").v() << "Loaded package \'" + p->name() << "\' [" + p->version().toString() + "]";
+        vlog("lvbase-packagegraph").v() << "Loaded package \'" + p->nameScope() << "\' [" + p->version().toString() + "]";
 
     } else {
         Package::Ptr existingPackage = it->second;
@@ -104,17 +104,17 @@ void PackageGraph::loadPackage(const Package::Ptr &p, bool addLibraries){
         if ( newVersion.majorNumber() != oldVersion.majorNumber() ){
             THROW_EXCEPTION(
                 lv::Exception,
-                "Incompatible package versions for package \'" + p->name() + "\': " +
+                "Incompatible package versions for package \'" + p->nameScope() + "\': " +
                 oldVersion.toString() + " vs " + newVersion.toString(), 1);
         }
 
         if ( newVersion > oldVersion ){
             vlog("lvbase-packagegraph").v() <<
-                "Replaced package \'" << p->name() << "\' from [" << existingPackage->version().toString() << "] to [" <<
+                "Replaced package \'" << p->nameScope() << "\' from [" << existingPackage->version().toString() << "] to [" <<
                 p->version().toString() << "]";
 
             p->assignContext(this);
-            m_d->packages[p->name()] = p;
+            m_d->packages[p->nameScope()] = p;
 
             if ( addLibraries ){
                 for ( auto it = p->libraries().begin(); it != p->libraries().end(); ++it ){
@@ -145,19 +145,19 @@ void PackageGraph::loadPackageWithDependencies(
 
 /** */
 void PackageGraph::addDependency(const Package::Ptr &package, const Package::Ptr &dependsOn){
-    auto packageit = m_d->packages.find(package->name());
-    if ( packageit == m_d->packages.end() && package->name() != "." )
-        THROW_EXCEPTION(lv::Exception, "Failed to find package:" + package->name(), 3);
+    auto packageit = m_d->packages.find(package->nameScope());
+    if ( packageit == m_d->packages.end() && package->nameScope() != "." )
+        THROW_EXCEPTION(lv::Exception, "Failed to find package:" + package->nameScope(), 3);
     if ( package->contextOwner() != this )
-        THROW_EXCEPTION(lv::Exception, "Package \'" + package->name() +"\' is not part of the current package graph.", 3);
+        THROW_EXCEPTION(lv::Exception, "Package \'" + package->nameScope() +"\' is not part of the current package graph.", 3);
     if ( dependsOn->contextOwner() != this )
-        THROW_EXCEPTION(lv::Exception, "Package \'" + dependsOn->name() +"\' is not part of the current package graph.", 3);
+        THROW_EXCEPTION(lv::Exception, "Package \'" + dependsOn->nameScope() +"\' is not part of the current package graph.", 3);
 
-    auto dependsOnit = m_d->packages.find(dependsOn->name());
+    auto dependsOnit = m_d->packages.find(dependsOn->nameScope());
     if ( dependsOnit == m_d->packages.end() ){
-        auto internalsIt = internals().find(dependsOn->name());
+        auto internalsIt = internals().find(dependsOn->nameScope());
         if ( internalsIt == internals().end() ){
-            THROW_EXCEPTION(lv::Exception, "Failed to find package: " + dependsOn->name(), 2);
+            THROW_EXCEPTION(lv::Exception, "Failed to find package: " + dependsOn->nameScope(), 2);
         } else {
             if ( !hasDependency(package, dependsOn) )
                 package->context()->dependencies.push_back(dependsOn);
@@ -179,7 +179,7 @@ void PackageGraph::addDependency(const Package::Ptr &package, const Package::Ptr
                     ss << " -> ";
                 }
 
-                ss << n->name() << "[" << n->version().toString() << "]";
+                ss << n->nameScope() << "[" << n->version().toString() << "]";
             }
 
             for ( auto it = package->context()->dependencies.begin(); it != package->context()->dependencies.end(); ++it ){
@@ -203,9 +203,9 @@ void PackageGraph::addDependency(const Package::Ptr &package, const Package::Ptr
 
 /** Check if there are cycles between packages, starting from the given packages */
 PackageGraph::CyclesResult<Package::Ptr> PackageGraph::checkCycles(const Package::Ptr &p){
-    auto it = m_d->packages.find(p->name());
-    if ( it == m_d->packages.end() && p->name() != ".")
-        THROW_EXCEPTION(lv::Exception, "Failed to find package for cycles: " + p->name(), 2);
+    auto it = m_d->packages.find(p->nameScope());
+    if ( it == m_d->packages.end() && p->nameScope() != ".")
+        THROW_EXCEPTION(lv::Exception, "Failed to find package for cycles: " + p->nameScope(), 2);
 
     std::list<Package::Ptr> path;
     path.push_back(p);
@@ -384,7 +384,7 @@ std::string PackageGraph::toString() const{
 
     ss << "Internals:" << std::endl;
     for ( auto it = internals().begin(); it != internals().end(); ++it ){
-        ss << "  " << it->second->name() << "[" << it->second->version().toString() << "]";
+        ss << "  " << it->second->nameScope() << "[" << it->second->version().toString() << "]";
     }
     ss << std::endl;
 
@@ -412,7 +412,7 @@ std::string PackageGraph::toString() const{
 Package::Ptr PackageGraph::findPackage(Package::Reference ref) const{
     std::vector<std::string> paths = packageImportPaths();
     for ( auto it = paths.begin(); it != paths.end(); ++it ){
-        std::string path = *it + "/" + ref.name.data();
+        std::string path = *it + "/" + ref.name.replaceAll(".", "/").data();
         if ( Package::existsIn(path) ){
             Package::Ptr p = Package::createFromPath(path);
             if ( p->version().majorNumber() == ref.version.majorNumber() && p->version() > ref.version ){
@@ -446,9 +446,12 @@ Package::Ptr PackageGraph::findPackage(Package::Reference ref) const{
 Package::Ptr PackageGraph::findPackage(const std::string &packageName) const{
     Package::Ptr foundPackage(nullptr);
 
+    std::string packageNameScope = packageName;
+    Utf8::replaceAll(packageNameScope, ".", "/");
+
     std::vector<std::string> paths = packageImportPaths();
     for ( auto it = paths.begin(); it != paths.end(); ++it ){
-        std::string path = *it + "/" + packageName;
+        std::string path = *it + "/" + packageNameScope;
         if ( Package::existsIn(path) ){
             Package::Ptr p = Package::createFromPath(path);
 
@@ -518,9 +521,9 @@ void PackageGraph::setPackageImportPaths(const std::vector<std::string> &paths){
  * \brief Adds internal package
  */
 void PackageGraph::addInternalPackage(const Package::Ptr &package){
-    auto it = internals().find(package->name());
+    auto it = internals().find(package->nameScope());
     if ( it == internals().end() ){
-        internals()[package->name()] = package;
+        internals()[package->nameScope()] = package;
         if ( internalsContextOwner() ){
             package->assignContext(internalsContextOwner());
         }
@@ -580,12 +583,12 @@ void PackageGraph::loadRunningPackageAndModule(const Package::Ptr &package, cons
 
     Utf8::replaceAll(uriFromPackage, "/",  ".");
     Utf8::replaceAll(uriFromPackage, "\\", ".");
-    module->context()->importId = uriFromPackage.empty() ? package->name() : package->name() + "." + uriFromPackage;
+    module->context()->importId = uriFromPackage.empty() ? package->nameScope() : package->nameScope() + "." + uriFromPackage;
 
-    if ( package->name() != "." ){
-        auto it = m_d->packages.find(package->name());
+    if ( package->nameScope() != "." ){
+        auto it = m_d->packages.find(package->nameScope());
         if ( it == m_d->packages.end() ){
-            m_d->packages[package->name()] = package;
+            m_d->packages[package->nameScope()] = package;
         } else if ( it->second->path() != package->path() ){
             addRunningPackage(package);
         }
@@ -611,6 +614,14 @@ Module::Ptr PackageGraph::loadModule(const std::vector<std::string> &importSegme
         THROW_EXCEPTION(lv::Exception, "Given import path is empty.", 5);
 
     std::string packageName = importSegments[0];
+    size_t modulePathIndex = 1;
+    if ( packageName.size() && packageName[0] == '@' ){
+        if ( importSegments.size() < 2 ){
+            THROW_EXCEPTION(lv::Exception, Utf8("Cannot import package scope without package: %").format(packageName), lv::Exception::toCode("~Import"));
+        }
+        modulePathIndex = 2;
+        packageName = importSegments[0] + "." + importSegments[1];
+    }
 
     Package::Ptr foundPackage = nullptr;
 
@@ -618,7 +629,7 @@ Module::Ptr PackageGraph::loadModule(const std::vector<std::string> &importSegme
         Package::Ptr requestingPackage = requestingModule->context() ? requestingModule->context()->packageUnwrapped() : nullptr;
 
         if ( requestingPackage ){
-            if ( requestingPackage->name() == packageName || (requestingPackage->name() == "." && packageName.empty() )){
+            if ( requestingPackage->nameScope() == packageName || (requestingPackage->nameScope() == "." && packageName.empty() )){
                 foundPackage = requestingPackage;
             }
         }
@@ -650,7 +661,7 @@ Module::Ptr PackageGraph::loadModule(const std::vector<std::string> &importSegme
     if ( !foundPackage->filePath().empty() ){ // some internal packages may not have the package file
         std::string modulePath = foundPackage->path();
         std::string importId = packageName;
-        for ( size_t i = 1; i < importSegments.size(); ++i ){
+        for ( size_t i = modulePathIndex; i < importSegments.size(); ++i ){
             modulePath += "/" + importSegments[i];
             importId += "." + importSegments[i];
         }
@@ -774,13 +785,13 @@ bool PackageGraph::hasDependency(const Module::Ptr &module, const Module::Ptr &d
 
 std::string PackageGraph::toString(Package::Ptr package, const std::string &indent) const{
     std::stringstream ss;
-    ss << indent << package->name() << "[" << package->version().toString() << "]" << std::endl;
+    ss << indent << package->nameScope() << "[" << package->version().toString() << "]" << std::endl;
     return ss.str();
 }
 
 std::string PackageGraph::toStringRecurse(Package::Ptr package, const std::string &indent) const{
     std::stringstream ss;
-    ss << indent << package->name() << "[" << package->version().toString() << "]" << std::endl;
+    ss << indent << package->nameScope() << "[" << package->version().toString() << "]" << std::endl;
     for ( auto it = package->context()->dependencies.begin(); it != package->context()->dependencies.end(); ++it ){
         ss << toStringRecurse(*it, indent + "  ");
     }

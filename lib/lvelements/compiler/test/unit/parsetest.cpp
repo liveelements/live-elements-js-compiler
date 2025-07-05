@@ -163,6 +163,9 @@ TEST_CASE( "Parse Test", "[Parse]" ) {
     SECTION("Property Notation"){ testFileParse("ParserTest48"); }
     SECTION("Anonymous Components"){ testFileParse("ParserTest49"); }
     SECTION("Additional Declarations"){ testFileParse("ParserTest50"); }
+    SECTION("Package Scope Import"){ testFileParse("ParserTest51"); }
+
     SECTION("Function & Variables Type Test"){ testFileParse("ParserTypeTest01"); }
+
 }
 

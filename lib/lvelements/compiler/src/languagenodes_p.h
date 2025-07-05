@@ -123,8 +123,8 @@ public:
 
     int startByte() const;
     int endByte() const;
-    std::pair<int, int> startPoint() const;
-    std::pair<int, int> endPoint() const;
+    SourcePoint startPoint() const;
+    SourcePoint endPoint() const;
     std::string rangeString() const;
     std::string pointRangeString() const;
 
@@ -288,6 +288,7 @@ public:
         std::string name;
         std::string importNamespace;
         std::string resolvedPath;
+        SourcePoint location;
     };
 
 public:
@@ -420,12 +421,14 @@ class ImportPathNode : public BaseNode{
     friend class BaseNode;
     LANGUAGE_NODE_INFO(ImportPathNode);
 public:
-    ImportPathNode(const TSNode& node) : BaseNode(node, ImportPathNode::nodeInfo()), m_isRelative(false){}
+    ImportPathNode(const TSNode& node) : BaseNode(node, ImportPathNode::nodeInfo()), m_hasScope(false), m_isRelative(false){}
 
     bool isRelative(){ return m_isRelative; }
+    bool hasScope(){ return m_hasScope; }
     const std::vector<ImportPathSegmentNode*>& segments() const{ return m_segments; }
 
 private:
+    bool m_hasScope;
     bool m_isRelative;
     std::vector<ImportPathSegmentNode*> m_segments;
 };
@@ -974,11 +977,13 @@ public:
     ParameterListNode* parameterList() const{ return m_parameters; }
     JsBlockNode* body() const{ return m_body; }
     ExpressionNode* bodyExpression() const{ return m_bodyExpression; }
+    bool isAsync() const{ return m_async; }
 private:
     IdentifierNode*    m_name;
     ParameterListNode* m_parameters;
     JsBlockNode*       m_body;
     ExpressionNode*    m_bodyExpression;
+    bool               m_async;
 };
 
 class MethodDefinitionNode : public BaseNode{

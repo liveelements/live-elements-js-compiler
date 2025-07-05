@@ -44,6 +44,7 @@ class PackagePrivate{
 
 public:
     std::string name;
+    std::string scope;
     std::string path;
     std::string filePath;
     std::string documentation;
@@ -120,8 +121,12 @@ Package::Ptr Package::createFromNode(const std::string& path, const std::string 
     if ( !m.hasKey("name") || !m.hasKey("version") )
         return Package::Ptr(nullptr);
 
+    std::string nameScope = m["name"].asString();
+    size_t pos = nameScope.find_last_of('.');
+    std::string name = pos != std::string::npos ? nameScope.substr(pos + 1) : nameScope;
+    std::string scope = pos != std::string::npos ? nameScope.substr(0, pos) : "";
 
-    Package::Ptr pt(new Package(path, filePath, m["name"].asString(), Version(m["version"].asString())));
+    Package::Ptr pt(new Package(path, filePath, scope, name, Version(m["version"].asString())));
 
     if ( m.hasKey("dependencies") ){
         MLNode::ObjectType dep = m["dependencies"].asObject();
@@ -203,6 +208,25 @@ Package::Ptr Package::createFromNode(const std::string& path, const std::string 
 /** \brief Returns the package name */
 const std::string &Package::name() const{
     return m_d->name;
+}
+
+/** \brief Returns the package scope */
+const std::string &Package::scope() const{
+    return m_d->scope;
+}
+
+/** \brief Returns the package name with its scope */
+std::string Package::nameScope() const{
+    return hasScope() ? m_d->scope + "." + m_d->name : m_d->name;
+}
+
+/** \brief Returns the package name with its scope as a path */
+std::string Package::nameScopeAsPath() const{
+    return hasScope() ? m_d->scope + "/" + m_d->name : m_d->name;
+}
+
+bool Package::hasScope() const{
+    return !m_d->scope.empty();
 }
 
 /** \brief Returns the package path */
@@ -312,12 +336,13 @@ std::vector<std::string> Package::findModules(const std::string &path){
     return result;
 }
 
-Package::Package(const std::string &path, const std::string& filePath, const std::string &name, const Version &version)
+Package::Package(const std::string &path, const std::string& filePath, const std::string& scope, const std::string &name, const Version &version)
     : m_d(new PackagePrivate)
 {
     m_d->path     = path;
     m_d->filePath = filePath;
     m_d->name     = name;
+    m_d->scope    = scope;
     m_d->version  = version;
     m_d->context  = nullptr;
 }

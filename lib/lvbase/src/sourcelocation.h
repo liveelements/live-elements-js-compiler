@@ -23,7 +23,6 @@ public:
     int column() const{ return m_column; }
     int offset() const{ return m_offset; }
     
-
     static SourcePoint createFromLine(int line);
 
 private:

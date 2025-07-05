@@ -263,6 +263,13 @@ Utf8 Utf8::toUpper() const{
 }
 
 std::vector<Utf8> Utf8::split(const char *sep){
+    if ( isEmpty() )
+        return std::vector<Utf8>();
+
+    if ( strlen(sep) == 0 ){
+        THROW_EXCEPTION(lv::Exception, "Utf8 split using an empty string argument.", lv::Exception::toCode("~String"));
+    }
+
     std::vector<Utf8> tokens;
     std::size_t start = 0, end = 0;
     while ((end = m_data->find(sep, start)) != std::string::npos) {

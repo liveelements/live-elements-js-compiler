@@ -129,7 +129,11 @@ void LanguageNodesToJs::convertProgram(ProgramNode *node, const std::string &sou
             for ( auto impIt = it->second.begin(); impIt != it->second.end(); ++ impIt ){
                 if ( !ctx->allowUnresolved && impIt->second.resolvedPath.empty() ){
                     delete importsCompose;
-                    THROW_EXCEPTION(lv::Exception, "Identifer not found in imports: \'" + impIt->second.name + "\' in " + node->filePath(), lv::Exception::toCode("~Identifier"));
+                    THROW_EXCEPTION(
+                        lv::Exception, 
+                        Utf8("Identifier not found in imports: \'%\' in %:%:%").format(impIt->second.name, node->filePath(), impIt->second.location.line(), impIt->second.location.column()), 
+                        lv::Exception::toCode("~Identifier")
+                    );
                 }
                 std::string impPath = impIt->second.resolvedPath.empty() ? "__UNRESOLVED__" : impIt->second.resolvedPath;
                 *importsCompose << ("import {" + impIt->second.name + "} from '" + impPath + "'\n");
@@ -139,7 +143,11 @@ void LanguageNodesToJs::convertProgram(ProgramNode *node, const std::string &sou
             for ( auto impIt = it->second.begin(); impIt != it->second.end(); ++ impIt ){
                 if ( !ctx->allowUnresolved && impIt->second.resolvedPath.empty() ){
                     delete importsCompose;
-                    THROW_EXCEPTION(lv::Exception, "Identifer not found in imports: \'" + impIt->second.name + "\' in " + node->filePath(), lv::Exception::toCode("~Identifier"));
+                    THROW_EXCEPTION(
+                        lv::Exception, 
+                        Utf8("Identifier not found in imports: \'%\' in %:%:%").format(impIt->second.name, node->filePath(), impIt->second.location.line(), impIt->second.location.column()), 
+                        lv::Exception::toCode("~Identifier")
+                    );
                 }
                 std::string impPath = impIt->second.resolvedPath.empty() ? "__UNRESOLVED__" : impIt->second.resolvedPath;
                 std::string impKey = "__" + it->first + "__" + impIt->second.name;
@@ -309,7 +317,10 @@ void LanguageNodesToJs::convertComponentDeclaration(ComponentDeclarationNode *no
             }
         }
 
-        *compose << indent(indentValue + 2) << "this.on(\'" << slice(source, node->listeners()[i]->name()) << "\', function(" << paramList << ")";
+        *compose << indent(indentValue + 2) 
+            << "this.on(\'" << slice(source, node->listeners()[i]->name()) << "\', " 
+            << (node->listeners()[i]->isAsync() ? "async " : "") 
+            << "function(" << paramList << ")";
 
         if ( node->listeners()[i]->body() ){
             JSSection* jssection = new JSSection;
@@ -852,7 +863,7 @@ void LanguageNodesToJs::convertNewComponentExpression(NewComponentExpressionNode
             }
         }
 
-        *compose << indent(indt + 1) << "this.on(\'" << slice(source, ldn->name()) << "\', function(" << paramList << ")";
+        *compose << indent(indt + 1) << "this.on(\'" << slice(source, ldn->name()) << "\', " << (ldn->isAsync() ? "async " : "") << "function(" << paramList << ")";
 
         if ( ldn->body() ){
             JSSection* jssection = new JSSection;

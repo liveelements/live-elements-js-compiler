@@ -88,11 +88,13 @@ void ModuleFile::resolveTypes(){
                             }
                             if ( impIt->isRelative ){
                                 // this plugin to package
-                                std::vector<Utf8> parts = Utf8(m_d->elementsModule->module()->context()->importId).split(".");
-                                if ( parts.size() > 0 ){
-                                    parts.erase(parts.begin());
-                                }
+                                Utf8 currentImportId = m_d->elementsModule->module()->context()->importId;
+                                Utf8 packageName = impIt->module->module()->context()->packageUnwrapped()->nameScopeAsPath();
+                                Utf8 packageToPluginName = currentImportId.length() > packageName.length() 
+                                    ? currentImportId.substr(packageName.length() + 1, std::string::npos)
+                                    : "";
 
+                                std::vector<Utf8> parts = packageToPluginName.split(".");
                                 std::string pluginToPackage = "";
                                 if ( parts.size() > 0 ){
                                     for ( size_t i = 0; i < parts.size(); ++i ){
@@ -106,10 +108,14 @@ void ModuleFile::resolveTypes(){
 
                                 // package to new plugin
 
-                                std::vector<Utf8> packageToNewPluginParts = Utf8(impIt->module->module()->context()->importId).split(".");
-                                if ( packageToNewPluginParts.size() > 0 ){
-                                    packageToNewPluginParts.erase(packageToNewPluginParts.begin());
-                                }
+                                Utf8 newPluginImportId = impIt->module->module()->context()->importId;
+
+                                Utf8 packageToNewPluginUri = newPluginImportId.length() > packageName.length() 
+                                    ? newPluginImportId.substr(packageName.length() + 1, std::string::npos)
+                                    : "";
+
+                                std::vector<Utf8> packageToNewPluginParts = packageToNewPluginUri.split(".");
+
                                 std::string packageToNewPlugin = Utf8::join(packageToNewPluginParts, "/").data();
                                 if ( !packageToNewPlugin.empty() )
                                     packageToNewPlugin += "/";
@@ -117,12 +123,16 @@ void ModuleFile::resolveTypes(){
                                 m_d->rootNode->resolveImport(impType.importNamespace, impType.name, pluginToPackage + "/" + packageToNewPlugin + foundFile->jsFileName());
 
                             } else {
-                                std::vector<Utf8> packageToPlugin = impIt->module->module()->context()->importId.split(".");
-                                packageToPlugin.erase(packageToPlugin.begin());
+                                Utf8 packageName = impIt->module->module()->context()->packageUnwrapped()->nameScopeAsPath();
+                                Utf8 importId = impIt->module->module()->context()->importId;
+                                Utf8 packageToPluginName =  importId.length() > packageName.length() 
+                                    ? importId.substr(packageName.length() + 1, std::string::npos)
+                                    : "";
+
+                                std::vector<Utf8> packageToPlugin = packageToPluginName.split(".");
 
                                 std::string configPackageBuildPath = m_d->elementsModule->compiler()->packageBuildPath();
-                                std::string packageBuildPath =
-                                    impIt->module->module()->context()->packageUnwrapped()->name() +
+                                std::string packageBuildPath = packageName.data() +
                                     (configPackageBuildPath.empty() ? "" : "/" + configPackageBuildPath);
                                 std::string packageToPluginStr = Utf8::join(packageToPlugin, "/").data();
                                 std::string importPath = packageBuildPath + (packageToPluginStr.empty() ? "" : "/" + packageToPluginStr) + "/" + foundFile->jsFileName();

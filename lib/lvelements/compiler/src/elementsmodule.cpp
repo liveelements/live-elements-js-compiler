@@ -165,11 +165,11 @@ ModuleFile *ElementsModule::loadModuleFile(ElementsModule::Ptr &epl, const std::
             if ( epl->module()->context()->packageUnwrapped() == nullptr ){
                 THROW_EXCEPTION(TracePointException, Utf8("Cannot import relative path withouth package: \'%\' in \'%\'").format(importUri, currentUriName), Exception::toCode("~Import"));
             }
-            if ( epl->module()->context()->packageUnwrapped()->name() == "." ){
+            if ( epl->module()->context()->packageUnwrapped()->nameScope() == "." ){
                 THROW_EXCEPTION(TracePointException, Utf8("Cannot import relative path withouth package: \'%\' in \'%\'").format(importUri, currentUriName), Exception::toCode("~Import"));
             }
 
-            importUriFull = epl->module()->context()->packageUnwrapped()->name() + (importUri == "." ? "" : importUri.data());
+            importUriFull = epl->module()->context()->packageUnwrapped()->nameScope() + (importUri == "." ? "" : importUri.data());
         } else {
             importUriFull = importUri;
         }
@@ -234,11 +234,11 @@ ModuleFile *ElementsModule::parseModuleFile(ElementsModule::Ptr &epl, const std:
             if ( epl->module()->context()->packageUnwrapped() == nullptr ){
                 THROW_EXCEPTION(TracePointException, Utf8("Cannot import relative path withouth package: \'%\' in \'%\'").format(imp.uri, currentUriName), Exception::toCode("~Import"));
             }
-            if ( epl->module()->context()->packageUnwrapped()->name() == "." ){
+            if ( epl->module()->context()->packageUnwrapped()->nameScope() == "." ){
                 THROW_EXCEPTION(TracePointException, Utf8("Cannot import relative path withouth package: \'%\' in \'%\'").format(imp.uri, currentUriName), Exception::toCode("~Import"));
             }
 
-            std::string importUri = epl->module()->context()->packageUnwrapped()->name() + (imp.uri == "." ? "" : imp.uri);
+            std::string importUri = epl->module()->context()->packageUnwrapped()->nameScope() + (imp.uri == "." ? "" : imp.uri);
             if ( importUri == epl->module()->context()->importId.data() ){
                 THROW_EXCEPTION(
                     TracePointException,

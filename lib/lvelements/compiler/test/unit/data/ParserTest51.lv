@@ -1,0 +1,6 @@
+import @scope.package
+import @scope.package.module
+import package.module
+
+component ParserTest51{
+}
