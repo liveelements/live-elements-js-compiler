@@ -16,60 +16,115 @@ jobs:
       fail-fast: false
       matrix:
         include:
-        - os: macos-latest
-          NAME: macos
-          TARGET: arm64-apple-darwin
-          COMPILER: clang
-          LINKER: clang
-          platform: darwin
-          arch: arm64
-          binaryrelease: true
-          nodeversion: 20
-          nodeversionmain: true
-        - os: macos-13
-          NAME: macos
-          TARGET: x86_64-apple-darwin
-          COMPILER: clang
-          LINKER: clang
-          platform: darwin
-          arch: x64
-          binaryrelease: true
-          nodeversion: 20
-          nodeversionmain: true
-        - os: ubuntu-20.04
-          NAME: ubuntu
-          TARGET: x86_64-linux
-          COMPILER: g++
-          LINKER: g++
-          platform: linux
-          arch: x64
-          binaryrelease: true
-          nodeversion: 20
-          nodeversionmain: true
-        - os: ubuntu-20.04
-          NAME: ubuntu
-          TARGET: x86_64-linux
-          COMPILER: g++
-          LINKER: g++
-          platform: linux
-          arch: x64
-          binaryrelease: true
-          nodeversion: 21
-          nodeversionmain: false
-        - os: windows-latest
-          NAME: windows
-          platform: win32
-          arch: x64
-          binaryrelease: true
-          nodeversion: 20
-          nodeversionmain: true
-        - os: windows-latest
-          NAME: windows
-          platform: win32
-          arch: x64
-          binaryrelease: true
-          nodeversion: 21
-          nodeversionmain: false
+          # macOS (Apple Silicon)
+          - os: macos-latest
+            NAME: macos
+            TARGET: arm64-apple-darwin
+            COMPILER: clang
+            LINKER: clang
+            platform: darwin
+            arch: arm64
+            binaryrelease: true
+            nodeversion: 22
+            nodeversionmain: true
+
+          - os: macos-latest
+            NAME: macos
+            TARGET: arm64-apple-darwin
+            COMPILER: clang
+            LINKER: clang
+            platform: darwin
+            arch: arm64
+            binaryrelease: true
+            nodeversion: 24
+            nodeversionmain: false
+
+          # macOS (Intel)
+          - os: macos-13
+            NAME: macos
+            TARGET: x86_64-apple-darwin
+            COMPILER: clang
+            LINKER: clang
+            platform: darwin
+            arch: x64
+            binaryrelease: true
+            nodeversion: 22
+            nodeversionmain: true
+
+          - os: macos-13
+            NAME: macos
+            TARGET: x86_64-apple-darwin
+            COMPILER: clang
+            LINKER: clang
+            platform: darwin
+            arch: x64
+            binaryrelease: true
+            nodeversion: 24
+            nodeversionmain: false
+
+          # Ubuntu 22.04 (Intel)
+          - os: ubuntu-22.04
+            NAME: ubuntu
+            TARGET: x86_64-linux
+            COMPILER: g++
+            LINKER: g++
+            platform: linux
+            arch: x64
+            binaryrelease: true
+            nodeversion: 22
+            nodeversionmain: true
+
+          - os: ubuntu-22.04
+            NAME: ubuntu
+            TARGET: x86_64-linux
+            COMPILER: g++
+            LINKER: g++
+            platform: linux
+            arch: x64
+            binaryrelease: true
+            nodeversion: 24
+            nodeversionmain: false
+
+          # Ubuntu 22.04 (Arm64)
+          - os: ubuntu-22.04
+            NAME: ubuntu
+            TARGET: aarch64-linux
+            COMPILER: g++
+            LINKER: g++
+            platform: linux
+            arch: arm64
+            binaryrelease: true
+            nodeversion: 22
+            nodeversionmain: true
+
+          - os: ubuntu-22.04
+            NAME: ubuntu
+            TARGET: aarch64-linux
+            COMPILER: g++
+            LINKER: g++
+            platform: linux
+            arch: arm64
+            binaryrelease: true
+            nodeversion: 24
+            nodeversionmain: false
+
+          # Windows
+          - os: windows-latest
+            NAME: windows
+            platform: win32
+            arch: x64
+            binaryrelease: true
+            nodeversion: 22
+            nodeversionmain: true
+
+          - os: windows-latest
+            NAME: windows
+            platform: win32
+            arch: x64
+            binaryrelease: true
+            nodeversion: 24
+            nodeversionmain: false
+
 
     steps:
       - uses: actions/checkout@v4
