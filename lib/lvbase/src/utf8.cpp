@@ -19,6 +19,7 @@
 #include "live/exception.h"
 
 #include <locale>
+#include <cstring>
 #include <functional>
 #include <algorithm>
 #include <cctype>
