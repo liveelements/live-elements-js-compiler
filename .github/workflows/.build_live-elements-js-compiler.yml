@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   build:
-    name: "${{ matrix.name }} - node=${{matrix.nodeversion}}"
+    name: "${{ matrix.name }} - node=${{matrix.nodeversion}} - arch=${{ matrix.arch }}"
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
