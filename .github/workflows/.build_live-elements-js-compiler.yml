@@ -128,6 +128,12 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Runner architecture info
+        run: |
+          echo "→ runner.arch context: ${{ runner.arch }}"
+          echo "→ RUNNER_ARCH env var: $RUNNER_ARCH"
+          echo "→ uname -m: $(uname -m)"
       
       - name: Get Archive Name
         id: get_archive_name
