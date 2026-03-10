@@ -46,6 +46,12 @@ public:
         friend class CompilerPrivate;
 
     public:
+        enum OutputTarget {
+            JS,
+            TS,
+            JS_DTS
+        };
+
         Config(
             bool fileOutput = true,
             const std::string& outputExtension = ".js",
@@ -59,7 +65,7 @@ public:
         void setBaseComponent(const std::string& name, const std::string& importUri);
         void initialize(const MLNode& config);
         void allowUnresolvedTypes(bool allow){ m_allowUnresolved = allow; }
-        void outputTypes(bool outputTypes) { m_outputTypes = outputTypes; }
+        void outputTarget(OutputTarget target) { m_outputTarget = target; }
     private:
         bool                   m_fileOutput;
         bool                   m_fileOutputOnlyOnModified;
@@ -75,7 +81,14 @@ public:
         bool                   m_enableJsImports;
         bool                   m_enableComponentMetaInfo;
         bool                   m_allowUnresolved;
-        bool                   m_outputTypes;
+        OutputTarget           m_outputTarget;
+    };
+
+    class TargetResult {
+    public:
+        std::string js;
+        std::string ts;
+        std::string dts;
     };
 
 public:
@@ -87,10 +100,10 @@ public:
 
     const std::list<std::string>& importPaths() const;
 
-    std::string compileToJs(const std::string& path, const std::string& contents);
-    std::string compileToJs(const std::string& path, const std::string& contents, LanguageParser::AST* ast);
-    std::string compileToJs(const std::string& path, const std::string& content, BaseNode* node);
-    std::string compileModuleFileToJs(const Module::Ptr& plugin, const std::string& path, const std::string& content, BaseNode* node);
+    TargetResult compileToTarget(const std::string& path, const std::string& contents);
+    TargetResult compileToTarget(const std::string& path, const std::string& contents, LanguageParser::AST* ast);
+    TargetResult compileToTarget(const std::string& path, const std::string& content, BaseNode* node);
+    TargetResult compileModuleFileToTarget(const Module::Ptr& plugin, const std::string& path, const std::string& content, BaseNode* node);
 
     const std::string& packageBuildPath() const;
     std::string moduleFileBuildPath(const Module::Ptr& plugin, const std::string& path);

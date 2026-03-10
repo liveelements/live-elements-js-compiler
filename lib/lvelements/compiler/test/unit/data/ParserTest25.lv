@@ -8,10 +8,10 @@ component B{
         id: extra
     }
 
-    var x : {
+    any x : {
         var d = Element{
             id: did
-            int y: 10
+            number y: 10
             
             Element {
                 id: nested

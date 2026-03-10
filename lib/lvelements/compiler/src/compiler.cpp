@@ -39,13 +39,14 @@ public:
     std::map<std::string, ElementsModule::Ptr> loadedModulesByPath;
 
     BaseNode::ConversionContext* createConversionContext(
+            BaseNode::ConversionContext::OutputTarget target = BaseNode::ConversionContext::JS,
             const Module::Ptr& module = nullptr,
             const std::string& componentPath = "",
             const std::string& relativePathFromBuild = "")
     {
         BaseNode::ConversionContext* ctx = new BaseNode::ConversionContext;
         ctx->implicitTypes = config.m_implicitTypes;
-        ctx->outputTypes = config.m_outputTypes;
+        ctx->outputTarget = target;
         if ( config.hasCustomBaseComponent() ){
             ctx->baseComponent = config.m_baseComponent;
             ctx->baseComponentImportUri = config.m_baseComponentUri;
@@ -98,15 +99,15 @@ const std::list<std::string> &Compiler::importPaths() const{
     return m_d->config.m_importPaths;
 }
 
-std::string Compiler::compileToJs(const std::string &path, const std::string &contents){
+Compiler::TargetResult Compiler::compileToTarget(const std::string &path, const std::string &contents){
     LanguageParser::AST* ast = m_d->parser->parse(contents);
-    std::string result = compileToJs(path, contents, ast);
+    Compiler::TargetResult result = compileToTarget(path, contents, ast);
     LanguageParser::destroy(ast);
     return result;
 }
 
-std::string Compiler::compileToJs(const std::string &path, const std::string &contents, LanguageParser::AST *ast){
-    std::string result;
+Compiler::TargetResult Compiler::compileToTarget(const std::string &path, const std::string &contents, LanguageParser::AST *ast){
+    Compiler::TargetResult result;
     if ( !ast )
         return result;
 
@@ -116,43 +117,59 @@ std::string Compiler::compileToJs(const std::string &path, const std::string &co
     root->collectImportTypes(contents, ctx);
     delete ctx;
 
-    result = compileToJs(path, contents, root);
+    result = compileToTarget(path, contents, root);
 
     delete root;
 
     return result;
 }
 
-std::string Compiler::compileToJs(const std::string &path, const std::string &contents, BaseNode *node){
-    std::string result;
-    el::JSSection* section = new el::JSSection;
-    section->from = 0;
-    section->to   = static_cast<int>(contents.size());
+Compiler::TargetResult Compiler::compileToTarget(const std::string &path, const std::string &contents, BaseNode *node){
+    Compiler::TargetResult result;
 
-    auto ctx = m_d->createConversionContext();
+    auto compileContextTarget = [&](BaseNode::ConversionContext::OutputTarget target, std::string& outStr, const std::string& extension) {
+        el::JSSection* section = new el::JSSection;
+        section->from = 0;
+        section->to   = static_cast<int>(contents.size());
 
-    LanguageNodesToJs lnt;
-    lnt.convert(node, contents, section->m_children, 0, ctx);
-    delete ctx;
+        auto ctx = m_d->createConversionContext(target);
 
-    std::vector<std::string> flatten;
-    section->flatten(contents, flatten);
-    for ( const std::string& s : flatten ){
-        result += s;
+        LanguageNodesToJs lnt;
+        lnt.convert(node, contents, section->m_children, 0, ctx);
+        delete ctx;
+
+        std::vector<std::string> flatten;
+        section->flatten(contents, flatten);
+        for ( const std::string& s : flatten ){
+            outStr += s;
+        }
+
+        delete section;
+
+        if ( m_d->config.m_fileOutput ){
+            std::string outputPath = path + extension;
+            m_d->config.m_fileIO->writeToFile(outputPath, outStr);
+        }
+    };
+
+    if (m_d->config.m_outputTarget == Compiler::Config::JS || m_d->config.m_outputTarget == Compiler::Config::JS_DTS) {
+        compileContextTarget(BaseNode::ConversionContext::JS, result.js, m_d->config.m_outputExtension);
+    }
+    
+    if (m_d->config.m_outputTarget == Compiler::Config::TS) {
+        compileContextTarget(BaseNode::ConversionContext::TS, result.ts, ".ts");
     }
 
-    delete section;
-
-    if ( m_d->config.m_fileOutput ){
-        std::string outputPath = path + m_d->config.m_outputExtension;
-        m_d->config.m_fileIO->writeToFile(outputPath, result);
+    if (m_d->config.m_outputTarget == Compiler::Config::JS_DTS) {
+        compileContextTarget(BaseNode::ConversionContext::JS, result.js, m_d->config.m_outputExtension);
+        compileContextTarget(BaseNode::ConversionContext::DTS, result.dts, ".d.ts");
     }
 
     return result;
 }
 
-std::string Compiler::compileModuleFileToJs(const Module::Ptr &module, const std::string &path, const std::string &contents, BaseNode *node){
-    std::string result;
+Compiler::TargetResult Compiler::compileModuleFileToTarget(const Module::Ptr &module, const std::string &path, const std::string &contents, BaseNode *node){
+    Compiler::TargetResult result;
     el::JSSection* section = new el::JSSection;
     section->from = 0;
     section->to   = static_cast<int>(contents.size());
@@ -188,48 +205,68 @@ std::string Compiler::compileModuleFileToJs(const Module::Ptr &module, const std
 
     relativePathFromOutput = Utf8::join(relativePathFromOutputSegments, "/");
 
-    auto ctx = m_d->createConversionContext(module, path, relativePathFromOutput.data());
-    LanguageNodesToJs lnt;
-    lnt.convert(node, contents, section->m_children, 0, ctx);
-    delete ctx;
+    auto compileContextTarget = [&](BaseNode::ConversionContext::OutputTarget target, std::string& outStr, const std::string& extension) {
+        el::JSSection* section = new el::JSSection;
+        section->from = 0;
+        section->to   = static_cast<int>(contents.size());
 
-    std::vector<std::string> flatten;
-    section->flatten(contents, flatten);
+        auto ctx = m_d->createConversionContext(target, module, path, relativePathFromOutput.data());
+        LanguageNodesToJs lnt;
+        lnt.convert(node, contents, section->m_children, 0, ctx);
+        delete ctx;
 
-    for ( const std::string& s : flatten ){
-        result += s;
-    }
+        std::vector<std::string> flatten;
+        section->flatten(contents, flatten);
 
-    delete section;
-
-    if ( m_d->config.m_fileOutput ){
-        std::string outputFile = outputPath.data();
-        std::string displayFilePath = path;
-        Utf8::replaceAll(displayFilePath, module->packagePath(), "");
-
-        bool shouldWrite = true;
-        if ( m_d->config.m_fileOutputOnlyOnModified && Path::exists(outputFile) ){
-            DateTime sourceModifiedStamp = Path::lastModified(path);
-            DateTime outputModifiedStamp = Path::lastModified(outputFile);
-            shouldWrite = outputModifiedStamp < sourceModifiedStamp;
+        for ( const std::string& s : flatten ){
+            outStr += s;
         }
-        if ( shouldWrite && module->context() ){
-            auto package = module->context()->packageUnwrapped();
-            if ( !package->release().empty() ){
-                shouldWrite = false;
-                if ( !Path::exists(outputPath.data()) ){
-                    Utf8 msg = Utf8("Released package '%' missing build file: %").format(package->name(), displayFilePath);
-                    THROW_EXCEPTION(lv::Exception, msg, Exception::toCode("~File"));
+
+        delete section;
+
+        if ( m_d->config.m_fileOutput ){
+            std::string outputFile = outputPath.data() + extension;
+
+            std::string displayFilePath = path;
+            Utf8::replaceAll(displayFilePath, module->packagePath(), "");
+
+            bool shouldWrite = true;
+            if ( m_d->config.m_fileOutputOnlyOnModified && Path::exists(outputFile) ){
+                DateTime sourceModifiedStamp = Path::lastModified(path);
+                DateTime outputModifiedStamp = Path::lastModified(outputFile);
+                shouldWrite = outputModifiedStamp < sourceModifiedStamp;
+            }
+            if ( shouldWrite && module->context() ){
+                auto package = module->context()->packageUnwrapped();
+                if ( !package->release().empty() ){
+                    shouldWrite = false;
+                    if ( extension != ".d.ts" && !Path::exists(outputFile) ){
+                        Utf8 msg = Utf8("Released package '%' missing build file: %").format(package->name(), displayFilePath);
+                        THROW_EXCEPTION(lv::Exception, msg, Exception::toCode("~File"));
+                    }
                 }
             }
-        }
 
-        if ( shouldWrite ){
-            m_d->config.m_fileIO->writeToFile(outputPath.data(), result);
-            vlog("lvcompiler").v() << "Compiler: Compiled file: " << displayFilePath;
-        } else {
-            vlog("lvcompiler").v() << "Compiler: Skipped file: " << displayFilePath;
+            if ( shouldWrite ){
+                m_d->config.m_fileIO->writeToFile(outputFile, outStr);
+                vlog("lvcompiler").v() << "Compiler: Compiled file: " << displayFilePath << extension;
+            } else {
+                vlog("lvcompiler").v() << "Compiler: Skipped file: " << displayFilePath << extension;
+            }
         }
+    };
+
+    if (m_d->config.m_outputTarget == Compiler::Config::JS || m_d->config.m_outputTarget == Compiler::Config::JS_DTS) {
+        compileContextTarget(BaseNode::ConversionContext::JS, result.js, m_d->config.m_outputExtension);
+    }
+    
+    if (m_d->config.m_outputTarget == Compiler::Config::TS) {
+        compileContextTarget(BaseNode::ConversionContext::TS, result.ts, ".ts");
+    }
+
+    if (m_d->config.m_outputTarget == Compiler::Config::JS_DTS) {
+        compileContextTarget(BaseNode::ConversionContext::JS, result.js, m_d->config.m_outputExtension);
+        compileContextTarget(BaseNode::ConversionContext::DTS, result.dts, ".d.ts");
     }
 
     return result;
@@ -241,12 +278,12 @@ const std::string &Compiler::packageBuildPath() const{
 
 std::string Compiler::moduleFileBuildPath(const Module::Ptr &plugin, const std::string &path){
     if ( m_d->config.m_packageBuildPath.empty() ){
-        return path + m_d->config.m_outputExtension;
+        return path;
     }
 
     std::string buildPath = createModuleBuildPath(plugin);
     std::string fileName = Path::name(path);
-    return Path::join(buildPath, fileName + m_d->config.m_outputExtension);
+    return Path::join(buildPath, fileName);
 }
 
 std::string Compiler::moduleBuildPath(const Module::Ptr &module){
@@ -453,6 +490,7 @@ Compiler::Config::Config(bool fileOutput, const std::string &outputExtension, Fi
     , m_enableJsImports(true)
     , m_enableComponentMetaInfo(true)
     , m_allowUnresolved(true)
+    , m_outputTarget(JS)
 {
     if ( m_fileOutput && !m_fileIO ){
         THROW_EXCEPTION(lv::Exception, "File reader & writer not defined for compiler.", lv::Exception::toCode("~FileIO"));
@@ -513,6 +551,15 @@ void Compiler::Config::initialize(const MLNode &config){
     }
     if ( config.hasKey("enableComponentMetaInfo") ){
         m_enableComponentMetaInfo = config["enableComponentMetaInfo"].asBool();
+    }
+    if ( config.hasKey("outputTypes") ){
+        m_outputTarget = config["outputTypes"].asBool() ? TS : JS;
+    }
+    if ( config.hasKey("outputTarget") ){
+        std::string t = config["outputTarget"].asString();
+        if ( t == "TS" ) m_outputTarget = TS;
+        else if ( t == "JS" ) m_outputTarget = JS;
+        else m_outputTarget = JS_DTS;
     }
 }
 

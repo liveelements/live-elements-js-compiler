@@ -52,7 +52,7 @@ TEST_CASE( "Parse Error Test", "[ParseError]" ) {
         bool hadException = false;
 
         try {
-            compiler->compileToJs(filePath, contents);
+            compiler->compileToTarget(filePath, contents);
         } catch (lv::el::SyntaxException& e) {
             REQUIRE(e.code() == lv::Exception::toCode("~Language"));
             hadException = true;
@@ -73,7 +73,7 @@ TEST_CASE( "Parse Error Test", "[ParseError]" ) {
         bool hadException = false;
 
         try {
-            compiler->compileToJs(filePath, contents);
+            compiler->compileToTarget(filePath, contents);
         } catch (lv::Exception& e) {
             REQUIRE(e.code() == lv::Exception::toCode("~Identifier"));
             hadException = true;
@@ -95,7 +95,7 @@ TEST_CASE( "Parse Error Test", "[ParseError]" ) {
         bool hadException = false;
 
         try {
-            compiler->compileToJs(filePath, contents);
+            compiler->compileToTarget(filePath, contents);
         } catch (lv::Exception& e) {
             REQUIRE(e.code() == lv::Exception::toCode("~Language"));
             hadException = true;
@@ -117,7 +117,7 @@ TEST_CASE( "Parse Error Test", "[ParseError]" ) {
         bool hadException = false;
 
         try {
-            compiler->compileToJs(filePath, contents);
+            compiler->compileToTarget(filePath, contents);
         } catch (lv::Exception& e) {
             REQUIRE(e.code() == lv::Exception::toCode("~Language"));
             hadException = true;
@@ -139,7 +139,7 @@ TEST_CASE( "Parse Error Test", "[ParseError]" ) {
         bool hadException = false;
 
         try {
-            compiler->compileToJs(filePath, contents);
+            compiler->compileToTarget(filePath, contents);
         } catch (lv::Exception& e) {
             REQUIRE(e.code() == lv::Exception::toCode("~Language"));
             hadException = true;

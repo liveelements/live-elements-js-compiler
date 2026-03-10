@@ -26,6 +26,44 @@
 using namespace lv;
 using namespace lv::el;
 
+void testFileParseOutput(const std::string& name, const std::string& contents, Compiler::Config::OutputTarget outputTarget, const std::string& expectation) {
+    static FileIO fileIO;
+    static std::string scriptPath = Path::join(Path::parent(lv::ApplicationContext::instance().applicationFilePath()), "data");
+
+    const auto expectationPath = Path::join(scriptPath, name + ".lv" + expectation);
+
+    if (!Path::exists(expectationPath)) 
+        return;
+    const auto expectedContent = fileIO.readFromFile(expectationPath);
+    Compiler::Config compilerConfig(false);
+    compilerConfig.allowUnresolvedTypes(true);
+    compilerConfig.outputTarget(outputTarget);
+    Compiler::Ptr compiler = Compiler::create(compilerConfig);
+    compiler->configureImplicitType("console");
+    compiler->configureImplicitType("vlog");
+
+    Compiler::TargetResult targetResult = compiler->compileToTarget(Path::join(scriptPath, name + ".lv"), contents);
+    std::string conversion = targetResult.js;
+    if (expectation == ".ts") conversion = targetResult.ts;
+    else if (expectation == ".d.ts") conversion = targetResult.dts;
+    if (conversion.empty()) conversion = targetResult.js;
+
+    el::LanguageParser::Ptr parser = el::LanguageParser::createForElements();
+    el::LanguageParser::AST* conversionAST = parser->parse(conversion);
+    el::LanguageParser::AST* expectedAST   = parser->parse(expectedContent);
+
+    el::LanguageParser::ComparisonResult compare = parser->compare(expectedContent, expectedAST, conversion, conversionAST);
+    parser->destroy(conversionAST);
+    parser->destroy(expectedAST);
+
+    if ( !compare.isEqual() ){
+        vlog().e() << "File: " << name << ".lv" << expectation << ":" << compare.source1Row() << ":" << compare.source1Col();
+        vlog().e() << compare.errorString();
+        vlog().e() << conversion;
+    }
+    REQUIRE(compare.isEqual());
+}
+
 void testFileParse(const std::string& name){
     static FileIO fileIO;
     static std::string scriptPath = Path::join(Path::parent(lv::ApplicationContext::instance().applicationFilePath()), "data");
@@ -33,40 +71,8 @@ void testFileParse(const std::string& name){
     try{
         std::string contents = fileIO.readFromFile(Path::join(scriptPath, name + ".lv"));
 
-        std::vector<std::string> expectations = {
-            ".js",
-            ".ts",
-        };
-
-        for(const auto& expectation : expectations) {
-            const auto expectationPath = Path::join(scriptPath, name + ".lv" + expectation);
-            if (!Path::exists(expectationPath)) continue;
-            const auto expectedContent = fileIO.readFromFile(expectationPath);
-            Compiler::Config compilerConfig(false);
-            compilerConfig.allowUnresolvedTypes(true);
-            compilerConfig.outputTypes(expectation == ".ts");
-            Compiler::Ptr compiler = Compiler::create(compilerConfig);
-            compiler->configureImplicitType("console");
-            compiler->configureImplicitType("vlog");
-
-            std::string conversion = compiler->compileToJs(Path::join(scriptPath, name + ".lv"), contents);
-
-            el::LanguageParser::Ptr parser = el::LanguageParser::createForElements();
-            el::LanguageParser::AST* conversionAST = parser->parse(conversion);
-            el::LanguageParser::AST* expectedAST   = parser->parse(expectedContent);
-
-            el::LanguageParser::ComparisonResult compare = parser->compare(expectedContent, expectedAST, conversion, conversionAST);
-            parser->destroy(conversionAST);
-            parser->destroy(expectedAST);
-
-            if ( !compare.isEqual() ){
-                vlog().e() << "File: " << name << ".lv" << expectation;
-                vlog().e() << compare.errorString();
-                vlog().e() << conversion;
-            }
-            REQUIRE(compare.isEqual());
-        }
-
+        testFileParseOutput(name, contents, Compiler::Config::OutputTarget::JS, ".js");
+        testFileParseOutput(name, contents, Compiler::Config::OutputTarget::JS_DTS, ".d.ts");
 
     } catch ( lv::el::SyntaxException& e ){
         FAIL(Utf8("SyntaxException: % at %:%").format(e.message(), e.parsedLocation().filePath(), e.parsedLocation().range().start().line()).data().c_str());
@@ -124,7 +130,8 @@ TEST_CASE( "Parse Test", "[Parse]" ) {
 
             el::LanguageParser::Ptr parser = el::LanguageParser::createForElements();
 
-            std::string conversion = compiler->compileToJs(Path::join(scriptPath, name + ".lv.js"), contents);
+            Compiler::TargetResult targetResult = compiler->compileToTarget(Path::join(scriptPath, name + ".lv.js"), contents);
+            std::string conversion = targetResult.js;
 
             el::LanguageParser::AST* conversionAST = parser->parse(conversion);
             el::LanguageParser::AST* expectedAST   = parser->parse(expect);
@@ -164,6 +171,7 @@ TEST_CASE( "Parse Test", "[Parse]" ) {
     SECTION("Anonymous Components"){ testFileParse("ParserTest49"); }
     SECTION("Additional Declarations"){ testFileParse("ParserTest50"); }
     SECTION("Package Scope Import"){ testFileParse("ParserTest51"); }
+    SECTION("Comments Preservation"){ testFileParse("ParserTest52"); }
 
     SECTION("Function & Variables Type Test"){ testFileParse("ParserTypeTest01"); }
 

@@ -2,7 +2,7 @@
 component TodoApp < Div{
     id: main
 
-    var todoItems: todoItems
+    any todoItems: todoItems
 
     TodoHeader{}
     TodoList{

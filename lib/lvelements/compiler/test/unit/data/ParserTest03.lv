@@ -1,14 +1,14 @@
 component NestingTest < Container{
     Element{
         id: e1
-        int x: enested.y
+        number x: enested.y
     }
 
     Container{
         id: c1
         Element{
             id: enested
-            int y : 200
+            number y : 200
         }
     }
 }
@@ -16,6 +16,6 @@ component NestingTest < Container{
 
 component ShortIdTest < Container{
     Element#e1{
-        int x : 10
+        number x : 10
     }
 }

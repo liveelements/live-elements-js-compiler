@@ -1,6 +1,6 @@
 component TodoListItem < Li{
     id: todoListItem
-    var item: null
+    any item: null
     event remove()
     event markDone()
     classes: "list-group-item"

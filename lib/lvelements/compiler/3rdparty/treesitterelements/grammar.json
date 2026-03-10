@@ -1,5 +1,7 @@
 {
+  "$schema": "https://tree-sitter.github.io/tree-sitter/assets/schemas/grammar.schema.json",
   "name": "elements",
+  "inherits": "typescript",
   "word": "identifier",
   "rules": {
     "program": {
@@ -12387,8 +12389,16 @@
             "type": "CHOICE",
             "members": [
               {
-                "type": "SYMBOL",
-                "name": "_template_chars"
+                "type": "PATTERN",
+                "value": "[^`\\\\]+"
+              },
+              {
+                "type": "STRING",
+                "value": "`"
+              },
+              {
+                "type": "STRING",
+                "value": "``"
               },
               {
                 "type": "SYMBOL",
@@ -14356,6 +14366,6 @@
     "pattern",
     "type",
     "primary_type"
-  ]
+  ],
+  "reserved": {}
 }
-

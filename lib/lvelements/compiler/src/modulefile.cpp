@@ -156,7 +156,7 @@ void ModuleFile::compile(){
         if ( !m_d->rootNode ){
             THROW_EXCEPTION(lv::Exception, Utf8("Assertion: ModuleFile being compiled without parsed node."), Exception::toCode("~NullPtr"));
         }
-        m_d->elementsModule->compiler()->compileModuleFileToJs(m_d->elementsModule->module(), filePath(), m_d->content, m_d->rootNode);
+        m_d->elementsModule->compiler()->compileModuleFileToTarget(m_d->elementsModule->module(), filePath(), m_d->content, m_d->rootNode);
         m_d->status = ModuleFile::Compiled;
     }
 }

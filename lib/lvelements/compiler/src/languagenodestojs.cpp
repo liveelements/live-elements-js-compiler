@@ -136,6 +136,9 @@ void LanguageNodesToJs::convertProgram(ProgramNode *node, const std::string &sou
                     );
                 }
                 std::string impPath = impIt->second.resolvedPath.empty() ? "__UNRESOLVED__" : impIt->second.resolvedPath;
+                if (ctx && ctx->outputTarget == BaseNode::ConversionContext::DTS && impPath == "__UNRESOLVED__") {
+                    continue;
+                }
                 *importsCompose << ("import {" + impIt->second.name + "} from '" + impPath + "'\n");
             }
         } else {
@@ -150,6 +153,9 @@ void LanguageNodesToJs::convertProgram(ProgramNode *node, const std::string &sou
                     );
                 }
                 std::string impPath = impIt->second.resolvedPath.empty() ? "__UNRESOLVED__" : impIt->second.resolvedPath;
+                if (ctx && ctx->outputTarget == BaseNode::ConversionContext::DTS && impPath == "__UNRESOLVED__") {
+                    continue;
+                }
                 std::string impKey = "__" + it->first + "__" + impIt->second.name;
                 std::string impName = impIt->second.name;
 
@@ -188,8 +194,149 @@ void LanguageNodesToJs::convertProgram(ProgramNode *node, const std::string &sou
 }
 
 void LanguageNodesToJs::convertComponentDeclaration(ComponentDeclarationNode *node, const std::string &source, std::vector<ElementsInsertion *> &sections, int indentValue, BaseNode::ConversionContext *ctx){
+    
+    if ( ctx && ctx->outputTarget == BaseNode::ConversionContext::DTS ){
+        ElementsInsertion* compose = new ElementsInsertion;
+        compose->from = node->startByte();
+        compose->to   = node->endByte();
+
+        std::string componentName = node->name(source);
+
+        std::string heritage = "";
+        if ( node->heritage().size() > 0 ){
+            heritage = slice(source, node->heritage()[0]);
+            for ( size_t i = 1; i < node->heritage().size(); ++i ){
+                heritage += "." + slice(source, node->heritage()[i]);
+            }
+        }
+
+        if ( heritage.empty() )
+            heritage = BaseNode::ConversionContext::baseComponentName(ctx);
+
+        if (node->parent() && node->parent()->isNodeType<ProgramNode>() ){
+            *compose << "\n" << indent(indentValue) << "export declare class ";
+        } else {
+            *compose << "export declare class "; 
+        }
+
+        *compose << (node->isAnonymous() ? "" : componentName + " ") << "extends " + heritage + " {\n";
+
+        // Constructor
+        if (node->componentBody()->constructor()){
+            for (auto c : node->componentBody()->constructor()->precedingComments()){
+                *compose << indent(indentValue + 1) << c->text(source) << "\n";
+            }
+            *compose << indent(indentValue + 1) <<  "constructor(";
+            if ( node->componentBody()->constructor()->parameters() && node->componentBody()->constructor()->parameters()->parameters().size() ){
+                for (size_t i = 0; i != node->componentBody()->constructor()->parameters()->parameters().size(); ++i){
+                    if ( i != 0 )
+                        *compose << ", ";
+                    ParameterNode* param = node->componentBody()->constructor()->parameters()->parameters()[i];
+                    *compose << slice(source, param->identifier());
+                    if (param->type()) {
+                        *compose << slice(source, param->type());
+                    } else {
+                        *compose << ":any";
+                    }
+                }
+            }
+            *compose << ");\n";
+        }
+
+        // Properties
+        for (size_t i = 0; i < node->properties().size(); ++i){
+            for (auto c : node->properties()[i]->precedingComments()){
+                *compose << indent(indentValue + 1) << c->text(source) << "\n";
+            }
+            std::string propertyName = slice(source, node->properties()[i]->name());
+            *compose << indent(indentValue + 1) << propertyName << ": " << getDTSPropertyType(source, node->properties()[i], indentValue + 1) << ";\n";
+        }
+
+        // Methods
+        for ( auto it = node->methods().begin(); it != node->methods().end(); ++it ){
+            TypedMethodDeclarationNode* tfdn = *it;
+            for (auto c : tfdn->precedingComments()){
+                *compose << indent(indentValue + 1) << c->text(source) << "\n";
+            }
+            *compose << indent(indentValue + 1);
+            if (tfdn->isStatic()) {
+                *compose << "static ";
+            }
+            *compose << slice(source, tfdn->name()) << "(";
+            if ( tfdn->parameters() ){
+                ParameterListNode* pdn = tfdn->parameters()->as<ParameterListNode>();
+                for ( auto pit = pdn->parameters().begin(); pit != pdn->parameters().end(); ++pit ){
+                    if ( pit != pdn->parameters().begin() )
+                        *compose << ", ";
+                    *compose << slice(source, (*pit)->identifier());
+                    if ((*pit)->type()) {
+                        *compose << ": " << TypeNode::sliceWithoutAnnotation(source, (*pit)->type());
+                    } else {
+                        *compose << ": any";
+                    }
+                }
+            }
+            *compose << "): any;\n";
+        }
+
+        // Accessors
+        for (size_t i = 0; i < node->propertyAccessors().size(); ++i){
+            PropertyAccessorDeclarationNode* pa = node->propertyAccessors()[i];
+            if ( !pa->isPropertyAttached() ){
+                if ( pa->access() == PropertyAccessorDeclarationNode::Getter ){
+                    *compose << indent(indentValue + 1) << "get " << slice(source, pa->name()) << "(): any;\n";
+                } else if ( pa->access() == PropertyAccessorDeclarationNode::Setter ){
+                    std::string param = "value";
+                    if ( pa->parameters() ){
+                        ParameterListNode* pdn = pa->parameters()->as<ParameterListNode>();
+                        if  ( pdn->parameters().size() > 0 ){
+                            param = slice(source, pdn->parameters()[0]->identifier());
+                        }
+                    }
+                    *compose << indent(indentValue + 1) << "set " << slice(source, pa->name()) << "(" << param << ": any);\n";
+                }
+            }
+        }
+
+        // Static properties
+        for ( auto it = node->staticProperties().begin(); it != node->staticProperties().end(); ++it ){
+            StaticPropertyDeclarationNode* spd = (*it)->as<StaticPropertyDeclarationNode>();
+            for (auto c : spd->precedingComments()){
+                *compose << indent(indentValue + 1) << c->text(source) << "\n";
+            }
+            *compose << indent(indentValue + 1) << "static " << slice(source, spd->name()) << ": ";
+            if (spd->type()) {
+                std::string tName = slice(source, spd->type());
+                if (tName == "var") {
+                    tName = "any";
+                } else if (tName.length() >= 2 && tName.substr(tName.length() - 2) == "[]") {
+                    tName = "Array<" + tName.substr(0, tName.length() - 2) + ">";
+                }
+                *compose << tName << ";\n";
+            } else {
+                *compose << "any;\n";
+            }
+        }
+
+        // Events
+        for ( auto it = node->events().begin(); it != node->events().end(); ++it ){
+            EventDeclarationNode* edn = *it;
+            for (auto c : edn->precedingComments()){
+                *compose << indent(indentValue + 1) << c->text(source) << "\n";
+            }
+            *compose << indent(indentValue + 1) << slice(source, edn->name()) << ": any;\n";
+        }
+
+        *compose << indent(indentValue) << "}\n";
+        sections.push_back(compose);
+        return;
+    }
+
     ElementsInsertion* compose = new ElementsInsertion;
     compose->from = node->startByte();
+    if (!node->precedingComments().empty()) {
+        compose->from = node->precedingComments().front()->startByte();
+    }
     compose->to   = node->endByte();
 
     std::string componentName = node->name(source);
@@ -302,7 +449,7 @@ void LanguageNodesToJs::convertComponentDeclaration(ComponentDeclarationNode *no
             }
         }
 
-        *compose << indent(indentValue + 1) << (BaseNode::ConversionContext::baseComponentName(ctx) + ".addEvent(this, \'" + slice(source, node->events()[i]->name()) + "\', [" + paramList + "])\n");
+        *compose << indent(indentValue + 2) << (BaseNode::ConversionContext::baseComponentName(ctx) + ".addEvent(this, \'" + slice(source, node->events()[i]->name()) + "\', [" + paramList + "])\n");
     }
 
     for (size_t i = 0; i < node->listeners().size(); ++i){
@@ -638,6 +785,55 @@ void LanguageNodesToJs::convertConstructorInitializer(ConstructorInitializerNode
 
 void LanguageNodesToJs::convertNewComponentExpression(NewComponentExpressionNode *node, const std::string &source, std::vector<ElementsInsertion *> &sections, int indt, BaseNode::ConversionContext *ctx)
 {
+    if ( ctx && ctx->outputTarget == BaseNode::ConversionContext::DTS ){
+        ElementsInsertion* compose = new ElementsInsertion;
+        compose->from = node->startByte();
+        compose->to   = node->endByte();
+
+        if ( node->parent() && node->parent()->isNodeType<ComponentInstanceStatementNode>() ){
+            compose->from = node->parent()->startByte();
+            std::string instanceName = node->parent()->as<ComponentInstanceStatementNode>()->name(source);
+            
+            std::string type = "";
+            for ( auto nameIden : node->name() ){
+                if ( !type.empty() ) type += ".";
+                type += slice(source, nameIden);
+            }
+
+            *compose << "\nexport declare const " << instanceName << ": " << type;
+
+            if (node->properties().size() > 0 || node->assignments().size() > 0 || node->methods().size() > 0 || node->events().size() > 0) {
+                *compose << " & {\n";
+                
+                for (size_t i = 0; i < node->properties().size(); ++i){
+                    std::string propertyName = slice(source, node->properties()[i]->name());
+                    *compose << indent(indt + 1) << propertyName << ": " << getDTSPropertyType(source, node->properties()[i], indt + 1) << ";\n";
+                }
+                for (size_t i = 0; i < node->methods().size(); ++i) {
+                    *compose << indent(indt + 1) << slice(source, node->methods()[i]->name()) << "(";
+                    if (node->methods()[i]->parameters()) {
+                        auto pdn = node->methods()[i]->parameters()->as<ParameterListNode>();
+                        for (auto pit = pdn->parameters().begin(); pit != pdn->parameters().end(); ++pit) {
+                            if (pit != pdn->parameters().begin()) *compose << ", ";
+                            *compose << slice(source, (*pit)->identifier());
+                            if ((*pit)->type()) *compose << ": " << TypeNode::sliceWithoutAnnotation(source, (*pit)->type());
+                            else *compose << ": any";
+                        }
+                    }
+                    *compose << "): any;\n";
+                }
+                for (size_t i = 0; i < node->events().size(); ++i) {
+                    *compose << indent(indt + 1) << slice(source, node->events()[i]->name()) << ": any;\n";
+                }
+                *compose << indent(indt) << "};\n";
+            } else {
+                *compose << ";\n";
+            }
+        }
+        sections.push_back(compose);
+        return;
+    }
+
     ElementsInsertion* compose = new ElementsInsertion;
     compose->from = node->startByte();
     compose->to   = node->endByte();
@@ -1074,9 +1270,7 @@ void LanguageNodesToJs::convertNewTrippleTaggedComponentExpression(NewTrippleTag
                 }
             }
 
-            Utf8::replaceAll(value, "\r", "");
-            Utf8::replaceAll(value, "\n", "\\n");
-            Utf8::replaceAll(value, "\t", "\\t");
+            value = LanguageNodesToJs::escapeForDoubleQuotedJsString(value);
         }
     }
 
@@ -1111,7 +1305,7 @@ void LanguageNodesToJs::convertVariableDeclaration(
             *compose << ",";
         *compose << slice(source, declarator->name());
 
-        if (ctx->outputTypes && declarator->type()) {
+        if (ctx->outputTarget != BaseNode::ConversionContext::JS && declarator->type()) {
             *compose << slice(source, declarator->type());
         }
 
@@ -1149,13 +1343,13 @@ void LanguageNodesToJs::convertFunctionDeclaration(
         if ( pit != params->parameters().begin() )
             paramList += ",";
         paramList += slice(source, (*pit)->identifier());
-        if (ctx->outputTypes && (*pit)->type()) {
+        if (ctx->outputTarget != BaseNode::ConversionContext::JS && (*pit)->type()) {
             paramList += slice(source, (*pit)->type());
         }
     }
 
     std::string returnType = "";
-    if (ctx->outputTypes && funcNode->returnType() != nullptr) {
+    if (ctx->outputTarget != BaseNode::ConversionContext::JS && funcNode->returnType() != nullptr) {
         returnType = slice(source, funcNode->returnType());
     }
 
@@ -1198,13 +1392,13 @@ void LanguageNodesToJs::convertArrowFunction(
         if ( pit != params->parameters().begin() )
             paramList += ",";
         paramList += slice(source, (*pit)->identifier());
-        if (ctx->outputTypes && (*pit)->type()) {
+        if (ctx->outputTarget != BaseNode::ConversionContext::JS && (*pit)->type()) {
             paramList += slice(source, (*pit)->type());
         }
     }
 
     std::string returnType = "";
-    if (ctx->outputTypes && arrowNode->returnType() != nullptr) {
+    if (ctx->outputTarget != BaseNode::ConversionContext::JS && arrowNode->returnType() != nullptr) {
         returnType = slice(source, arrowNode->returnType());
     }
 
@@ -1248,13 +1442,13 @@ void LanguageNodesToJs::convertFunction(
         if ( pit != params->parameters().begin() )
             paramList += ",";
         paramList += slice(source, (*pit)->identifier());
-        if (ctx->outputTypes && (*pit)->type()) {
+        if (ctx->outputTarget != BaseNode::ConversionContext::JS && (*pit)->type()) {
             paramList += slice(source, (*pit)->type());
         }
     }
 
     std::string returnType = "";
-    if (ctx->outputTypes && funcNode->returnType() != nullptr) {
+    if (ctx->outputTarget != BaseNode::ConversionContext::JS && funcNode->returnType() != nullptr) {
         returnType = slice(source, funcNode->returnType());
     }
 
@@ -1280,11 +1474,76 @@ void LanguageNodesToJs::convertFunction(
 }
 
 
-void LanguageNodesToJs::convertPropertyDeclaration(PropertyDeclarationNode *node, const std::string &source, const std::string &componentReference, int indt, BaseNode::ConversionContext *ctx, const PropertyAccessorDeclarationNode::PropertyAccess &propertyAccess, ElementsInsertion *compose){
-    *compose << indent(indt) << BaseNode::ConversionContext::baseComponentName(ctx) << ".addProperty(" + componentReference + ", '" << slice(source, node->name())
-             << "', { type: '" << (node->type() ? slice(source, node->type()) : "") << "', notify: '"
-             << slice(source, node->name()) << "Changed'";
+std::string LanguageNodesToJs::getDTSPropertyType(const std::string& source, BaseNode* propOrAss, int indt) {
+    BaseNode* statementBlock = nullptr;
+    std::string tName = "any";
+    
+    if (propOrAss->isNodeType<PropertyDeclarationNode>()) {
+        PropertyDeclarationNode* prop = propOrAss->as<PropertyDeclarationNode>();
+        tName = prop->type() ? slice(source, prop->type()) : "any";
+        statementBlock = prop->statementBlock();
+    } else if (propOrAss->isNodeType<PropertyAssignmentNode>()) {
+        PropertyAssignmentNode* ass = propOrAss->as<PropertyAssignmentNode>();
+        statementBlock = ass->statementBlock();
+        tName = "any"; // Force deep check for assignments
+    }
 
+    if (tName == "any" ) {
+        if (statementBlock && statementBlock->isNodeType<NewComponentExpressionNode>()) {
+            NewComponentExpressionNode* nce = statementBlock->as<NewComponentExpressionNode>();
+            std::string type = "";
+            for (auto nameIden : nce->name()) {
+                if (!type.empty()) type += ".";
+                type += slice(source, nameIden);
+            }
+            if (nce->properties().size() > 0 || nce->assignments().size() > 0 || nce->methods().size() > 0) {
+                type += " & {\n";
+                for (auto p : nce->properties()) {
+                    for (auto c: p->precedingComments()){
+                        type += indent(indt + 1) + c->text(source) + "\n";
+                    }
+                    type += indent(indt + 1) + slice(source, p->name()) + ": " + getDTSPropertyType(source, p, indt + 1) + ";\n";
+                }
+                for (auto a : nce->assignments()) {
+                    if (a->property().size() == 1) {
+                        for (auto c: a->precedingComments()){
+                            type += indent(indt + 1) + c->text(source) + "\n";
+                        }
+                        type += indent(indt + 1) + slice(source, a->property()[0]) + ": " + getDTSPropertyType(source, a, indt + 1) + ";\n";
+                    }
+                }
+                for (auto m : nce->methods()) {
+                    for (auto c: m->precedingComments()){
+                        type += indent(indt + 1) + c->text(source) + "\n";
+                    }
+                    type += indent(indt + 1) + slice(source, m->name()) + "(";
+                    if (m->parameters()) {
+                        auto pdn = m->parameters()->as<ParameterListNode>();
+                        for (auto pit = pdn->parameters().begin(); pit != pdn->parameters().end(); ++pit) {
+                            if (pit != pdn->parameters().begin()) type += ", ";
+                            type += slice(source, (*pit)->identifier());
+                            if ((*pit)->type()) type += ": " + TypeNode::sliceWithoutAnnotation(source, (*pit)->type());
+                            else type += ": any";
+                        }
+                    }
+                    type += "): any;\n";
+                }
+                type += indent(indt) + "}";
+            }
+            return type;
+        }
+        return "any";
+    }
+    return tName;
+}
+
+void LanguageNodesToJs::convertPropertyDeclaration(PropertyDeclarationNode *node, const std::string &source, const std::string &componentReference, int indt, BaseNode::ConversionContext *ctx, const PropertyAccessorDeclarationNode::PropertyAccess &propertyAccess, ElementsInsertion *compose){
+    std::string type = node->type() ? slice(source, node->type()) : "";
+    std::string typeProp = type == "default" ? ("type: '" + type + "', ") : "";
+
+    *compose << indent(indt) << BaseNode::ConversionContext::baseComponentName(ctx) << ".addProperty(" + componentReference + ", '" << slice(source, node->name())
+             << "', { " << typeProp << "notify: '"
+             << slice(source, node->name()) << "Changed'";
     if ( propertyAccess.getter ){
         *compose << ", get: function()";
         JSSection* jssection = new JSSection;
@@ -1304,6 +1563,36 @@ void LanguageNodesToJs::convertPropertyDeclaration(PropertyDeclarationNode *node
 
 
     *compose << "})\n";
+}
+
+std::string LanguageNodesToJs::escapeForDoubleQuotedJsString(const std::string& input){
+    std::string out;
+    out.reserve(input.size() * 2);
+
+    for (char c : input) {
+        switch (c) {
+            case '\\':
+                out += "\\\\";
+                break;
+            case '"':
+                out += "\\\"";
+                break;
+            case '\r':
+                out += "\\r";
+                break;
+            case '\n':
+                out += "\\n";
+                break;
+            case '\t':
+                out += "\\t";
+                break;
+            default:
+                out += c;
+                break;
+        }
+    }
+
+    return out;
 }
 
 }} // namespace lv, el

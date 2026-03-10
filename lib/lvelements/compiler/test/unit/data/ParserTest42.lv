@@ -7,7 +7,7 @@ instance elem Element{
     event add(item:Element)
     event remove(item:Element)
 
-    fn insert(item:Element, index:int){
+    fn insert(item:Element, index:number){
         this.items.insert(item, index)
     }
 }
@@ -20,7 +20,7 @@ component X < Element{
     event add(item:Element)
     event remove(item:Element)
 
-    fn insert(item:Element, index:int){
+    fn insert(item:Element, index:number){
         this.items.insert(item, index)
     }
 }

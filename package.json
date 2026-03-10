@@ -5,15 +5,15 @@
   "author": "Dinu SV",
   "license": "LGPLv3",
   "main": "index.js",
-  "private" : false,
+  "private": false,
   "repository": {
-      "type": "git",
-      "url": "https://github.com/live-keys/live-elements-js-compiler.git"
+    "type": "git",
+    "url": "https://github.com/live-keys/live-elements-js-compiler.git"
   },
   "scripts": {
     "install": "npm run downloadbinary || npm run cmake",
     "downloadbinary": "cross-env node ./scripts/downloadbinary.mjs",
-    "cmake": "cross-env CMAKE_BUILD_PARALLEL_LEVEL=8 cmake-js compile",
+    "cmake": "cross-env CMAKE_BUILD_PARALLEL_LEVEL=8 cmake-js build",
     "test": "cross-env node test/test.mjs"
   },
   "dependencies": {

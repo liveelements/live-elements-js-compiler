@@ -79,6 +79,7 @@ class NewExpressionNode;
 class ReturnStatementNode;
 class TryCatchBlockNode;
 class AssignmentExpressionNode;
+class CommentNode;
 
 class BaseNode{
 
@@ -88,7 +89,13 @@ class BaseNode{
 public:
     class ConversionContext{
     public:
-        ConversionContext() : jsImportsEnabled(true), allowUnresolved(true), outputComponentMeta(false), outputTypes(false){}
+        enum OutputTarget {
+            JS,
+            TS,
+            DTS
+        };
+
+        ConversionContext() : jsImportsEnabled(true), allowUnresolved(true), outputComponentMeta(false), outputTarget(JS){}
 
         std::string baseComponent;
         std::string baseComponentImportUri;
@@ -99,7 +106,7 @@ public:
         std::string relativePathFromBuild;
         std::string currentImportUri;
         bool        outputComponentMeta;
-        bool        outputTypes;
+        OutputTarget outputTarget;
 
         static std::string baseComponentName(ConversionContext* ctx);
         static std::string baseComponentImport(ConversionContext* ctx);
@@ -157,6 +164,8 @@ public:
 protected:
     template<typename T> T* addCreatedChild(T* child){ addChild(child); return child; }
     virtual void addChild(BaseNode *child);
+
+    static std::vector<CommentNode*> extractPrecedingComments(const TSNode& tsnode);
 
 private:
     static BaseNode* visit(BaseNode* parent, const TSNode& node);
@@ -216,11 +225,21 @@ private:
     std::vector<BaseNode*>     m_children;
 };
 
+
 class NumberNode: public BaseNode {
     friend class BaseNode;
     LANGUAGE_NODE_INFO(NumberNode);
 public:
     NumberNode(const TSNode& node, const LanguageNodeInfo::ConstPtr& ni = NumberNode::nodeInfo()) : BaseNode(node, ni){}
+};
+
+class CommentNode: public BaseNode {
+    friend class BaseNode;
+    LANGUAGE_NODE_INFO(CommentNode);
+public:
+    CommentNode(const TSNode& node, const LanguageNodeInfo::ConstPtr& ni = CommentNode::nodeInfo()) : BaseNode(node, ni){}
+    
+    std::string text(const std::string& source) const;
 };
 
 class ObjectNode: public BaseNode {
@@ -364,6 +383,10 @@ private:
 class VariableDeclarationNode : public BaseNode{
     friend class BaseNode;
     LANGUAGE_NODE_INFO(VariableDeclarationNode);
+public:
+    const std::vector<CommentNode*>& precedingComments() const { return m_precedingComments; }
+private:
+    std::vector<CommentNode*>  m_precedingComments;
 public:
     VariableDeclarationNode(const TSNode& node) : BaseNode(node, VariableDeclarationNode::nodeInfo()), m_hasSemicolon(false), m_declarationForm(Var) {}
     virtual std::string toString(int indent = 0) const;
@@ -520,6 +543,10 @@ class ConstructorDefinitionNode : public BaseNode{
     friend class ComponentDeclarationNode;
 
     LANGUAGE_NODE_INFO(ConstructorDefinitionNode);
+public:
+    const std::vector<CommentNode*>& precedingComments() const { return m_precedingComments; }
+private:
+    std::vector<CommentNode*>  m_precedingComments;
 
 public:
     ConstructorDefinitionNode(const TSNode& node)
@@ -549,6 +576,10 @@ private:
 class TypedMethodDeclarationNode : public BaseNode{
     friend class BaseNode;
     LANGUAGE_NODE_INFO(TypedMethodDeclarationNode);
+public:
+    const std::vector<CommentNode*>& precedingComments() const { return m_precedingComments; }
+private:
+    std::vector<CommentNode*>  m_precedingComments;
 public:
     TypedMethodDeclarationNode(const TSNode& node);
     virtual std::string toString(int indent = 0) const;
@@ -616,7 +647,10 @@ class PropertyDeclarationNode : public JsBlockNode{
 
     friend class BaseNode;
     LANGUAGE_NODE_INFO(PropertyDeclarationNode);
-
+public:
+    const std::vector<CommentNode*>& precedingComments() const { return m_precedingComments; }
+private:
+    std::vector<CommentNode*>  m_precedingComments;
 public:
     PropertyDeclarationNode(const TSNode& node);
     virtual ~PropertyDeclarationNode();
@@ -648,7 +682,10 @@ class StaticPropertyDeclarationNode : public BaseNode{
 
     friend class BaseNode;
     LANGUAGE_NODE_INFO(StaticPropertyDeclarationNode);
-
+public:
+    const std::vector<CommentNode*>& precedingComments() const { return m_precedingComments; }
+private:
+    std::vector<CommentNode*>  m_precedingComments;
 public:
     StaticPropertyDeclarationNode(const TSNode& node);
     virtual std::string toString(int indent = 0) const;
@@ -685,6 +722,10 @@ class PropertyAssignmentNode : public JsBlockNode{
     friend class NewComponentExpressionNode;
 
     LANGUAGE_NODE_INFO(PropertyAssignmentNode);
+public:
+    const std::vector<CommentNode*>& precedingComments() const { return m_precedingComments; }
+private:
+    std::vector<CommentNode*>  m_precedingComments;
 
 public:
     PropertyAssignmentNode(const TSNode& node);
@@ -733,6 +774,10 @@ private:
 class ComponentDeclarationNode : public JsBlockNode{
     friend class BaseNode;
     LANGUAGE_NODE_INFO(ComponentDeclarationNode);
+public:
+    const std::vector<CommentNode*>& precedingComments() const { return m_precedingComments; }
+private:
+    std::vector<CommentNode*>  m_precedingComments;
 public:
     ComponentDeclarationNode(const TSNode& node);
     virtual std::string toString(int indent = 0) const override;
@@ -962,7 +1007,9 @@ public:
     virtual std::string toString(int indent = 0) const;
     IdentifierNode* name() const{ return m_name; }
     ParameterListNode* parameterList() const{ return m_parameters; }
+    const std::vector<CommentNode*>& precedingComments() const { return m_precedingComments; }
 private:
+    std::vector<CommentNode*>  m_precedingComments;
     IdentifierNode* m_name;
     ParameterListNode* m_parameters;
 };
@@ -990,6 +1037,10 @@ class MethodDefinitionNode : public BaseNode{
     friend class BaseNode;
     LANGUAGE_NODE_INFO(MethodDefinitionNode);
 public:
+    const std::vector<CommentNode*>& precedingComments() const { return m_precedingComments; }
+private:
+    std::vector<CommentNode*>  m_precedingComments;
+public:
     MethodDefinitionNode(const TSNode& node);
     virtual std::string toString(int indent = 0) const;
 
@@ -1005,6 +1056,10 @@ private:
 class FunctionNode: public BaseNode {
     friend class BaseNode;
     LANGUAGE_NODE_INFO(FunctionNode);
+public:
+    const std::vector<CommentNode*>& precedingComments() const { return m_precedingComments; }
+private:
+    std::vector<CommentNode*>  m_precedingComments;
 public:
     FunctionNode(const TSNode& node);
     virtual std::string toString(int indent = 0) const;

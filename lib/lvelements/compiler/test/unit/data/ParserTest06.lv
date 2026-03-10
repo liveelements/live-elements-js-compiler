@@ -1,7 +1,7 @@
 component default < Container{
     component ElemProp : component T{
         id: twenty
-        int x: 20
+        number x: 20
     }
 
     Element{

@@ -4,10 +4,10 @@ component C{
         var x: 10
     }
 
-    var x : {
+    any x : {
         var d = Element{
             id: test
-            int y: 10
+            number y: 10
         }
         return d.y
     }

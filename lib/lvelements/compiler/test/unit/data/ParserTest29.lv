@@ -9,6 +9,6 @@ component C{
         vlog.i('remove triggered at: ' + index)
     }
 
-    int c1 : 200
-    int c2 : 300
+    number c1 : 200
+    number c2 : 300
 }

@@ -117,6 +117,8 @@ public:
 
 private:
     static std::string indent(int i);
+    static std::string getDTSPropertyType(const std::string& source, BaseNode* propOrAss, int indt);
+    static std::string escapeForDoubleQuotedJsString(const std::string& input);
 
 };
 

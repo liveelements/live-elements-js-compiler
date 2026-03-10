@@ -10,5 +10,9 @@ component X{
 
         Second empty line
 
+
+        `Internal Tags`
+        "Internal Double Quotes"
+        'Internal Quotes'
     ```
 }

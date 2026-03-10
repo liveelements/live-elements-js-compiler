@@ -1,8 +1,8 @@
 component A{
-    var x : {
+    any x : {
         var d = Element{
             id: did
-            int y: 10
+            number y: 10
         }
         return d.y
     }

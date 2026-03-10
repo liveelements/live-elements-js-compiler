@@ -1,0 +1,24 @@
+/** Does something */
+component X {
+    /* some number */
+    int a: 20
+    /// some other number
+    int b: 30
+    
+    /**
+     * @brief Adds two numbers together
+     * @param a First number
+     * @param b Second number
+     * @returns The sum of a and b
+     */
+    fn add(a:int, b:int){ return a + b }
+
+    /*
+      A static property example with multi-line
+      block comment formatting.
+    */
+    static string typeName = "XComponent"
+
+    // Single line on an event
+    event onAction(message:string, event:Event)
+}

@@ -7,7 +7,7 @@ component A < Element{
         this.b = b
     }
 
-    fn otherFunction(a:int){
+    fn otherFunction(a:number){
         this.a = a;
     }
 }
@@ -25,8 +25,8 @@ component C{
         this{}
     }
 
-    int c1 : 200
-    int c2 : 300
+    number c1 : 200
+    number c2 : 300
 }
 
 

@@ -1,7 +1,7 @@
 instance app Container{
     id: app
 
-    var x: Element{
+    any x: Element{
         id: elemX
     }
 

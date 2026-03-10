@@ -1,21 +1,21 @@
 component ParserTest49{
-    var x = component{}
-    var y = component < X{}
-    var z = &X{}
-    var w = &X#x{
+    any x = component{}
+    any y = component < X{}
+    any z = &X{}
+    any w = &X#x{
         fn completed(){
             let a = 5
             let b = &X{}
         }
     }
 
-    var t = &X{
+    any t = &X{
         fn completed(){
             let a = &X.Y{}
         }
     }
 
-    var v = &V{
+    any v = &V{
         constructor(){
             super()
             this{ x = 2 }

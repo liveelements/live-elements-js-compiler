@@ -7,7 +7,7 @@ instance default mod.A{
     string d : mod.D.value + mod2.Y.value
 
     Element t : mod2.X{
-        int a : mod2.Y.value
+        number a : mod2.Y.value
     }
 
 }

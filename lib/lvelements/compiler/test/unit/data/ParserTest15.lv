@@ -1,7 +1,7 @@
 component default {
-    int c: {
+    number c: {
         var newElement = Element {
-            int y: 20
+            number y: 20
         }
         return newElement.y
     }

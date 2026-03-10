@@ -1,9 +1,9 @@
 component default < Container{
     Element elemProp : Element{
-        int x: 20
+        number x: 20
     }
 
     Element{
-        int y: 20
+        number y: 20
     }
 }

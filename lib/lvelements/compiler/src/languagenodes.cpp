@@ -63,6 +63,21 @@ BaseNode::BaseNode(const TSNode &node, const LanguageNodeInfo::ConstPtr &ni)
 {
 }
 
+std::vector<CommentNode*> BaseNode::extractPrecedingComments(const TSNode& tsnode) {
+    std::vector<CommentNode*> result;
+    if (ts_node_is_null(tsnode)) return result;
+    TSNode prev = ts_node_prev_sibling(tsnode);
+    std::vector<TSNode> commentNodes;
+    while (!ts_node_is_null(prev) && std::string(ts_node_type(prev)) == "comment") {
+        commentNodes.push_back(prev);
+        prev = ts_node_prev_sibling(prev);
+    }
+    for (auto it = commentNodes.rbegin(); it != commentNodes.rend(); ++it) {
+        result.push_back(new CommentNode(*it));
+    }
+    return result;
+}
+
 BaseNode::~BaseNode(){
     for ( auto it = m_children.begin(); it != m_children.end(); ++it ){
         delete *it;
@@ -382,6 +397,10 @@ std::string BaseNode::toString(int indent) const{
     return result;
 }
 
+std::string CommentNode::text(const std::string& source) const {
+    return slice(source, startByte(), endByte());
+}
+
 BaseNode *BaseNode::visitRecognized(BaseNode *parent, const TSNode &node){
     if ( strcmp(ts_node_type(node), "import_statement") == 0 ){
         return visitImport(parent, node);
@@ -583,6 +602,10 @@ ImportPathNode* BaseNode::visitImportPath(BaseNode *parent, const TSNode &node){
 
 ComponentDeclarationNode* BaseNode::visitComponentDeclaration(BaseNode *parent, const TSNode &node){
     ComponentDeclarationNode* enode = parent->addCreatedChild(new ComponentDeclarationNode(node));
+    for (auto c : extractPrecedingComments(node)) {
+        enode->addChild(c);
+        enode->m_precedingComments.push_back(c);
+    }
 
     TSNode name = nodeChildByFieldName(node, "name");
     if ( !ts_node_is_null(name) ){
@@ -823,51 +846,59 @@ ConstructorInitializerNode* BaseNode::visitConstructorInitializer(BaseNode* pare
 }
 
 PropertyDeclarationNode* BaseNode::visitPropertyDeclaration(BaseNode *parent, const TSNode &node){
-    PropertyDeclarationNode* enode = parent->addCreatedChild(new PropertyDeclarationNode(node));
+    PropertyDeclarationNode* pnode = parent->addCreatedChild(new PropertyDeclarationNode(node));
+    for (auto c : extractPrecedingComments(node)) {
+        pnode->addChild(c);
+        pnode->m_precedingComments.push_back(c);
+    }
 
     TSNode propName = BaseNode::nodeChildByFieldName(node, "name");
     assertValid(parent, propName, "Property name is null.");
-    enode->m_name = enode->addCreatedChild(new IdentifierNode(propName));
+    pnode->m_name = pnode->addCreatedChild(new IdentifierNode(propName));
     TSNode propType = BaseNode::nodeChildByFieldName(node, "type");
     if ( !ts_node_is_null(propType) ){
-        enode->m_type = enode->addCreatedChild(new TypeNode(propType));
+        pnode->m_type = pnode->addCreatedChild(new TypeNode(propType));
     }
 
     uint32_t count = ts_node_child_count(node);
     for ( uint32_t i = 0; i < count; ++i ){
         TSNode child = ts_node_child(node, i);
         if ( strcmp(ts_node_type(child), "property_assignment_expression") == 0 ){
-            enode->m_expression = enode->addCreatedChild(new BindableExpressionNode(child));
-            visitChildren(enode->m_expression, child);
+            pnode->m_expression = pnode->addCreatedChild(new BindableExpressionNode(child));
+            visitChildren(pnode->m_expression, child);
         } else if (strcmp(ts_node_type(child), "statement_block") == 0) {
-            enode->m_statementBlock = enode->addCreatedChild(new JsBlockNode(child));
-            visitChildren(enode->m_statementBlock, child);
+            pnode->m_statementBlock = pnode->addCreatedChild(new JsBlockNode(child));
+            visitChildren(pnode->m_statementBlock, child);
         } else if ( strcmp(ts_node_type(child), "=") == 0 ){
-            enode->m_isBindingAssignment = false;
+            pnode->m_isBindingAssignment = false;
         }
     }
 
     if (parent->parent() && parent->parent()->isNodeType<ComponentDeclarationNode>() ){
-        parent->parent()->as<ComponentDeclarationNode>()->pushToProperties(enode);
+        parent->parent()->as<ComponentDeclarationNode>()->pushToProperties(pnode);
     }
 
     if (parent->parent() && (parent->parent()->isNodeType<NewComponentExpressionNode>() ||
         parent->parent()->isNodeType<RootNewComponentExpressionNode>() ))
     {
-        parent->parent()->as<NewComponentExpressionNode>()->pushToProperties(enode);
+        parent->parent()->as<NewComponentExpressionNode>()->pushToProperties(pnode);
     }
-    return enode;
+    return pnode;
 }
 
 StaticPropertyDeclarationNode* BaseNode::visitStaticPropertyDeclaration(BaseNode *parent, const TSNode &node){
-    StaticPropertyDeclarationNode* enode = parent->addCreatedChild(new StaticPropertyDeclarationNode(node));
+    StaticPropertyDeclarationNode* pnode = parent->addCreatedChild(new StaticPropertyDeclarationNode(node));
+    for (auto c : extractPrecedingComments(node)) {
+        pnode->addChild(c);
+        pnode->m_precedingComments.push_back(c);
+    }
 
     TSNode propName = BaseNode::nodeChildByFieldName(node, "name");
     assertValid(parent, propName, "Property name is null.");
-    enode->m_name = enode->addCreatedChild(new IdentifierNode(propName));
+    pnode->m_name = pnode->addCreatedChild(new IdentifierNode(propName));
     TSNode propType = BaseNode::nodeChildByFieldName(node, "type");
     if ( !ts_node_is_null(propType) ){
-        enode->m_type = enode->addCreatedChild(new TypeNode(propType));
+        pnode->m_type = pnode->addCreatedChild(new TypeNode(propType));
     }
 
     uint32_t count = ts_node_child_count(node);
@@ -877,8 +908,8 @@ StaticPropertyDeclarationNode* BaseNode::visitStaticPropertyDeclaration(BaseNode
             uint32_t initCount = ts_node_child_count(child);
             if ( initCount == 2 ){
                 TSNode initChild = ts_node_child(child, 1);
-                enode->m_expression = enode->addCreatedChild(new BindableExpressionNode(initChild));
-                visitChildren(enode->m_expression, initChild);
+                pnode->m_expression = pnode->addCreatedChild(new BindableExpressionNode(initChild));
+                visitChildren(pnode->m_expression, initChild);
             }
         }
     }
@@ -886,18 +917,18 @@ StaticPropertyDeclarationNode* BaseNode::visitStaticPropertyDeclaration(BaseNode
     if (parent->parent() && parent->parent()->isNodeType<ComponentDeclarationNode>() ){
         auto componentDeclaration = parent->parent()->as<ComponentDeclarationNode>();
         if ( componentDeclaration->isAnonymous() ){
-            throwError(enode, node, "Cannot declare static members for an anonymous component.");
+            throwError(pnode, node, "Cannot declare static members for an anonymous component.");
         }
 
-        componentDeclaration->pushToStaticProperties(enode);
+        componentDeclaration->pushToStaticProperties(pnode);
     }
 
     if (parent->parent() && (parent->parent()->isNodeType<NewComponentExpressionNode>() ||
         parent->parent()->isNodeType<RootNewComponentExpressionNode>() ) )
     {
-        throwError(enode, node, "Cannot declare static members on a new expression.");
+        throwError(pnode, node, "Cannot declare static members on a new expression.");
     }
-    return enode;
+    return pnode;
 }
 
 BindableExpressionNode* BaseNode::visitBindableExpression(BaseNode *parent, const TSNode &node){
@@ -974,41 +1005,45 @@ SubscriptExpressionNode* BaseNode::visitSubscriptExpression(BaseNode *parent, co
 }
 
 PropertyAssignmentNode* BaseNode::visitPropertyAssignment(BaseNode *parent, const TSNode &node){
-    PropertyAssignmentNode* enode = parent->addCreatedChild(new PropertyAssignmentNode(node));
+    PropertyAssignmentNode* pnode = parent->addCreatedChild(new PropertyAssignmentNode(node));
+    for (auto c : extractPrecedingComments(node)) {
+        pnode->addChild(c);
+        pnode->m_precedingComments.push_back(c);
+    }
     uint32_t count = ts_node_child_count(node);
 
     TSNode propertyName = BaseNode::nodeChildByFieldName(node, "name");
     assertValid(parent, propertyName, "Failed to find property name.");
 
-    auto propertyIdentifiers = fromNestedIdentifier(enode, propertyName);
+    auto propertyIdentifiers = fromNestedIdentifier(pnode, propertyName);
     for ( IdentifierNode* inode : propertyIdentifiers ){
-        enode->addChild(inode);
+        pnode->addChild(inode);
     }
-    enode->m_property = propertyIdentifiers;
+    pnode->m_property = propertyIdentifiers;
 
     for ( uint32_t i = 0; i < count; ++i ){
         TSNode child = ts_node_child(node, i);
         if ( strcmp(ts_node_type(child), "property_assignment_expression") == 0 ){
-            enode->m_expression = enode->addCreatedChild(new BindableExpressionNode(child));
-            visitChildren(enode->m_expression, child);
+            pnode->m_expression = pnode->addCreatedChild(new BindableExpressionNode(child));
+            visitChildren(pnode->m_expression, child);
         } else if (strcmp(ts_node_type(child),"statement_block") == 0) {
-            enode->m_statementBlock = enode->addCreatedChild(new JsBlockNode(child));
-            visitChildren(enode->m_statementBlock, child);
+            pnode->m_statementBlock = pnode->addCreatedChild(new JsBlockNode(child));
+            visitChildren(pnode->m_statementBlock, child);
         } else if ( strcmp(ts_node_type(child), "=") == 0 ){
-            enode->m_isBindingAssignment = false;
+            pnode->m_isBindingAssignment = false;
         }
     }
 
     if (parent->parent() && parent->parent()->isNodeType<ComponentDeclarationNode>() ){
-        parent->parent()->as<ComponentDeclarationNode>()->pushToAssignments(enode);
+        parent->parent()->as<ComponentDeclarationNode>()->pushToAssignments(pnode);
     }
 
     if (parent->parent() && (parent->parent()->isNodeType<NewComponentExpressionNode>() ||
                              parent->parent()->isNodeType<RootNewComponentExpressionNode>() ))
     {
-        parent->parent()->as<NewComponentExpressionNode>()->pushToAssignments(enode);
+        parent->parent()->as<NewComponentExpressionNode>()->pushToAssignments(pnode);
     }
-    return enode;
+    return pnode;
 }
 
 IdentifierNode* BaseNode::visitIdentifierAssignment(BaseNode *parent, const TSNode &node){
@@ -1039,6 +1074,11 @@ IdentifierNode* BaseNode::visitIdentifierAssignment(BaseNode *parent, const TSNo
 
 EventDeclarationNode* BaseNode::visitEventDeclaration(BaseNode *parent, const TSNode &node){
     EventDeclarationNode* enode = parent->addCreatedChild(new EventDeclarationNode(node));
+
+    for (auto c : extractPrecedingComments(node)) {
+        enode->addChild(c);
+        enode->m_precedingComments.push_back(c);
+    }
 
     TSNode name = nodeChildByFieldName(node, "name");
     assertValid(parent, name, "Event name is null.");
@@ -1108,67 +1148,75 @@ ListenerDeclarationNode* BaseNode::visitListenerDeclaration(BaseNode *parent, co
 }
 
 MethodDefinitionNode* BaseNode::visitMethodDefinition(BaseNode *parent, const TSNode &node){
-    MethodDefinitionNode* enode = parent->addCreatedChild(new MethodDefinitionNode(node));
+    MethodDefinitionNode* cnode = parent->addCreatedChild(new MethodDefinitionNode(node));
+    for (auto c : extractPrecedingComments(node)) {
+        cnode->addChild(c);
+        cnode->m_precedingComments.push_back(c);
+    }
 
     uint32_t count = ts_node_child_count(node);
     for ( uint32_t i = 0; i < count; ++i ){
         TSNode child = ts_node_child(node, i);
         if ( strcmp(ts_node_type(child), "property_identifier") == 0 ){
-            enode->m_name = enode->addCreatedChild(new IdentifierNode(child));
+            cnode->m_name = cnode->addCreatedChild(new IdentifierNode(child));
         } else if ( strcmp(ts_node_type(child), "formal_parameters") == 0 ){
-            enode->m_parameters = BaseNode::scanFormalParameters(parent, child);
-            enode->addChild(enode->m_parameters);
+            cnode->m_parameters = BaseNode::scanFormalParameters(parent, child);
+            cnode->addChild(cnode->m_parameters);
         } else if ( strcmp(ts_node_type(child), "statement_block") == 0 ){
-            enode->m_body = enode->addCreatedChild(new JsBlockNode(child));
-            visitChildren(enode->m_body, child);
+            cnode->m_body = cnode->addCreatedChild(new JsBlockNode(child));
+            visitChildren(cnode->m_body, child);
         }
     }
-    return enode;
+    return cnode;
 }
 
 TypedMethodDeclarationNode* BaseNode::visitTypedMethodDeclaration(BaseNode *parent, const TSNode &node){
-    TypedMethodDeclarationNode* enode = parent->addCreatedChild(new TypedMethodDeclarationNode(node));
+    TypedMethodDeclarationNode* cnode = parent->addCreatedChild(new TypedMethodDeclarationNode(node));
+    for (auto c : extractPrecedingComments(node)) {
+        cnode->addChild(c);
+        cnode->m_precedingComments.push_back(c);
+    }
 
     TSNode name = nodeChildByFieldName(node, "name");
     assertValid(parent, name, "Function name is null.");
-    enode->m_name = enode->addCreatedChild(new IdentifierNode(name));
+    cnode->m_name = cnode->addCreatedChild(new IdentifierNode(name));
 
     TSNode parameters = nodeChildByFieldName(node, "parameters");
     assertValid(parent, parameters, "Function parameters are null.");
 
-    enode->m_parameters = BaseNode::scanFormalTypeParameters(parent, parameters);
-    enode->addChild(enode->m_parameters);
+    cnode->m_parameters = BaseNode::scanFormalTypeParameters(parent, parameters);
+    cnode->addChild(cnode->m_parameters);
 
     TSNode body = nodeChildByFieldName(node, "body");
     assertValid(parent, body, "Function body is null.");
 
-    enode->m_body = enode->addCreatedChild(new JsBlockNode(body));
-    visitChildren(enode->m_body, body);
+    cnode->m_body = cnode->addCreatedChild(new JsBlockNode(body));
+    visitChildren(cnode->m_body, body);
 
     uint32_t count = ts_node_child_count(node);
     for ( uint32_t i = 0; i < count; ++i ){
 
         TSNode child = ts_node_child(node, i);
         if ( strcmp(ts_node_type(child), "static") == 0 ){
-            enode->setStatic(true);
+            cnode->setStatic(true);
         } else if ( strcmp(ts_node_type(child), "async") == 0 ){
-            enode->setAsync(true);
+            cnode->setAsync(true);
         }
     }
 
     if (parent->parent() && parent->parent()->isNodeType<ComponentDeclarationNode>() ){
-        parent->parent()->as<ComponentDeclarationNode>()->m_methods.push_back(enode);
+        parent->parent()->as<ComponentDeclarationNode>()->m_methods.push_back(cnode);
     }
     if (parent->parent() && parent->parent()->canCast<NewComponentExpressionNode>()){
-        parent->parent()->as<NewComponentExpressionNode>()->m_methods.push_back(enode);
+        parent->parent()->as<NewComponentExpressionNode>()->m_methods.push_back(cnode);
     }
 
-    if (enode->m_body && enode->m_parameters){
-        for (size_t i = 0; i != enode->m_parameters->m_parameters.size(); ++i){
-            addToDeclarations(enode->m_body, enode->m_parameters->m_parameters[i]->identifier());
+    if (cnode->m_body && cnode->m_parameters){
+        for (size_t i = 0; i != cnode->m_parameters->m_parameters.size(); ++i){
+            addToDeclarations(cnode->m_body, cnode->m_parameters->m_parameters[i]->identifier());
         }
     }
-    return enode;
+    return cnode;
 }
 
 PropertyAccessorDeclarationNode* BaseNode::visitPropertyAccessorDeclaration(BaseNode *parent, const TSNode &node){
@@ -1233,19 +1281,23 @@ NumberNode* BaseNode::visitNumber(BaseNode *parent, const TSNode &node)
 
 ConstructorDefinitionNode* BaseNode::visitConstructorDefinition(BaseNode *parent, const TSNode &node)
 {
-    ConstructorDefinitionNode* cdnode = parent->addCreatedChild(new ConstructorDefinitionNode(node));
+    ConstructorDefinitionNode* cnode = parent->addCreatedChild(new ConstructorDefinitionNode(node));
+    for (auto c : extractPrecedingComments(node)) {
+        cnode->addChild(c);
+        cnode->m_precedingComments.push_back(c);
+    }
     // visitChildren(cdnode, node);
 
     uint32_t count = ts_node_child_count(node);
     for ( uint32_t i = 0; i < count; ++i ){
         TSNode child = ts_node_child(node, i);
         if ( strcmp(ts_node_type(child), "statement_block") == 0 ){
-            cdnode->m_body = cdnode->addCreatedChild(new JsBlockNode(child));
-            visitChildren(cdnode->m_body, child);
+            cnode->m_body = cnode->addCreatedChild(new JsBlockNode(child));
+            visitChildren(cnode->m_body, child);
         } else if ( strcmp(ts_node_type(child), "formal_type_parameters") == 0 ){
             TSNode& parameters = child;
 
-            cdnode->m_parameters = cdnode->addCreatedChild(new ParameterListNode(parameters));
+            cnode->m_parameters = cnode->addCreatedChild(new ParameterListNode(parameters));
             uint32_t parameterCount = ts_node_child_count(parameters);
 
             for (uint32_t pc = 0; pc < parameterCount; ++pc){
@@ -1257,36 +1309,36 @@ ConstructorDefinitionNode* BaseNode::visitConstructorDefinition(BaseNode *parent
                         TSNode typeParameter = ts_node_child(ftpc, 0);
 
                         TSNode parameterName = BaseNode::nodeChildByFieldName(typeParameter, "name");
-                        assertValid(cdnode, parameterName, "Parameter name is null.");
+                        assertValid(cnode, parameterName, "Parameter name is null.");
                         TSNode parameterType = BaseNode::nodeChildByFieldName(typeParameter, "type");
-                        assertValid(cdnode, parameterType, "Parameter type is null.");
+                        assertValid(cnode, parameterType, "Parameter type is null.");
 
                         if ( strcmp(ts_node_type(typeParameter), "required_type_parameter") == 0 ){
-                            cdnode->m_parameters->m_parameters.push_back(
-                                cdnode->addCreatedChild(new ParameterNode(typeParameter, new IdentifierNode(parameterName), new TypeNode(parameterType), false))
+                            cnode->m_parameters->m_parameters.push_back(
+                                cnode->addCreatedChild(new ParameterNode(typeParameter, new IdentifierNode(parameterName), new TypeNode(parameterType), false))
                             );
                         } else if ( strcmp(ts_node_type(typeParameter), "optional_type_parameter") == 0){
-                            cdnode->m_parameters->m_parameters.push_back(
-                                cdnode->addCreatedChild(new ParameterNode(typeParameter, new IdentifierNode(parameterName), new TypeNode(parameterType), true))
+                            cnode->m_parameters->m_parameters.push_back(
+                                cnode->addCreatedChild(new ParameterNode(typeParameter, new IdentifierNode(parameterName), new TypeNode(parameterType), true))
                             );
                         }
                     }
                 }
             }
         } else
-            visit(cdnode, child);
+            visit(cnode, child);
     }
 
     if (parent->isNodeType<ComponentBodyNode>() ){
-        parent->as<ComponentBodyNode>()->setConstructor(cdnode);
+        parent->as<ComponentBodyNode>()->setConstructor(cnode);
     }
 
-    if (cdnode->m_body){
-        for (size_t i = 0; i != cdnode->m_parameters->parameters().size(); ++i){
-            addToDeclarations(cdnode->m_body, cdnode->m_parameters->m_parameters[i]->identifier());
+    if (cnode->m_body){
+        for (size_t i = 0; i != cnode->m_parameters->parameters().size(); ++i){
+            addToDeclarations(cnode->m_body, cnode->m_parameters->m_parameters[i]->identifier());
         }
     }
-    return cdnode;
+    return cnode;
 }
 
 ExpressionStatementNode* BaseNode::visitExpressionStatement(BaseNode *parent, const TSNode &node)
@@ -1408,6 +1460,10 @@ TrippleTaggedStringNode* BaseNode::visitTrippleTaggedString(BaseNode *parent, co
 FunctionNode* BaseNode::visitFunction(BaseNode *parent, const TSNode &node){
 
     FunctionNode* enode = parent->addCreatedChild(new FunctionNode(node));
+    for (auto c : extractPrecedingComments(node)) {
+        enode->addChild(c);
+        enode->m_precedingComments.push_back(c);
+    }
 
     // Function parameters
     const TSNode parameters = BaseNode::nodeChildByFieldName(node, "parameters");
@@ -1449,24 +1505,28 @@ FunctionNode* BaseNode::visitFunction(BaseNode *parent, const TSNode &node){
 
 FunctionDeclarationNode* BaseNode::visitFunctionDeclaration(BaseNode *parent, const TSNode &node)
 {
-    FunctionDeclarationNode* enode = parent->addCreatedChild(new FunctionDeclarationNode(node));
+    FunctionDeclarationNode* fnode = parent->addCreatedChild(new FunctionDeclarationNode(node));
+    for (auto c : extractPrecedingComments(node)) {
+        fnode->addChild(c);
+        fnode->m_precedingComments.push_back(c);
+    }
 
     // Function name
     const TSNode name = BaseNode::nodeChildByFieldName(node, "name");
     assertValid(parent, name, "Function name is null.");
-    enode->m_name = enode->addCreatedChild(new IdentifierNode(name));
-    addToDeclarations(parent, enode->m_name);
+    fnode->m_name = fnode->addCreatedChild(new IdentifierNode(name));
+    addToDeclarations(parent, fnode->m_name);
 
     // Function parameters
     const TSNode parameters = BaseNode::nodeChildByFieldName(node, "parameters");
     assertValid(parent, parameters, "Function parameters are null.");
-    enode->m_parameters = BaseNode::scanFormalParameters(parent, parameters);
-    enode->addChild(enode->m_parameters);
+    fnode->m_parameters = BaseNode::scanFormalParameters(parent, parameters);
+    fnode->addChild(fnode->m_parameters);
 
     // Function return type
     const TSNode returnType = BaseNode::nodeChildByFieldName(node, "return_type");
     if (!ts_node_is_null(returnType)) {
-        enode->m_returnType = enode->addCreatedChild(new TypeNode(returnType));
+        fnode->m_returnType = fnode->addCreatedChild(new TypeNode(returnType));
     }
 
     // Function properties
@@ -1474,24 +1534,24 @@ FunctionDeclarationNode* BaseNode::visitFunctionDeclaration(BaseNode *parent, co
     for ( uint32_t i = 0; i < count; ++i ){
         TSNode child = ts_node_child(node, i);
         if ( strcmp(ts_node_type(child), "async") == 0 ){
-            enode->m_async = true;
+            fnode->m_async = true;
         }
     }
 
     // Function body
     const TSNode body = BaseNode::nodeChildByFieldName(node, "body");
     assertValid(parent, body, "Function body is null.");
-    enode->m_body = enode->addCreatedChild(new JsBlockNode(body));
-    visitChildren(enode->m_body, body);
+    fnode->m_body = fnode->addCreatedChild(new JsBlockNode(body));
+    visitChildren(fnode->m_body, body);
 
-    if ( enode->m_parameters ){
-        if (enode->m_body ){
-            for (size_t i = 0; i != enode->m_parameters->m_parameters.size(); ++i){
-                addToDeclarations(enode->m_body, enode->m_parameters->m_parameters[i]->identifier());
+    if ( fnode->m_parameters ){
+        if (fnode->m_body ){
+            for (size_t i = 0; i != fnode->m_parameters->m_parameters.size(); ++i){
+                addToDeclarations(fnode->m_body, fnode->m_parameters->m_parameters[i]->identifier());
             }
         }
     }
-    return enode;
+    return fnode;
 }
 
 ClassDeclarationNode* BaseNode::visitClassDeclaration(BaseNode *parent, const TSNode &node)
@@ -1531,15 +1591,19 @@ VariableDeclarationNode* BaseNode::visitLexicalDeclaration(BaseNode *parent, con
 
 
 VariableDeclarationNode* BaseNode::visitDeclarationForm(BaseNode * parent, const TSNode & node, int form){
-    VariableDeclarationNode* vdn = parent->addCreatedChild(new VariableDeclarationNode(node));
-    vdn->m_declarationForm = static_cast<VariableDeclarationNode::DeclarationForm>(form);
+    VariableDeclarationNode* dnode = parent->addCreatedChild(new VariableDeclarationNode(node));
+    for (auto c : extractPrecedingComments(node)) {
+        dnode->addChild(c);
+        dnode->m_precedingComments.push_back(c);
+    }
+    dnode->m_declarationForm = static_cast<VariableDeclarationNode::DeclarationForm>(form);
 
     uint32_t count = ts_node_child_count(node);
     for ( uint32_t i = 0; i < count; ++i ){
         TSNode child = ts_node_child(node, i);
         if ( strcmp(ts_node_type(child), "variable_declarator") == 0 ){
-            VariableDeclaratorNode* declaratorNode = vdn->addCreatedChild(new VariableDeclaratorNode(child));
-            vdn->m_declarators.push_back(declaratorNode);
+            VariableDeclaratorNode* declaratorNode = dnode->addCreatedChild(new VariableDeclaratorNode(child));
+            dnode->m_declarators.push_back(declaratorNode);
             
             TSNode name = BaseNode::nodeChildByFieldName(child, "name");
             TSNode type = BaseNode::nodeChildByFieldName(child, "type");
@@ -1555,12 +1619,12 @@ VariableDeclarationNode* BaseNode::visitDeclarationForm(BaseNode * parent, const
                 visit(declaratorNode->m_value, value);
             }
         } else if ( strcmp(ts_node_type(child), ";") == 0 ) {
-            vdn->m_hasSemicolon = true;
+            dnode->m_hasSemicolon = true;
         } else {
-            visit(vdn, child);
+            visit(dnode, child);
         }
     }
-    return vdn;
+    return dnode;
 }
 
 
@@ -1605,6 +1669,10 @@ ReturnStatementNode* BaseNode::visitReturnStatement(BaseNode *parent, const TSNo
 
 ArrowFunctionNode* BaseNode::visitArrowFunction(BaseNode *parent, const TSNode &node){
     ArrowFunctionNode* enode = parent->addCreatedChild(new ArrowFunctionNode(node));
+    for (auto c : extractPrecedingComments(node)) {
+        enode->addChild(c);
+        enode->m_precedingComments.push_back(c);
+    }
 
     // Function parameters
     const TSNode parameters = BaseNode::nodeChildByFieldName(node, "parameters");

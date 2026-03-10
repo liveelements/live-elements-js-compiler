@@ -1,31 +1,31 @@
 component X{
-    static fn test1(x:int){
+    static fn test1(x:number){
         return 100
     }
 
-    static async fn test2(y:int){
+    static async fn test2(y:number){
         return 200
     }
 
-    static fn test3():int{
+    static fn test3():number{
         return 100
     }
 
-    fn test4(x:int):int{
+    fn test4(x:number):number{
         return 200
     }
 
-    async fn test5():int{
+    async fn test5():number{
         return 2
     }
 }
 
 instance x X{
-    async fn test2(y:int){
+    async fn test2(y:number){
         return 200
     }
 
-    fn test3():int{
+    fn test3():number{
         return 100
     }
 }
