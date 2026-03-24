@@ -104,6 +104,30 @@ public:
         BaseNode::ConversionContext *ctx
     );
 
+    void convertTypeAliasDeclaration(
+        TypeAliasDeclarationNode* node,
+        const std::string &source,
+        std::vector<ElementsInsertion *> &sections,
+        int indentValue,
+        BaseNode::ConversionContext *ctx
+    );
+
+    void convertInterfaceDeclaration(
+        InterfaceDeclarationNode* node,
+        const std::string &source,
+        std::vector<ElementsInsertion *> &sections,
+        int indentValue,
+        BaseNode::ConversionContext *ctx
+    );
+
+    void convertEnumDeclaration(
+        EnumDeclarationNode* node,
+        const std::string &source,
+        std::vector<ElementsInsertion *> &sections,
+        int indentValue,
+        BaseNode::ConversionContext *ctx
+    );
+
     void convertPropertyDeclaration(
         PropertyDeclarationNode* node,
         const std::string& source,
@@ -118,6 +142,7 @@ public:
 private:
     static std::string indent(int i);
     static std::string getDTSPropertyType(const std::string& source, BaseNode* propOrAss, int indt);
+    static std::string getDTSEventType(const std::string& source, EventDeclarationNode* edn);
     static std::string escapeForDoubleQuotedJsString(const std::string& input);
 
 };

@@ -68,6 +68,12 @@ void LanguageNodesToJs::convert(BaseNode* node, const std::string &source, std::
         convertArrowFunction(node->as<ArrowFunctionNode>(), source, sections, indentValue, ctx);
     } else if (node->isNodeType<FunctionNode>()) {
         convertFunction(node->as<FunctionNode>(), source, sections, indentValue, ctx);
+    } else if ( node->isNodeType<TypeAliasDeclarationNode>() ){
+        convertTypeAliasDeclaration(node->as<TypeAliasDeclarationNode>(), source, sections, indentValue, ctx);
+    } else if ( node->isNodeType<InterfaceDeclarationNode>() ){
+        convertInterfaceDeclaration(node->as<InterfaceDeclarationNode>(), source, sections, indentValue, ctx);
+    } else if ( node->isNodeType<EnumDeclarationNode>() ){
+        convertEnumDeclaration(node->as<EnumDeclarationNode>(), source, sections, indentValue, ctx);
     }
     else {
         for ( BaseNode* child : node->children() ){
@@ -324,7 +330,7 @@ void LanguageNodesToJs::convertComponentDeclaration(ComponentDeclarationNode *no
             for (auto c : edn->precedingComments()){
                 *compose << indent(indentValue + 1) << c->text(source) << "\n";
             }
-            *compose << indent(indentValue + 1) << slice(source, edn->name()) << ": any;\n";
+            *compose << indent(indentValue + 1) << slice(source, edn->name()) << ": " << getDTSEventType(source, edn) << ";\n";
         }
 
         *compose << indent(indentValue) << "}\n";
@@ -806,10 +812,16 @@ void LanguageNodesToJs::convertNewComponentExpression(NewComponentExpressionNode
                 *compose << " & {\n";
                 
                 for (size_t i = 0; i < node->properties().size(); ++i){
+                    for (auto c : node->properties()[i]->precedingComments()){
+                        *compose << indent(indt + 1) << c->text(source) << "\n";
+                    }
                     std::string propertyName = slice(source, node->properties()[i]->name());
                     *compose << indent(indt + 1) << propertyName << ": " << getDTSPropertyType(source, node->properties()[i], indt + 1) << ";\n";
                 }
                 for (size_t i = 0; i < node->methods().size(); ++i) {
+                    for (auto c : node->methods()[i]->precedingComments()){
+                        *compose << indent(indt + 1) << c->text(source) << "\n";
+                    }
                     *compose << indent(indt + 1) << slice(source, node->methods()[i]->name()) << "(";
                     if (node->methods()[i]->parameters()) {
                         auto pdn = node->methods()[i]->parameters()->as<ParameterListNode>();
@@ -823,7 +835,10 @@ void LanguageNodesToJs::convertNewComponentExpression(NewComponentExpressionNode
                     *compose << "): any;\n";
                 }
                 for (size_t i = 0; i < node->events().size(); ++i) {
-                    *compose << indent(indt + 1) << slice(source, node->events()[i]->name()) << ": any;\n";
+                    for (auto c : node->events()[i]->precedingComments()){
+                        *compose << indent(indt + 1) << c->text(source) << "\n";
+                    }
+                    *compose << indent(indt + 1) << slice(source, node->events()[i]->name()) << ": " << getDTSEventType(source, node->events()[i]) << ";\n";
                 }
                 *compose << indent(indt) << "};\n";
             } else {
@@ -840,7 +855,11 @@ void LanguageNodesToJs::convertNewComponentExpression(NewComponentExpressionNode
 
     if ( node->parent() && node->parent()->isNodeType<ComponentInstanceStatementNode>() ){
         compose->from = node->parent()->startByte();
-        std::string instanceName = node->parent()->as<ComponentInstanceStatementNode>()->name(source);
+        auto* instanceNode = node->parent()->as<ComponentInstanceStatementNode>();
+        if (!instanceNode->precedingComments().empty()) {
+            compose->from = instanceNode->precedingComments().front()->startByte();
+        }
+        std::string instanceName = instanceNode->name(source);
         *compose << "\nexport let " << instanceName << " = ";
     }
     if ( newLinePrecedes(source, node->startByte()) )
@@ -1473,6 +1492,51 @@ void LanguageNodesToJs::convertFunction(
     sections.push_back(compose);
 }
 
+void LanguageNodesToJs::convertTypeAliasDeclaration(TypeAliasDeclarationNode *node, const std::string &source, std::vector<ElementsInsertion *> &sections, int indentValue, BaseNode::ConversionContext *ctx){
+    ElementsInsertion* compose = new ElementsInsertion;
+    compose->from = node->startByte();
+    compose->to   = node->endByte();
+    if ( ctx && ctx->outputTarget == BaseNode::ConversionContext::DTS ){
+        *compose << slice(source, node);
+        if ( newLineFollows(source, node->endByte()) )
+            *compose << "\n";
+    } else {
+        if ( newLineFollows(source, node->endByte()) )
+             compose->to++;
+    }
+    sections.push_back(compose);
+}
+
+void LanguageNodesToJs::convertInterfaceDeclaration(InterfaceDeclarationNode *node, const std::string &source, std::vector<ElementsInsertion *> &sections, int indentValue, BaseNode::ConversionContext *ctx){
+    ElementsInsertion* compose = new ElementsInsertion;
+    compose->from = node->startByte();
+    compose->to   = node->endByte();
+    if ( ctx && ctx->outputTarget == BaseNode::ConversionContext::DTS ){
+        *compose << slice(source, node);
+        if ( newLineFollows(source, node->endByte()) )
+            *compose << "\n";
+    } else {
+        if ( newLineFollows(source, node->endByte()) )
+             compose->to++;
+    }
+    sections.push_back(compose);
+}
+
+void LanguageNodesToJs::convertEnumDeclaration(EnumDeclarationNode *node, const std::string &source, std::vector<ElementsInsertion *> &sections, int indentValue, BaseNode::ConversionContext *ctx){
+    ElementsInsertion* compose = new ElementsInsertion;
+    compose->from = node->startByte();
+    compose->to   = node->endByte();
+    if ( ctx && ctx->outputTarget == BaseNode::ConversionContext::DTS ){
+        *compose << slice(source, node);
+        if ( newLineFollows(source, node->endByte()) )
+            *compose << "\n";
+    } else {
+        if ( newLineFollows(source, node->endByte()) )
+             compose->to++;
+    }
+    sections.push_back(compose);
+}
+
 
 std::string LanguageNodesToJs::getDTSPropertyType(const std::string& source, BaseNode* propOrAss, int indt) {
     BaseNode* statementBlock = nullptr;
@@ -1535,6 +1599,25 @@ std::string LanguageNodesToJs::getDTSPropertyType(const std::string& source, Bas
         return "any";
     }
     return tName;
+}
+
+std::string LanguageNodesToJs::getDTSEventType(const std::string& source, EventDeclarationNode* edn) {
+    std::string result = "{ emit(";
+    if (edn->parameterList()) {
+        ParameterListNode* pdn = edn->parameterList()->as<ParameterListNode>();
+        for (auto pit = pdn->parameters().begin(); pit != pdn->parameters().end(); ++pit) {
+            if (pit != pdn->parameters().begin())
+                result += ", ";
+            result += slice(source, (*pit)->identifier());
+            if ((*pit)->type()) {
+                result += ": " + TypeNode::sliceWithoutAnnotation(source, (*pit)->type());
+            } else {
+                result += ": any";
+            }
+        }
+    }
+    result += "): void; }";
+    return result;
 }
 
 void LanguageNodesToJs::convertPropertyDeclaration(PropertyDeclarationNode *node, const std::string &source, const std::string &componentReference, int indt, BaseNode::ConversionContext *ctx, const PropertyAccessorDeclarationNode::PropertyAccess &propertyAccess, ElementsInsertion *compose){

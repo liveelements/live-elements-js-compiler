@@ -174,6 +174,7 @@ TEST_CASE( "Parse Test", "[Parse]" ) {
     SECTION("Comments Preservation"){ testFileParse("ParserTest52"); }
 
     SECTION("Function & Variables Type Test"){ testFileParse("ParserTypeTest01"); }
+    SECTION("TS Declarations Test"){ testFileParse("ParserTest53"); }
 
 }
 

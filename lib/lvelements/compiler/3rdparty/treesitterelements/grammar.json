@@ -1,7 +1,5 @@
 {
-  "$schema": "https://tree-sitter.github.io/tree-sitter/assets/schemas/grammar.schema.json",
   "name": "elements",
-  "inherits": "typescript",
   "word": "identifier",
   "rules": {
     "program": {
@@ -39,6 +37,18 @@
               {
                 "type": "SYMBOL",
                 "name": "component_instance_statement"
+              },
+              {
+                "type": "SYMBOL",
+                "name": "type_alias_declaration"
+              },
+              {
+                "type": "SYMBOL",
+                "name": "interface_declaration"
+              },
+              {
+                "type": "SYMBOL",
+                "name": "enum_declaration"
               }
             ]
           }
@@ -14366,6 +14376,6 @@
     "pattern",
     "type",
     "primary_type"
-  ],
-  "reserved": {}
+  ]
 }
+

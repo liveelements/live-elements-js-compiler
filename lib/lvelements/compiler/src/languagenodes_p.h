@@ -80,6 +80,9 @@ class ReturnStatementNode;
 class TryCatchBlockNode;
 class AssignmentExpressionNode;
 class CommentNode;
+class TypeAliasDeclarationNode;
+class InterfaceDeclarationNode;
+class EnumDeclarationNode;
 
 class BaseNode{
 
@@ -210,12 +213,16 @@ private:
     static ClassDeclarationNode*           visitClassDeclaration(BaseNode* parent, const TSNode& node);
     static VariableDeclarationNode*        visitVariableDeclaration(BaseNode* parent, const TSNode& node);
     static VariableDeclarationNode*        visitLexicalDeclaration(BaseNode* parent, const TSNode& node);
-    static void                            visitDestructuringPattern(BaseNode* parent, const TSNode& node);
+    static BaseNode*                       visitDestructuringPattern(BaseNode* parent, const TSNode& node);
     static NewExpressionNode*              visitNewExpression(BaseNode* parent, const TSNode& node);
     static ReturnStatementNode*            visitReturnStatement(BaseNode* parent, const TSNode& node);
     static ArrowFunctionNode*              visitArrowFunction(BaseNode* parent, const TSNode& node);
     static ObjectNode*                     visitObject(BaseNode* parent, const TSNode& node);
     static TryCatchBlockNode*              visitTryCatchBlock(BaseNode* parent, const TSNode& node);
+    static BaseNode*                       visitForInStatement(BaseNode* parent, const TSNode& node);
+    static TypeAliasDeclarationNode*       visitTypeAliasDeclaration(BaseNode* parent, const TSNode& node);
+    static InterfaceDeclarationNode*       visitInterfaceDeclaration(BaseNode* parent, const TSNode& node);
+    static EnumDeclarationNode*            visitEnumDeclaration(BaseNode* parent, const TSNode& node);
 
     static VariableDeclarationNode* visitDeclarationForm(BaseNode * parent, const TSNode & node, int form);
 
@@ -514,6 +521,27 @@ private:
     std::vector<IdentifierNode*> m_importNames;
     BaseNode*                    m_importPath;
     bool                         m_isObjectImport;
+};
+
+class TypeAliasDeclarationNode : public BaseNode {
+    friend class BaseNode;
+    LANGUAGE_NODE_INFO(TypeAliasDeclarationNode);
+public:
+    TypeAliasDeclarationNode(const TSNode& node) : BaseNode(node, TypeAliasDeclarationNode::nodeInfo()){}
+};
+
+class InterfaceDeclarationNode : public BaseNode {
+    friend class BaseNode;
+    LANGUAGE_NODE_INFO(InterfaceDeclarationNode);
+public:
+    InterfaceDeclarationNode(const TSNode& node) : BaseNode(node, InterfaceDeclarationNode::nodeInfo()){}
+};
+
+class EnumDeclarationNode : public BaseNode {
+    friend class BaseNode;
+    LANGUAGE_NODE_INFO(EnumDeclarationNode);
+public:
+    EnumDeclarationNode(const TSNode& node) : BaseNode(node, EnumDeclarationNode::nodeInfo()){}
 };
 
 class ImportNode : public BaseNode{
@@ -887,6 +915,10 @@ public:
 class ComponentInstanceStatementNode: public BaseNode{
     friend class BaseNode;
     LANGUAGE_NODE_INFO(RootNewComponentExpressionNode);
+public:
+    const std::vector<CommentNode*>& precedingComments() const { return m_precedingComments; }
+private:
+    std::vector<CommentNode*>  m_precedingComments;
 public:
     ComponentInstanceStatementNode(const TSNode& node) : BaseNode(node, ComponentInstanceStatementNode::nodeInfo()), m_name(nullptr){}
 

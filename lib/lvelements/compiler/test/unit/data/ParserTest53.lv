@@ -1,0 +1,13 @@
+type MyType = string;
+
+interface MyInterface {
+  prop: number;
+}
+
+enum MyEnum {
+  Alpha,
+  Beta = 1
+}
+
+component TestComponent {
+}

@@ -1,5 +1,5 @@
 
 export declare class TodoForm extends Form {
-    addItem: any;
+    addItem: { emit(name: string): void; };
 }
 

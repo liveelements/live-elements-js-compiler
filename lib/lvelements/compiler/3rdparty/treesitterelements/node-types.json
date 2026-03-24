@@ -2299,6 +2299,40 @@
     "fields": {}
   },
   {
+    "type": "export_specifier",
+    "named": true,
+    "fields": {
+      "alias": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          },
+          {
+            "type": "string",
+            "named": true
+          }
+        ]
+      },
+      "name": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          },
+          {
+            "type": "string",
+            "named": true
+          }
+        ]
+      }
+    }
+  },
+  {
     "type": "export_statement",
     "named": true,
     "fields": {},
@@ -3228,6 +3262,36 @@
     }
   },
   {
+    "type": "import_specifier",
+    "named": true,
+    "fields": {
+      "alias": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      },
+      "name": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          },
+          {
+            "type": "string",
+            "named": true
+          }
+        ]
+      }
+    }
+  },
+  {
     "type": "import_statement",
     "named": true,
     "fields": {},
@@ -3554,6 +3618,251 @@
           "named": true
         }
       ]
+    }
+  },
+  {
+    "type": "jsx_attribute",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "jsx_element",
+          "named": true
+        },
+        {
+          "type": "jsx_expression",
+          "named": true
+        },
+        {
+          "type": "jsx_namespace_name",
+          "named": true
+        },
+        {
+          "type": "jsx_self_closing_element",
+          "named": true
+        },
+        {
+          "type": "property_identifier",
+          "named": true
+        },
+        {
+          "type": "string",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "jsx_closing_element",
+    "named": true,
+    "fields": {
+      "name": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          },
+          {
+            "type": "jsx_namespace_name",
+            "named": true
+          },
+          {
+            "type": "member_expression",
+            "named": true
+          }
+        ]
+      }
+    }
+  },
+  {
+    "type": "jsx_element",
+    "named": true,
+    "fields": {
+      "close_tag": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "jsx_closing_element",
+            "named": true
+          }
+        ]
+      },
+      "open_tag": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "jsx_opening_element",
+            "named": true
+          }
+        ]
+      }
+    },
+    "children": {
+      "multiple": true,
+      "required": false,
+      "types": [
+        {
+          "type": "html_character_reference",
+          "named": true
+        },
+        {
+          "type": "jsx_element",
+          "named": true
+        },
+        {
+          "type": "jsx_expression",
+          "named": true
+        },
+        {
+          "type": "jsx_self_closing_element",
+          "named": true
+        },
+        {
+          "type": "jsx_text",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "jsx_expression",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": false,
+      "required": false,
+      "types": [
+        {
+          "type": "expression",
+          "named": true
+        },
+        {
+          "type": "sequence_expression",
+          "named": true
+        },
+        {
+          "type": "spread_element",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "jsx_namespace_name",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "identifier",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "jsx_opening_element",
+    "named": true,
+    "fields": {
+      "attribute": {
+        "multiple": true,
+        "required": false,
+        "types": [
+          {
+            "type": "jsx_attribute",
+            "named": true
+          },
+          {
+            "type": "jsx_expression",
+            "named": true
+          }
+        ]
+      },
+      "name": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          },
+          {
+            "type": "jsx_namespace_name",
+            "named": true
+          },
+          {
+            "type": "member_expression",
+            "named": true
+          }
+        ]
+      },
+      "type_arguments": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "type_arguments",
+            "named": true
+          }
+        ]
+      }
+    }
+  },
+  {
+    "type": "jsx_self_closing_element",
+    "named": true,
+    "fields": {
+      "attribute": {
+        "multiple": true,
+        "required": false,
+        "types": [
+          {
+            "type": "jsx_attribute",
+            "named": true
+          },
+          {
+            "type": "jsx_expression",
+            "named": true
+          }
+        ]
+      },
+      "name": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          },
+          {
+            "type": "jsx_namespace_name",
+            "named": true
+          },
+          {
+            "type": "member_expression",
+            "named": true
+          }
+        ]
+      },
+      "type_arguments": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "type_arguments",
+            "named": true
+          }
+        ]
+      }
     }
   },
   {
@@ -4017,6 +4326,36 @@
           }
         ]
       }
+    }
+  },
+  {
+    "type": "named_imports",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": false,
+      "types": [
+        {
+          "type": "import_specifier",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "namespace_import",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": false,
+      "required": true,
+      "types": [
+        {
+          "type": "identifier",
+          "named": true
+        }
+      ]
     }
   },
   {
@@ -4775,7 +5114,6 @@
   {
     "type": "program",
     "named": true,
-    "root": true,
     "fields": {},
     "children": {
       "multiple": true,
@@ -4790,6 +5128,10 @@
           "named": true
         },
         {
+          "type": "enum_declaration",
+          "named": true
+        },
+        {
           "type": "hash_bang_line",
           "named": true
         },
@@ -4798,7 +5140,15 @@
           "named": true
         },
         {
+          "type": "interface_declaration",
+          "named": true
+        },
+        {
           "type": "js_import_statement",
+          "named": true
+        },
+        {
+          "type": "type_alias_declaration",
           "named": true
         }
       ]
@@ -5478,6 +5828,10 @@
       "types": [
         {
           "type": "escape_sequence",
+          "named": true
+        },
+        {
+          "type": "html_character_reference",
           "named": true
         },
         {
@@ -6532,6 +6886,10 @@
     "named": false
   },
   {
+    "type": "/>",
+    "named": false
+  },
+  {
     "type": ":",
     "named": false
   },
@@ -6541,6 +6899,10 @@
   },
   {
     "type": "<",
+    "named": false
+  },
+  {
+    "type": "</",
     "named": false
   },
   {
@@ -6664,6 +7026,10 @@
     "named": false
   },
   {
+    "type": "assert",
+    "named": false
+  },
+  {
     "type": "asserts",
     "named": false
   },
@@ -6697,8 +7063,7 @@
   },
   {
     "type": "comment",
-    "named": true,
-    "extra": true
+    "named": true
   },
   {
     "type": "component",
@@ -6797,9 +7162,12 @@
     "named": true
   },
   {
+    "type": "html_character_reference",
+    "named": true
+  },
+  {
     "type": "html_comment",
-    "named": true,
-    "extra": true
+    "named": true
   },
   {
     "type": "id",
@@ -6840,6 +7208,10 @@
   {
     "type": "is",
     "named": false
+  },
+  {
+    "type": "jsx_text",
+    "named": true
   },
   {
     "type": "keyof",
@@ -6932,6 +7304,10 @@
   {
     "type": "regex_pattern",
     "named": true
+  },
+  {
+    "type": "require",
+    "named": false
   },
   {
     "type": "return",

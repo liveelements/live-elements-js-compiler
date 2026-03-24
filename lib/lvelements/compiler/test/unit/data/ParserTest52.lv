@@ -22,3 +22,18 @@ component X {
     // Single line on an event
     event onAction(message:string, event:Event)
 }
+
+/** Does something else */
+instance x X{
+
+  /// a property
+  number a: 200
+
+    /**
+     * @brief Increments 'a'
+     * @param a number to increment
+     */
+  fn additionalFunction(a:number){
+    return x + 1
+  }
+}

@@ -19,4 +19,19 @@ component X{
        const simple = function(a:number):number {}
        const annotated = async function(a:number):number {}
    }
+
+   default children: this.selectedNodes?.map((n:any, level:number) => Child{
+     handler: (x:any) => {
+        const internalHandler = (x:any) => {
+            return x + 1
+        }
+     }
+
+    onReset: () => index.reset()
+    onJumpToLevel: (levelInclusive:number) => index.jumpToLevel(levelInclusive)
+    onSelectAtLevel: (level:number, nodeId:string) => index.selectAtLevel(level, nodeId)
+    onWrapEl: (el:any) => index.setWrapEl(el)
+    onOptionsRowEl: (el:any) => index.setOptionsRowEl(el)
+    onSelectedEl: (level:number, el:any) => index.setSelectedEl(level, el)
+   })
 }

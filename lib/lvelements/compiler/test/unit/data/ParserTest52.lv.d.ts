@@ -18,5 +18,17 @@ export declare class X extends Element {
     */
     static typeName: string;
     // Single line on an event
-    onAction: any;
+    onAction: { emit(message: string, event: Event): void; };
 }
+
+/** Does something else */
+
+export declare const x: X & {
+    /// a property
+    a: number;
+    /**
+     * @brief Increments 'a'
+     * @param a number to increment
+     */
+    additionalFunction(a: number): any;
+};

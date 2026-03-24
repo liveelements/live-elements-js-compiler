@@ -23,6 +23,12 @@ component default < Container{
             for ( var i = 0; i < 3; ++i ){
                 result += parent.a
             }
+            for (const it of [0, 1, 2]) {
+                result += it
+            }
+            for ( const [key, value] of Object.entries(this) ) {
+                result += key + value
+            }
             if ( parent.b > 0 )
                 result += parent.b
             return result

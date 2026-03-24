@@ -483,11 +483,9 @@ BaseNode *BaseNode::visitRecognized(BaseNode *parent, const TSNode &node){
     } else if ( strcmp(ts_node_type(node), "lexical_declaration") == 0 ){
         return visitLexicalDeclaration(parent, node);
     } else if ( strcmp(ts_node_type(node), "array_pattern") == 0 ){
-        visitDestructuringPattern(parent, node);
-        return nullptr;
+        return visitDestructuringPattern(parent, node);
     } else if ( strcmp(ts_node_type(node), "object_pattern") == 0 ){
-        visitDestructuringPattern(parent, node);
-        return nullptr;
+        return visitDestructuringPattern(parent, node);
     } else if ( strcmp(ts_node_type(node), "new_expression") == 0 ){
         return visitNewExpression(parent, node);
     } else if ( strcmp(ts_node_type(node), "return_statement") == 0 ){
@@ -496,6 +494,14 @@ BaseNode *BaseNode::visitRecognized(BaseNode *parent, const TSNode &node){
         return visitObject(parent, node);
     } else if ( strcmp(ts_node_type(node), "try_statement") == 0 ){
         return visitTryCatchBlock(parent, node);
+    } else if ( strcmp(ts_node_type(node), "for_in_statement") == 0 ){
+        return visitForInStatement(parent, node);
+    } else if ( strcmp(ts_node_type(node), "type_alias_declaration") == 0 ){
+        return visitTypeAliasDeclaration(parent, node);
+    } else if ( strcmp(ts_node_type(node), "interface_declaration") == 0 ){
+        return visitInterfaceDeclaration(parent, node);
+    } else if ( strcmp(ts_node_type(node), "enum_declaration") == 0 ){
+        return visitEnumDeclaration(parent, node);
     } else if ( strcmp(ts_node_type(node), "ERROR") == 0 ){
         SyntaxException se = SyntaxException(
             "Syntax error",
@@ -778,6 +784,10 @@ NewComponentExpressionNode* BaseNode::visitNewComponentExpression(BaseNode *pare
 
 ComponentInstanceStatementNode* BaseNode::visitComponentInstanceStatement(BaseNode *parent, const TSNode &node){
     ComponentInstanceStatementNode* enode = parent->addCreatedChild(new ComponentInstanceStatementNode(node));
+    for (auto c : extractPrecedingComments(node)) {
+        enode->addChild(c);
+        enode->m_precedingComments.push_back(c);
+    }
     uint32_t count = ts_node_child_count(node);
     for ( uint32_t i = 0; i < count; ++i ){
         TSNode child = ts_node_child(node, i);
@@ -1610,7 +1620,11 @@ VariableDeclarationNode* BaseNode::visitDeclarationForm(BaseNode * parent, const
             TSNode value = BaseNode::nodeChildByFieldName(child, "value");
 
             declaratorNode->m_name = declaratorNode->addCreatedChild(new IdentifierNode(name));
-            addToDeclarations(declaratorNode, declaratorNode->m_name);
+            if (strcmp(ts_node_type(name), "object_pattern") == 0 || strcmp(ts_node_type(name), "array_pattern") == 0) {
+                visitDestructuringPattern(declaratorNode, name);
+            } else {
+                addToDeclarations(declaratorNode, declaratorNode->m_name);
+            }
             if (!ts_node_is_null(type)) {
                 declaratorNode->m_type = declaratorNode->addCreatedChild(new TypeNode(type));
             }
@@ -1628,20 +1642,32 @@ VariableDeclarationNode* BaseNode::visitDeclarationForm(BaseNode * parent, const
 }
 
 
-void BaseNode::visitDestructuringPattern(BaseNode *parent, const TSNode &node){
+BaseNode* BaseNode::visitDestructuringPattern(BaseNode *parent, const TSNode &node){
     uint32_t count = ts_node_child_count(node);
     for ( uint32_t i = 0; i < count; ++i ){
         TSNode child = ts_node_child(node, i);
-        if ( strcmp(ts_node_type(child), "identifier") == 0 ){
+        const char* type = ts_node_type(child);
+        if ( strcmp(type, "identifier") == 0 ){
             auto inode = parent->addCreatedChild(new IdentifierNode(child));
             addToDeclarations(parent, inode);
-        } else if ( strcmp(ts_node_type(child), "shorthand_property_identifier") == 0 ){
+        } else if ( strcmp(type, "shorthand_property_identifier") == 0 || strcmp(type, "shorthand_property_identifier_pattern") == 0 ){
             auto inode = parent->addCreatedChild(new IdentifierNode(child));
             addToDeclarations(parent, inode);
-        } else {
+        } else if (strcmp(type, "array_pattern") == 0 || strcmp(type, "object_pattern") == 0){
             visitDestructuringPattern(parent, child);
+        } else if (strcmp(type, "rest_pattern") == 0){
+            visitDestructuringPattern(parent, child);
+        } else if (strcmp(type, "pair_pattern") == 0){
+            TSNode value = nodeChildByFieldName(child, "value");
+            if (!ts_node_is_null(value))
+                visitDestructuringPattern(parent, value);
+        } else if (strcmp(type, "assignment_pattern") == 0 || strcmp(type, "object_assignment_pattern") == 0){
+            TSNode left = nodeChildByFieldName(child, "left");
+            if (!ts_node_is_null(left))
+                visitDestructuringPattern(parent, left);
         }
     }
+    return nullptr;
 }
 
 NewExpressionNode* BaseNode::visitNewExpression(BaseNode *parent, const TSNode &node)
@@ -1764,6 +1790,10 @@ TryCatchBlockNode* BaseNode::visitTryCatchBlock(BaseNode *parent, const TSNode &
                 enode->m_catchBody = enode->addCreatedChild(new JsBlockNode(catchBody));
                 if ( enode->m_catchParameter ){
                     addToDeclarations(enode->m_catchBody, enode->m_catchParameter->identifier());
+                } else if (!ts_node_is_null(parameterNode) &&
+                           (strcmp(ts_node_type(parameterNode), "object_pattern") == 0 ||
+                            strcmp(ts_node_type(parameterNode), "array_pattern") == 0)) {
+                    visitDestructuringPattern(enode->m_catchBody, parameterNode);
                 }
                 visitChildren(enode->m_catchBody, catchBody);
             }
@@ -1774,6 +1804,40 @@ TryCatchBlockNode* BaseNode::visitTryCatchBlock(BaseNode *parent, const TSNode &
     }
 
     return enode;
+}
+
+BaseNode* BaseNode::visitForInStatement(BaseNode *parent, const TSNode &node){
+    JsBlockNode* enode = parent->addCreatedChild(new JsBlockNode(node));
+    uint32_t count = ts_node_child_count(node);
+
+    for (uint32_t i = 0; i < count; ++i) {
+        TSNode child = ts_node_child(node, i);
+        if (strcmp(ts_node_type(child), "identifier") == 0) {
+            auto inode = enode->addCreatedChild(new IdentifierNode(child));
+            addToDeclarations(enode, inode);
+        } else if (
+            strcmp(ts_node_type(child), "statement_block") == 0 || 
+            strcmp(ts_node_type(child), "expression_statement") == 0)
+        {
+            visitChildren(enode, child);
+        } else if (strcmp(ts_node_type(child), "array_pattern") == 0 || strcmp(ts_node_type(child), "object_pattern") == 0) {
+            visitDestructuringPattern(enode, child);
+        }
+    }
+
+    return enode;
+}
+
+TypeAliasDeclarationNode* BaseNode::visitTypeAliasDeclaration(BaseNode* parent, const TSNode& node){
+    return parent->addCreatedChild(new TypeAliasDeclarationNode(node));
+}
+
+InterfaceDeclarationNode* BaseNode::visitInterfaceDeclaration(BaseNode* parent, const TSNode& node){
+    return parent->addCreatedChild(new InterfaceDeclarationNode(node));
+}
+
+EnumDeclarationNode* BaseNode::visitEnumDeclaration(BaseNode* parent, const TSNode& node){
+    return parent->addCreatedChild(new EnumDeclarationNode(node));
 }
 
 std::string JsImportNode::toString(int indent) const{
@@ -1935,6 +1999,11 @@ void ProgramNode::addChild(BaseNode *child){
         m_exports.push_back(child);
         BaseNode::addChild(child);
     } else if ( child->isNodeType<ComponentInstanceStatementNode>() ){
+        m_exports.push_back(child);
+        BaseNode::addChild(child);
+    } else if ( child->isNodeType<TypeAliasDeclarationNode>() ||
+                child->isNodeType<InterfaceDeclarationNode>() ||
+                child->isNodeType<EnumDeclarationNode>() ){
         m_exports.push_back(child);
         BaseNode::addChild(child);
     } else {
