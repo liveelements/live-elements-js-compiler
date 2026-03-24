@@ -40,7 +40,7 @@ jobs:
             nodeversionmain: false
 
           # macOS (Intel)
-          - os: macos-13
+          - os: macos-15-intel
             NAME: macos
             TARGET: x86_64-apple-darwin
             COMPILER: clang
@@ -51,7 +51,7 @@ jobs:
             nodeversion: 22
             nodeversionmain: true
 
-          - os: macos-13
+          - os: macos-15-intel
             NAME: macos
             TARGET: x86_64-apple-darwin
             COMPILER: clang
@@ -127,7 +127,7 @@ jobs:
 
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Runner architecture info
         run: |
@@ -145,15 +145,15 @@ jobs:
             TAG_NAME="latest"
           fi
           ARCHIVE_NAME="live-elements-js-compiler-${TAG_NAME}-${{ matrix.platform }}-${{ matrix.arch }}.tar.gz"
-          ARCHIVE_NODE_NAME=""live-elements-js-compiler-${TAG_NAME}-${{ matrix.platform }}-${{ matrix.arch }}-nv${{ matrix.nodeversion }}.tar.gz""
+          ARCHIVE_NODE_NAME="live-elements-js-compiler-${TAG_NAME}-${{ matrix.platform }}-${{ matrix.arch }}-nv${{ matrix.nodeversion }}.tar.gz"
           echo "Archive Name: $ARCHIVE_NAME"
-          echo "A4chive Node Name: $ARCHIVE_NODE_NAME"
+          echo "Archive Node Name: $ARCHIVE_NODE_NAME"
           echo "ARCHIVE_FILENAME=$ARCHIVE_NAME" >> $GITHUB_ENV
           echo "ARCHIVE_NODE_FILENAME=$ARCHIVE_NODE_NAME" >> $GITHUB_ENV
-          echo "::set-output name=ARCHIVE_FILENAME::$ARCHIVE_NAME"
-          echo "::set-output name=ARCHIVE_NODE_FILENAME::$ARCHIVE_NODE_NAME"
+          echo "ARCHIVE_FILENAME=$ARCHIVE_NAME" >> $GITHUB_OUTPUT
+          echo "ARCHIVE_NODE_FILENAME=$ARCHIVE_NODE_NAME" >> $GITHUB_OUTPUT
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version:  ${{ matrix.nodeversion }}
         
@@ -170,43 +170,34 @@ jobs:
 
       - name: Compress files on windows to specific node version
         if: (startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/master') &&  (matrix.binaryrelease) && contains(matrix.os, 'windows-latest')
-        uses: a7ul/tar-action@v1.1.3
-        env:
-          ARCHIVE_NAME: ${{ steps.get_archive_name.outputs.ARCHIVE_NODE_FILENAME }}
-        with:
-          command: c
-          cwd: ./build/Release
-          files: |
-            ./live_elements_js_compiler.node
-            ./live_elements_js_compiler.lib
+        shell: bash
+        run: |
+          tar -czf "${{ steps.get_archive_name.outputs.ARCHIVE_NODE_FILENAME }}" \
+            -C ./build/Release \
+            ./live_elements_js_compiler.node \
+            ./live_elements_js_compiler.lib \
             ./live_elements_js_compiler.exp
-          outPath: ${{ steps.get_archive_name.outputs.ARCHIVE_NODE_FILENAME }}
 
-          
       - name: Compress files on linux/darwin to specific node version
         if: (startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/master') &&  (matrix.binaryrelease) && !contains(matrix.os, 'windows-latest')
-        uses: a7ul/tar-action@v1.1.3
-        env:
-          ARCHIVE_NAME: ${{ steps.get_archive_name.outputs.ARCHIVE_NODE_FILENAME }}
-        with:
-          command: c
-          cwd: ./build/Release
-          files: |
+        shell: bash
+        run: |
+          tar -czf "${{ steps.get_archive_name.outputs.ARCHIVE_NODE_FILENAME }}" \
+            -C ./build/Release \
             ./live_elements_js_compiler.node
-          outPath: ${{ steps.get_archive_name.outputs.ARCHIVE_NODE_FILENAME }}
 
           
       - name: Create main node version
         if: (startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/master') && (matrix.binaryrelease) && (matrix.nodeversionmain)
         run: cp "${{ steps.get_archive_name.outputs.ARCHIVE_NODE_FILENAME }}" "${{ steps.get_archive_name.outputs.ARCHIVE_FILENAME }}"
         
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         if: (startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/master') && (matrix.binaryrelease)
         with:
           name: ${{ steps.get_archive_name.outputs.ARCHIVE_NODE_FILENAME }}
           path: ${{ steps.get_archive_name.outputs.ARCHIVE_NODE_FILENAME }}
           
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         if: (startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/master') && (matrix.binaryrelease) && (matrix.nodeversionmain)
         with:
           name: ${{ steps.get_archive_name.outputs.ARCHIVE_FILENAME }}
@@ -214,7 +205,7 @@ jobs:
 
       - name: Upload specific node version release binaries
         if: startsWith(github.ref, 'refs/tags/v') && (matrix.binaryrelease)
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
@@ -223,7 +214,7 @@ jobs:
             
       - name: Upload main node version release binaries
         if: startsWith(github.ref, 'refs/tags/v') && (matrix.binaryrelease) && (matrix.nodeversionmain)
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
