@@ -1,6 +1,6 @@
 {
   "name": "live-elements-js-compiler",
-  "version": "0.1.17",
+  "version": "0.1.18",
   "description": "Js compiler for Live Elements.",
   "author": "Dinu SV",
   "license": "LGPLv3",
@@ -18,8 +18,8 @@
   },
   "dependencies": {
     "@nodegui/artifact-installer": "^1.1.0",
-    "cmake-js": "^7.2.1",
-    "cross-env": "^7.0.3",
-    "node-addon-api": "^4.3.0"
+    "cmake-js": "^8.0.0",
+    "cross-env": "^10.1.0",
+    "node-addon-api": "^8.6.0"
   }
 }

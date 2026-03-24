@@ -4,7 +4,7 @@ import os from 'os'
 import fs from 'fs'
 import path from 'path'
 import url from 'url'
-import tar from 'tar'
+import { extract } from 'tar'
 import { spawn } from 'child_process'
 import { setupArtifact } from '@nodegui/artifact-installer'
 
@@ -40,7 +40,7 @@ async function downloadAndExtract(downloadUrl, destination){
     })
     const tarballName = (new url.URL(downloadUrl)).pathname.split('/').pop();
     const tarPath = path.join(destination, tarballName.slice(0, -3))
-    tar.extract({
+    extract({
         cwd: destination,
         file: tarPath,
         sync: true,
