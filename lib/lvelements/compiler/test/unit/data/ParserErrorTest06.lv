@@ -1,0 +1,4 @@
+component SymbolData{
+    string symbol: ''
+    static fn create() { return SymbolData{ symbol: 'SYMBOL' } }
+}

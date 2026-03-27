@@ -360,6 +360,9 @@ class IdentifierNode : public BaseNode{
     LANGUAGE_NODE_INFO(IdentifierNode);
 public:
     IdentifierNode(const TSNode& node) : BaseNode(node, IdentifierNode::nodeInfo()){}
+
+public:
+    static IdentifierNode* createNonEmpty(const TSNode& node, BaseNode *parent = nullptr);
 };
 
 class TypeNode : public BaseNode{
