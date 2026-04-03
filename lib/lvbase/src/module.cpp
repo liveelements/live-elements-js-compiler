@@ -303,6 +303,8 @@ Module::Module(const std::string &path, const std::string &filePath, const std::
 }
 
 bool Module::lvFilesExistIn(const std::string &dir){
+    if ( !Path::exists(dir) ) return false;
+    if ( !Path::isDir(dir) ) return false;
     auto it = Directory::iterate(dir);
     while ( !it.isEnd() ){
         std::string path = it.path();
