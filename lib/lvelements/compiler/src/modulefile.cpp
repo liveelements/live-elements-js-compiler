@@ -17,9 +17,11 @@
 #include "languagenodes_p.h"
 #include "live/elements/compiler/languageparser.h"
 #include "live/exception.h"
+#include "live/package.h"
 #include "live/module.h"
 #include "live/modulecontext.h"
 #include "live/packagegraph.h"
+#include "live/utf8.h"
 #include "live/visuallog.h"
 
 #include <sstream>
@@ -80,8 +82,20 @@ void ModuleFile::resolveTypes(){
             if ( !foundLocalExport ){
                 for( auto impIt = m_d->imports.begin(); impIt != m_d->imports.end(); ++impIt ){
                     if ( impIt->as == impType.importNamespace ){
+                        if ( !impIt->module ){
+                            THROW_EXCEPTION(Exception,
+                                Utf8("ModuleFile::resolveTypes: import ElementsModule is null for namespace '%'.")
+                                    .format(impType.importNamespace),
+                                Exception::toCode("~NullPtr"));
+                        }
                         auto foundExp = impIt->module->findExport(impType.name);
                         if ( foundExp.isValid() ){
+                            if ( !foundExp.file() ){
+                                THROW_EXCEPTION(Exception,
+                                    Utf8("ModuleFile::resolveTypes: export '%' is not a module file (library export?). Namespace '%'.")
+                                        .format(impType.name, impType.importNamespace),
+                                    Exception::toCode("~Export"));
+                            }
                             auto foundFile = impIt->module->findModuleFileByName(foundExp.file()->fileName().data());
                             if ( !foundFile ){
                                 THROW_EXCEPTION(Exception, Utf8("Assertion: File not found: %").format(foundExp.file()->fileName()), Exception::toCode("NullPtr"));
@@ -89,7 +103,14 @@ void ModuleFile::resolveTypes(){
                             if ( impIt->isRelative ){
                                 // this plugin to package
                                 Utf8 currentImportId = m_d->elementsModule->module()->context()->importId;
-                                Utf8 packageName = impIt->module->module()->context()->packageUnwrapped()->nameScopeAsPath();
+                                Package::Ptr importedPkg = impIt->module->module()->context()->packageUnwrapped();
+                                if ( !importedPkg ){
+                                    THROW_EXCEPTION(Exception,
+                                        Utf8("ModuleFile::resolveTypes (relative): Package expired or unset for imported module (path %, importId %).")
+                                            .format(impIt->module->module()->path(), impIt->module->module()->context()->importId.data()),
+                                        Exception::toCode("~NullPtr"));
+                                }
+                                Utf8 packageName = importedPkg->nameScopeAsPath();
                                 Utf8 packageToPluginName = currentImportId.length() > packageName.length() 
                                     ? currentImportId.substr(packageName.length() + 1, std::string::npos)
                                     : "";
@@ -123,7 +144,14 @@ void ModuleFile::resolveTypes(){
                                 m_d->rootNode->resolveImport(impType.importNamespace, impType.name, pluginToPackage + "/" + packageToNewPlugin + foundFile->jsFileName());
 
                             } else {
-                                Utf8 packageName = impIt->module->module()->context()->packageUnwrapped()->nameScopeAsPath();
+                                Package::Ptr importedPkg = impIt->module->module()->context()->packageUnwrapped();
+                                if ( !importedPkg ){
+                                    THROW_EXCEPTION(Exception,
+                                        Utf8("ModuleFile::resolveTypes (absolute): Package expired or unset for imported module (path %, importId %).")
+                                            .format(impIt->module->module()->path(), impIt->module->module()->context()->importId.data()),
+                                        Exception::toCode("~NullPtr"));
+                                }
+                                Utf8 packageName = importedPkg->nameScopeAsPath();
                                 Utf8 importId = impIt->module->module()->context()->importId;
                                 Utf8 packageToPluginName =  importId.length() > packageName.length() 
                                     ? importId.substr(packageName.length() + 1, std::string::npos)

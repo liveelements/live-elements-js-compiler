@@ -345,7 +345,7 @@ std::shared_ptr<ElementsModule> Compiler::compile(Ptr compiler, const std::strin
     if ( Module::fileExistsIn(modulePath) ){ // package is now relative to the module
         std::string packagePath = Module::findPackageFrom(modulePath);
         // if there's a package, create the package and module if they are not loaded already
-        auto packageName = Path::name(packagePath);
+        std::string packageName = Package::nameScopeFromPath(packagePath);
         Package::Ptr package = compiler->m_d->packageGraph->findLoadedPackage(packageName);
         if ( package ){
             for ( auto it = package->context()->modules.begin(); it != package->context()->modules.end(); ++it ){
@@ -367,12 +367,8 @@ std::shared_ptr<ElementsModule> Compiler::compile(Ptr compiler, const std::strin
         // find package
         std::string packagePath = Module::findPackageFrom(modulePath);
         if ( !packagePath.empty() ){
-            auto packageName = Path::name(packagePath);
-            if ( Package::existsIn(packagePath ) ){
-                Package::Ptr newPackage = Package::createFromPath(packagePath);
-                packageName = newPackage->nameScope();
-            }
-            
+            std::string packageName = Package::nameScopeFromPath(packagePath);
+
             Package::Ptr package = compiler->m_d->packageGraph->findLoadedPackage(packageName);
             if ( package ){
                 for ( auto it = package->context()->modules.begin(); it != package->context()->modules.end(); ++it ){
