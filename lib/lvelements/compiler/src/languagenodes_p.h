@@ -214,6 +214,7 @@ private:
     static VariableDeclarationNode*        visitVariableDeclaration(BaseNode* parent, const TSNode& node);
     static VariableDeclarationNode*        visitLexicalDeclaration(BaseNode* parent, const TSNode& node);
     static BaseNode*                       visitDestructuringPattern(BaseNode* parent, const TSNode& node);
+    static void                            addParameterDeclarations(BaseNode* parent, ParameterNode* param);
     static NewExpressionNode*              visitNewExpression(BaseNode* parent, const TSNode& node);
     static ReturnStatementNode*            visitReturnStatement(BaseNode* parent, const TSNode& node);
     static ArrowFunctionNode*              visitArrowFunction(BaseNode* parent, const TSNode& node);

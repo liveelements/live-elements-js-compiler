@@ -1,4 +1,24 @@
 component ParserTest50 {
+    Function f: ({x1, x2}, [a1, a2]) => {
+        return x1 + x2 + a1 + a2
+    }
+
+    fn destructureFunctions() {
+        function normalFn({x1, x2}, [a1, a2]) {
+            return x1 + x2 + a1 + a2
+        }
+
+        const lambdaFn = ({x1, x2}, [a1, a2]) => {
+            return x1 + x2 + a1 + a2
+        }
+
+        const typedFn: ({x1, x2}: any, [a1, a2]: any) => any = ({x1, x2}, [a1, a2]) => {
+            return x1 + x2 + a1 + a2
+        }
+
+        return normalFn({x1: 1, x2: 2}, [3, 4]) + lambdaFn({x1: 1, x2: 2}, [3, 4]) + typedFn({x1: 1, x2: 2}, [3, 4])
+    }
+
     fn destructureVariables() {
         let {a, b} = {a: 1, b: 2}
         const {c, d, ...rest} = {c: 3, d: 4, e: 5, f: 6}

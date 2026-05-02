@@ -350,6 +350,9 @@ ParameterListNode *BaseNode::scanFormalTypeParameters(BaseNode *parent, const TS
                 TSNode typeParameter = ts_node_child(ftpc, 0);
 
                 TSNode parameterName = BaseNode::nodeChildByFieldName(typeParameter, "name");
+                if (ts_node_is_null(parameterName)) {
+                    parameterName = BaseNode::nodeChildByFieldName(typeParameter, "pattern");
+                }
                 assertValid(parent, parameterName, "Parameter name is null.");
                 TSNode parameterType = BaseNode::nodeChildByFieldName(typeParameter, "type");
                 assertValid(parent, parameterType, "Parameter type is null.");
@@ -1146,11 +1149,11 @@ ListenerDeclarationNode* BaseNode::visitListenerDeclaration(BaseNode *parent, co
     if ( enode->m_parameters ){
         if (enode->m_body ){
             for (size_t i = 0; i != enode->m_parameters->m_parameters.size(); ++i){
-                addToDeclarations(enode->m_body, enode->m_parameters->m_parameters[i]->identifier());
+                addParameterDeclarations(enode->m_body, enode->m_parameters->m_parameters[i]);
             }
         } else {
             for (size_t i = 0; i != enode->m_parameters->m_parameters.size(); ++i){
-                addToDeclarations(enode, enode->m_parameters->m_parameters[i]->identifier());
+                addParameterDeclarations(enode, enode->m_parameters->m_parameters[i]);
             }
         }
     }
@@ -1223,7 +1226,7 @@ TypedMethodDeclarationNode* BaseNode::visitTypedMethodDeclaration(BaseNode *pare
 
     if (cnode->m_body && cnode->m_parameters){
         for (size_t i = 0; i != cnode->m_parameters->m_parameters.size(); ++i){
-            addToDeclarations(cnode->m_body, cnode->m_parameters->m_parameters[i]->identifier());
+            addParameterDeclarations(cnode->m_body, cnode->m_parameters->m_parameters[i]);
         }
     }
     return cnode;
@@ -1261,7 +1264,7 @@ PropertyAccessorDeclarationNode* BaseNode::visitPropertyAccessorDeclaration(Base
     if (enode->m_body && enode->m_parameters ){
         for (size_t i = 0; i != enode->m_parameters->m_parameters.size(); ++i){
             auto param = enode->m_parameters->m_parameters[i];
-            addToDeclarations(enode->m_body, param->identifier());
+            addParameterDeclarations(enode->m_body, param);
         }
     }
 
@@ -1319,6 +1322,9 @@ ConstructorDefinitionNode* BaseNode::visitConstructorDefinition(BaseNode *parent
                         TSNode typeParameter = ts_node_child(ftpc, 0);
 
                         TSNode parameterName = BaseNode::nodeChildByFieldName(typeParameter, "name");
+                        if (ts_node_is_null(parameterName)) {
+                            parameterName = BaseNode::nodeChildByFieldName(typeParameter, "pattern");
+                        }
                         assertValid(cnode, parameterName, "Parameter name is null.");
                         TSNode parameterType = BaseNode::nodeChildByFieldName(typeParameter, "type");
                         assertValid(cnode, parameterType, "Parameter type is null.");
@@ -1345,7 +1351,7 @@ ConstructorDefinitionNode* BaseNode::visitConstructorDefinition(BaseNode *parent
 
     if (cnode->m_body){
         for (size_t i = 0; i != cnode->m_parameters->parameters().size(); ++i){
-            addToDeclarations(cnode->m_body, cnode->m_parameters->m_parameters[i]->identifier());
+            addParameterDeclarations(cnode->m_body, cnode->m_parameters->m_parameters[i]);
         }
     }
     return cnode;
@@ -1506,7 +1512,7 @@ FunctionNode* BaseNode::visitFunction(BaseNode *parent, const TSNode &node){
     if ( enode->m_parameters ){
         if (enode->m_body ){
             for (size_t i = 0; i != enode->m_parameters->m_parameters.size(); ++i){
-                addToDeclarations(enode->m_body, enode->m_parameters->m_parameters[i]->identifier());
+                addParameterDeclarations(enode->m_body, enode->m_parameters->m_parameters[i]);
             }
         }
     }
@@ -1557,7 +1563,7 @@ FunctionDeclarationNode* BaseNode::visitFunctionDeclaration(BaseNode *parent, co
     if ( fnode->m_parameters ){
         if (fnode->m_body ){
             for (size_t i = 0; i != fnode->m_parameters->m_parameters.size(); ++i){
-                addToDeclarations(fnode->m_body, fnode->m_parameters->m_parameters[i]->identifier());
+                addParameterDeclarations(fnode->m_body, fnode->m_parameters->m_parameters[i]);
             }
         }
     }
@@ -1670,6 +1676,26 @@ BaseNode* BaseNode::visitDestructuringPattern(BaseNode *parent, const TSNode &no
     return nullptr;
 }
 
+void BaseNode::addParameterDeclarations(BaseNode *parent, ParameterNode *param){
+    if (!parent || !param || !param->identifier())
+        return;
+
+    TSNode parameterNode = param->identifier()->current();
+    const char* parameterNodeType = ts_node_type(parameterNode);
+
+    if (strcmp(parameterNodeType, "object_pattern") == 0 ||
+        strcmp(parameterNodeType, "array_pattern") == 0 ||
+        strcmp(parameterNodeType, "assignment_pattern") == 0 ||
+        strcmp(parameterNodeType, "object_assignment_pattern") == 0 ||
+        strcmp(parameterNodeType, "pair_pattern") == 0 ||
+        strcmp(parameterNodeType, "rest_pattern") == 0)
+    {
+        visitDestructuringPattern(parent, parameterNode);
+    } else {
+        addToDeclarations(parent, param->identifier());
+    }
+}
+
 NewExpressionNode* BaseNode::visitNewExpression(BaseNode *parent, const TSNode &node)
 {
     NewExpressionNode* nenode = parent->addCreatedChild(new NewExpressionNode(node));
@@ -1733,11 +1759,11 @@ ArrowFunctionNode* BaseNode::visitArrowFunction(BaseNode *parent, const TSNode &
     if ( enode->m_parameters ){
         if (enode->m_body ){
             for (size_t i = 0; i != enode->m_parameters->m_parameters.size(); ++i){
-                addToDeclarations(enode->m_body, enode->m_parameters->m_parameters[i]->identifier());
+                addParameterDeclarations(enode->m_body, enode->m_parameters->m_parameters[i]);
             }
         } else {
             for (size_t i = 0; i != enode->m_parameters->m_parameters.size(); ++i){
-                addToDeclarations(enode, enode->m_parameters->m_parameters[i]->identifier());
+                addParameterDeclarations(enode, enode->m_parameters->m_parameters[i]);
             }
         }
     }
@@ -2817,4 +2843,3 @@ std::string TypeNode::sliceWithoutAnnotation(const std::string& source, TypeNode
 }
 
 }} // namespace lv, el
-
