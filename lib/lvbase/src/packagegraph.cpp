@@ -21,6 +21,7 @@
 #include "live/palettecontainer.h"
 #include "live/libraryloadpath.h"
 #include "live/visuallog.h"
+#include "live/utf8.h"
 
 #include <list>
 #include <iostream>
@@ -145,6 +146,18 @@ void PackageGraph::loadPackageWithDependencies(
 
 /** */
 void PackageGraph::addDependency(const Package::Ptr &package, const Package::Ptr &dependsOn){
+    if ( !package ){
+        THROW_EXCEPTION(
+            lv::Exception,
+            "PackageGraph::addDependency(Package): null `package` pointer.",
+            lv::Exception::toCode("~NullPtr"));
+    }
+    if ( !dependsOn ){
+        THROW_EXCEPTION(
+            lv::Exception,
+            "PackageGraph::addDependency(Package): null `dependsOn` pointer.",
+            lv::Exception::toCode("~NullPtr"));
+    }
     auto packageit = m_d->packages.find(package->nameScope());
     if ( packageit == m_d->packages.end() && package->nameScope() != "." )
         THROW_EXCEPTION(lv::Exception, "Failed to find package:" + package->nameScope(), 3);
@@ -714,7 +727,21 @@ void PackageGraph::addDependency(const Module::Ptr& module, const Module::Ptr& d
     if ( module == nullptr )
         return;
 
-    if ( module->context()->packageUnwrapped().get() == dependsOn->context()->packageUnwrapped().get() ){ // within the same package
+    
+
+    Package::Ptr pkgModule  = module->context()->packageUnwrapped();
+    Package::Ptr pkgDepends = dependsOn->context()->packageUnwrapped();
+    if ( !pkgModule || !pkgDepends ){
+        THROW_EXCEPTION(
+            lv::Exception,
+            Utf8("PackageGraph::addDependency(Module): Package weak reference expired or unset "
+                 "(requesting path=%, importId=%; dependency path=%, importId=%).")
+                .format(module->path(), module->context()->importId.data(),
+                        dependsOn->path(), dependsOn->context()->importId.data()),
+            lv::Exception::toCode("~NullPtr"));
+    }
+
+    if ( pkgModule.get() == pkgDepends.get() ){ // within the same package
 
         if ( !hasDependency(module, dependsOn) ){
             module->context()->localDependencies.push_back(dependsOn);
@@ -749,7 +776,7 @@ void PackageGraph::addDependency(const Module::Ptr& module, const Module::Ptr& d
         }
 
     } else { // add package dependency instead
-        addDependency(module->context()->packageUnwrapped(), dependsOn->context()->packageUnwrapped());
+        addDependency(pkgModule, pkgDepends);
     }
 }
 

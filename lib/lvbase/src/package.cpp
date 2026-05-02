@@ -79,6 +79,16 @@ bool Package::existsIn(const std::string &path){
     return Path::exists(Path::join(path, Package::fileName));
 }
 
+std::string Package::nameScopeFromPath(const std::string &packagePath){
+    if ( packagePath.empty() )
+        return "";
+    if ( Package::existsIn(packagePath) ){
+        Package::Ptr p = Package::createFromPath(packagePath);
+        return p->nameScope();
+    }
+    return Path::name(packagePath);
+}
+
 /** Creates a package pointer from that path, considering that path has a package */
 Package::Ptr Package::createFromPath(const std::string &path){
     std::string packagePath = path;
@@ -121,10 +131,25 @@ Package::Ptr Package::createFromNode(const std::string& path, const std::string 
     if ( !m.hasKey("name") || !m.hasKey("version") )
         return Package::Ptr(nullptr);
 
-    std::string nameScope = m["name"].asString();
-    size_t pos = nameScope.find_last_of('.');
-    std::string name = pos != std::string::npos ? nameScope.substr(pos + 1) : nameScope;
-    std::string scope = pos != std::string::npos ? nameScope.substr(0, pos) : "";
+    std::string nameScopeStr = m["name"].asString();
+    std::string name;
+    std::string scope;
+
+    if ( !nameScopeStr.empty() && nameScopeStr[0] == '@' ){
+        size_t slashPos = nameScopeStr.find('/');
+        if ( slashPos != std::string::npos && slashPos > 1 && slashPos + 1 < nameScopeStr.size() ){
+            scope = nameScopeStr.substr(0, slashPos);
+            name = nameScopeStr.substr(slashPos + 1);
+        } else {
+            size_t pos = nameScopeStr.find_last_of('.');
+            name = pos != std::string::npos ? nameScopeStr.substr(pos + 1) : nameScopeStr;
+            scope = pos != std::string::npos ? nameScopeStr.substr(0, pos) : "";
+        }
+    } else {
+        size_t pos = nameScopeStr.find_last_of('.');
+        name = pos != std::string::npos ? nameScopeStr.substr(pos + 1) : nameScopeStr;
+        scope = pos != std::string::npos ? nameScopeStr.substr(0, pos) : "";
+    }
 
     Package::Ptr pt(new Package(path, filePath, scope, name, Version(m["version"].asString())));
 

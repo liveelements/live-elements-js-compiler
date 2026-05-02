@@ -134,6 +134,8 @@ public:
     ~Package();
 
     static bool existsIn(const std::string& path);
+    /** Logical package id for graph lookups when \p packagePath is a package root (handles scoped npm dirs). Empty \p packagePath yields "". */
+    static std::string nameScopeFromPath(const std::string& packagePath);
     static Package::Ptr createFromPath(const std::string& path);
     static Package::Ptr createFromNode(const std::string &path, const std::string& filePath, const MLNode& m);
 
