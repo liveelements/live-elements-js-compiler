@@ -964,8 +964,20 @@ MemberExpressionNode* BaseNode::visitMemberExpression(BaseNode *parent, const TS
     }
 
     if ( parent->isNodeType<CallExpressionNode>() ){
-        if ( enode->children().size() > 0 && enode->children()[0]->isNodeType<MemberExpressionNode>() ){
-            enode = enode->children()[0]->as<MemberExpressionNode>();
+        
+        MemberExpressionNode* head = enode;
+        while ( !head->children().empty() &&
+                head->children()[0]->isNodeType<CallExpressionNode>() )
+        {
+            BaseNode* innerCall = head->children()[0];
+            if ( innerCall->children().empty() ||
+                 !innerCall->children()[0]->isNodeType<MemberExpressionNode>() )
+                return enode;
+            head = innerCall->children()[0]->as<MemberExpressionNode>();
+        }
+        if ( !head->children().empty() &&
+             head->children()[0]->isNodeType<MemberExpressionNode>() ){
+            enode = head->children()[0]->as<MemberExpressionNode>();
         } else {
             return enode;
         }
@@ -991,17 +1003,17 @@ MemberExpressionNode* BaseNode::visitMemberExpression(BaseNode *parent, const TS
             }
 
             if (p->isNodeType<PropertyDeclarationNode>() ){
-                auto child = enode->children()[0];
-                if (!child->isNodeType<MemberExpressionNode>()  && !child->isNodeType<IdentifierNode>() )
+                BaseNode* binding = resolveBindingBase(enode);
+                if ( !binding )
                     break;
-                p->as<PropertyDeclarationNode>()->pushToBindings(enode);
+                p->as<PropertyDeclarationNode>()->pushToBindings(binding);
                 break;
             }
             if (p->isNodeType<PropertyAssignmentNode>() ){
-                auto child = enode->children()[0];
-                if ( !child->isNodeType<MemberExpressionNode>() && !child->isNodeType<IdentifierNode>() )
+                BaseNode* binding = resolveBindingBase(enode);
+                if ( !binding )
                     break;
-                p->as<PropertyAssignmentNode>()->pushToBindings(enode);
+                p->as<PropertyAssignmentNode>()->pushToBindings(binding);
                 break;
             }
             prevP = p;
@@ -1009,6 +1021,30 @@ MemberExpressionNode* BaseNode::visitMemberExpression(BaseNode *parent, const TS
         }
     }
     return enode;
+}
+
+BaseNode* BaseNode::resolveBindingBase(BaseNode* node){
+    if ( !node->isNodeType<MemberExpressionNode>() || node->children().empty() )
+        return nullptr;
+    BaseNode* child = node->children()[0];
+    if ( child->isNodeType<MemberExpressionNode>() || child->isNodeType<IdentifierNode>() )
+        return node;
+    // For chains broken by function calls (e.g. this.m.a('x').b.c) drill down
+    // through call/member pairs to find the leading member chain (this.m).
+    MemberExpressionNode* head = node->as<MemberExpressionNode>();
+    while ( !head->children().empty() &&
+            head->children()[0]->isNodeType<CallExpressionNode>() )
+    {
+        BaseNode* innerCall = head->children()[0];
+        if ( innerCall->children().empty() ||
+             !innerCall->children()[0]->isNodeType<MemberExpressionNode>() )
+            return nullptr;
+        head = innerCall->children()[0]->as<MemberExpressionNode>();
+    }
+    if ( !head->children().empty() &&
+         head->children()[0]->isNodeType<MemberExpressionNode>() )
+        return head->children()[0];
+    return nullptr;
 }
 
 SubscriptExpressionNode* BaseNode::visitSubscriptExpression(BaseNode *parent, const TSNode &node){

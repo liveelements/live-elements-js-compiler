@@ -159,6 +159,7 @@ public:
     static std::vector<IdentifierNode*> fromNestedIdentifier(BaseNode* parent, const TSNode& node);
     static ParameterListNode* scanFormalParameters(BaseNode* parent, const TSNode& formalParameters);
     static ParameterListNode* scanFormalTypeParameters(BaseNode* parent, const TSNode& formalParameters);
+    static BaseNode* resolveBindingBase(BaseNode* node);
 
     static void assertValid(BaseNode* from, const TSNode& node, const std::string& message);
     static void assertError(BaseNode* from, const TSNode& node, const std::string& message);

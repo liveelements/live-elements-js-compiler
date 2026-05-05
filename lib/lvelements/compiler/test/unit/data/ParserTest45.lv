@@ -6,6 +6,10 @@ component X{
     z: this.m.getValue()
     w: this.getValue()
 
+    singleConcat: this.m.concat('m')
+    concatChain: this.m.concat('mm').concat('xclass')
+    concatChainKey: this.m.concat('mm').concat('xclass').key
+
     t: T{
         any x: {
             var i = this.y
@@ -13,5 +17,8 @@ component X{
         }
         any y: this.z.a + this.z.b
         z: this.m.getValue()
+
+        concatChain: this.m.concat('mm').concat('xclass')
+        concatChainKey: this.m.concat('mm').concat('xclass').key
     }
 }
