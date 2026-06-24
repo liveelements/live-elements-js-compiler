@@ -26,7 +26,8 @@ class LV_ELEMENTS_COMPILER_EXPORT ExportDescriptor{
 public:
     enum Kind{
         Component,
-        Element
+        Element,
+        Function
     };
 
 public:

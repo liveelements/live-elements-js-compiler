@@ -1,0 +1,23 @@
+import .module as mod
+
+@fn add(a:int, b:int): int {
+    return a + b
+}
+
+@fn zero(): int {
+    return 0
+}
+
+async @fn load(name:string): string {
+    return name
+}
+
+fn plain(value:int): int {
+    return value
+}
+
+component ParserTest55 < mod.A {
+    fn multiply(value:int): int {
+        return value * 2
+    }
+}

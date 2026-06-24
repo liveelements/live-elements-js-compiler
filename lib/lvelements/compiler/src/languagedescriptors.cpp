@@ -23,7 +23,12 @@ ExportDescriptor::ExportDescriptor(const Utf8& name, ExportDescriptor::Kind kind
 {}
 
 Utf8 ExportDescriptor::kindString() const{
-    return m_kind == ExportDescriptor::Component ? "component" : "element";
+    if ( m_kind == ExportDescriptor::Component ){
+        return "component";
+    } else if ( m_kind == ExportDescriptor::Element ){
+        return "element";
+    }
+    return "function";
 }
 
 ExportDescriptor::Kind ExportDescriptor::kindFromString(const Utf8 &str){
@@ -31,6 +36,8 @@ ExportDescriptor::Kind ExportDescriptor::kindFromString(const Utf8 &str){
         return ExportDescriptor::Component;
     } else if ( str == "element" ){
         return ExportDescriptor::Element;
+    } else if ( str == "function" ){
+        return ExportDescriptor::Function;
     } else {
         THROW_EXCEPTION(Exception, Utf8("ExportDescriptor: Invalid kind string: \'%\'").format(str), Exception::toCode("~Kind"));
     }

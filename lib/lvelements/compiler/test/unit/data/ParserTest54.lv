@@ -1,0 +1,23 @@
+import .module as mod
+
+/// Adds two numbers.
+fn add(a:int, b:int): int {
+    return a + b
+}
+
+/** Returns the provided name. */
+async fn load(name:string): string {
+    return name
+}
+
+instance __add_Meta Element{
+    fn completed(){
+        add.Meta = { resolved: true }
+    }
+}
+
+component ParserTest54 < mod.A {
+    fn multiply(value:int): int {
+        return value * 2
+    }
+}

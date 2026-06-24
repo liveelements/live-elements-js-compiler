@@ -662,7 +662,23 @@ Module::Ptr PackageGraph::loadModule(const std::vector<std::string> &importSegme
     if ( foundPackage == nullptr ){
         Package::Ptr package = findPackage(packageName); // search for it within the paths
         if ( package ){
+            if ( package->nameScope() != packageName ){
+                THROW_EXCEPTION(
+                    lv::Exception,
+                    Utf8("Package found for import \'%\' declares name \'%\', which does not match "
+                         "its location in the package search path. Check the \'name\' field in \'%\'.")
+                        .format(packageName, package->nameScope(), package->filePath()),
+                    lv::Exception::toCode("~Import"));
+            }
+
             loadPackage(package);
+            if ( package->context() == nullptr ){
+                THROW_EXCEPTION(
+                    lv::Exception,
+                    Utf8("Package \'%\' was loaded without a context. This might be a configuration issue on the package side.").format(package->nameScope()),
+                    lv::Exception::toCode("~NullPtr"));
+            }
+
             foundPackage = package;
         }
     }

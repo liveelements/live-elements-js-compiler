@@ -317,6 +317,14 @@ ModuleFile *ModuleFile::createFromProgramNode(ElementsModule *module, const std:
             auto expression = val->as<ComponentDeclarationNode>();
             ExportDescriptor expt(expression->name(content), ExportDescriptor::Component);
             descriptor->addExport(expt);
+        } else if ( val->isNodeType<TypedFunctionDeclarationNode>() ){
+            auto expression = val->as<TypedFunctionDeclarationNode>();
+            std::string name = content.substr(
+                expression->name()->startByte(),
+                expression->name()->endByte() - expression->name()->startByte()
+            );
+            ExportDescriptor expt(name, ExportDescriptor::Function);
+            descriptor->addExport(expt);
         }
     }
 

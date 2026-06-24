@@ -64,6 +64,8 @@ void LanguageNodesToJs::convert(BaseNode* node, const std::string &source, std::
         convertVariableDeclaration(node->as<VariableDeclarationNode>(), source, sections, indentValue, ctx);
     } else if ( node->isNodeType<FunctionDeclarationNode>() ){
         convertFunctionDeclaration(node->as<FunctionDeclarationNode>(), source, sections, indentValue, ctx);
+    } else if ( node->isNodeType<TypedFunctionDeclarationNode>() ){
+        convertRootFunction(node->as<TypedFunctionDeclarationNode>(), source, sections, indentValue, ctx);
     } else if (node->isNodeType<ArrowFunctionNode>()) {
         convertArrowFunction(node->as<ArrowFunctionNode>(), source, sections, indentValue, ctx);
     } else if (node->isNodeType<FunctionNode>()) {
@@ -1390,6 +1392,88 @@ void LanguageNodesToJs::convertFunctionDeclaration(
     if ( newLineFollows(source, funcNode->endByte()) )
         *compose << "\n";
     
+    sections.push_back(compose);
+}
+
+void LanguageNodesToJs::convertRootFunction(
+    TypedFunctionDeclarationNode *funcNode,
+    const std::string &source,
+    std::vector<ElementsInsertion *> &sections,
+    int indentValue,
+    BaseNode::ConversionContext *ctx)
+{
+    ElementsInsertion* compose = new ElementsInsertion;
+    compose->from = funcNode->startByte();
+    if (!funcNode->precedingComments().empty()) {
+        compose->from = funcNode->precedingComments().front()->startByte();
+    }
+    compose->to = funcNode->endByte();
+
+    for (auto c : funcNode->precedingComments()){
+        *compose << indent(indentValue) << c->text(source) << "\n";
+    }
+
+    std::string paramList = "";
+    std::string paramNamesArrayLiteral = "";
+    if ( funcNode->parameters() ){
+        ParameterListNode* pdn = funcNode->parameters()->as<ParameterListNode>();
+        for ( auto pit = pdn->parameters().begin(); pit != pdn->parameters().end(); ++pit ){
+            if ( pit != pdn->parameters().begin() )
+                paramList += ", ";
+            paramList += slice(source, (*pit)->identifier());
+            if ( pit != pdn->parameters().begin() )
+                paramNamesArrayLiteral += ", ";
+            paramNamesArrayLiteral += "'" + slice(source, (*pit)->identifier()) + "'";
+            if (ctx->outputTarget != BaseNode::ConversionContext::JS && (*pit)->type()) {
+                paramList += ": " + TypeNode::sliceWithoutAnnotation(source, (*pit)->type());
+            }
+        }
+    }
+
+    *compose << indent(indentValue) << "export ";
+    if (ctx->outputTarget != BaseNode::ConversionContext::JS) {
+        *compose << "declare ";
+    }
+    if ( funcNode->isAsync() ){
+        *compose << "async ";
+    }
+    *compose << "function " << slice(source, funcNode->name()) << "(" << paramList << ")";
+    if (ctx->outputTarget != BaseNode::ConversionContext::JS) {
+        if (funcNode->returnType()) {
+            *compose << slice(source, funcNode->returnType());
+        } else {
+            *compose << ": any";
+        }
+    }
+
+    if (ctx->outputTarget == BaseNode::ConversionContext::JS) {
+        JSSection* jssection = new JSSection;
+        jssection->from = funcNode->body()->startByte();
+        jssection->to   = funcNode->body()->endByte();
+        convert(funcNode->body(), source, jssection->m_children, indentValue + 1, ctx);
+        *compose << " " << jssection;
+
+        if ( funcNode->isMeta() ){
+            std::string fnName = slice(source, funcNode->name());
+            *compose << indent(indentValue) << fnName << ".Meta = {\n";
+            *compose << indent(indentValue + 1)
+                     << "get sourceFileName(){ return \'" << Path::name(ctx->componentPath) << "\' },\n";
+            if ( !ctx->currentImportUri.empty() ){
+                *compose << indent(indentValue + 1)
+                         << "get module(){ return \'" << ctx->currentImportUri << "\' },\n";
+            }
+            *compose << indent(indentValue + 1)
+                     << "get parameterNames(){ return [" << paramNamesArrayLiteral << "] }\n";
+            // Future extension point: emit full parameter and return type metadata.
+            *compose << indent(indentValue) << "}\n";
+        }
+    } else {
+        *compose << ";\n";
+    }
+
+    if ( newLineFollows(source, funcNode->endByte()) )
+        *compose << "\n";
+
     sections.push_back(compose);
 }
 

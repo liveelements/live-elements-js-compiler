@@ -88,6 +88,14 @@ public:
         BaseNode::ConversionContext *ctx
     );
 
+    void convertRootFunction(
+        TypedFunctionDeclarationNode* node,
+        const std::string &source,
+        std::vector<ElementsInsertion *> &sections,
+        int indentValue,
+        BaseNode::ConversionContext *ctx
+    );
+
     void convertArrowFunction(
         ArrowFunctionNode* node,
         const std::string &source,

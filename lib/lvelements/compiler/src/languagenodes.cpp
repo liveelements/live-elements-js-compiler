@@ -459,6 +459,8 @@ BaseNode *BaseNode::visitRecognized(BaseNode *parent, const TSNode &node){
         return visitMethodDefinition(parent, node);
     } else if ( strcmp(ts_node_type(node), "typed_method_declaration") == 0 ){
         return visitTypedMethodDeclaration(parent, node);
+    } else if ( strcmp(ts_node_type(node), "typed_function_declaration") == 0 ){
+        return visitTypedFunctionDeclaration(parent, node);
     } else if ( strcmp(ts_node_type(node), "property_accessor_declaration") == 0 ){
         return visitPropertyAccessorDeclaration(parent, node);
     } else if ( strcmp(ts_node_type(node), "function_declaration") == 0 ){
@@ -1236,6 +1238,11 @@ TypedMethodDeclarationNode* BaseNode::visitTypedMethodDeclaration(BaseNode *pare
     cnode->m_parameters = BaseNode::scanFormalTypeParameters(parent, parameters);
     cnode->addChild(cnode->m_parameters);
 
+    TSNode returnType = nodeChildByFieldName(node, "return");
+    if ( !ts_node_is_null(returnType) ){
+        cnode->m_returnType = cnode->addCreatedChild(new TypeNode(returnType));
+    }
+
     TSNode body = nodeChildByFieldName(node, "body");
     assertValid(parent, body, "Function body is null.");
 
@@ -1258,6 +1265,56 @@ TypedMethodDeclarationNode* BaseNode::visitTypedMethodDeclaration(BaseNode *pare
     }
     if (parent->parent() && parent->parent()->canCast<NewComponentExpressionNode>()){
         parent->parent()->as<NewComponentExpressionNode>()->m_methods.push_back(cnode);
+    }
+
+    if (cnode->m_body && cnode->m_parameters){
+        for (size_t i = 0; i != cnode->m_parameters->m_parameters.size(); ++i){
+            addParameterDeclarations(cnode->m_body, cnode->m_parameters->m_parameters[i]);
+        }
+    }
+    return cnode;
+}
+
+TypedFunctionDeclarationNode* BaseNode::visitTypedFunctionDeclaration(BaseNode *parent, const TSNode &node){
+    TypedFunctionDeclarationNode* cnode = parent->addCreatedChild(new TypedFunctionDeclarationNode(node));
+    for (auto c : extractPrecedingComments(node)) {
+        cnode->addChild(c);
+        cnode->m_precedingComments.push_back(c);
+    }
+
+    TSNode name = nodeChildByFieldName(node, "name");
+    assertValid(parent, name, "Function name is null.");
+    cnode->m_name = cnode->addCreatedChild(IdentifierNode::createNonEmpty(name, cnode));
+    addToDeclarations(parent, cnode->m_name);
+
+    TSNode parameters = nodeChildByFieldName(node, "parameters");
+    assertValid(parent, parameters, "Function parameters are null.");
+
+    cnode->m_parameters = BaseNode::scanFormalTypeParameters(parent, parameters);
+    cnode->addChild(cnode->m_parameters);
+
+    TSNode meta = nodeChildByFieldName(node, "meta");
+    if ( !ts_node_is_null(meta) ){
+        cnode->setMeta(true);
+    }
+
+    TSNode returnType = nodeChildByFieldName(node, "return");
+    if ( !ts_node_is_null(returnType) ){
+        cnode->m_returnType = cnode->addCreatedChild(new TypeNode(returnType));
+    }
+
+    TSNode body = nodeChildByFieldName(node, "body");
+    assertValid(parent, body, "Function body is null.");
+
+    cnode->m_body = cnode->addCreatedChild(new JsBlockNode(body));
+    visitChildren(cnode->m_body, body);
+
+    uint32_t count = ts_node_child_count(node);
+    for ( uint32_t i = 0; i < count; ++i ){
+        TSNode child = ts_node_child(node, i);
+        if ( strcmp(ts_node_type(child), "async") == 0 ){
+            cnode->setAsync(true);
+        }
     }
 
     if (cnode->m_body && cnode->m_parameters){
@@ -2063,6 +2120,9 @@ void ProgramNode::addChild(BaseNode *child){
     } else if ( child->isNodeType<ComponentInstanceStatementNode>() ){
         m_exports.push_back(child);
         BaseNode::addChild(child);
+    } else if ( child->isNodeType<TypedFunctionDeclarationNode>() ){
+        m_exports.push_back(child);
+        BaseNode::addChild(child);
     } else if ( child->isNodeType<TypeAliasDeclarationNode>() ||
                 child->isNodeType<InterfaceDeclarationNode>() ||
                 child->isNodeType<EnumDeclarationNode>() ){
@@ -2639,6 +2699,7 @@ TypedMethodDeclarationNode::TypedMethodDeclarationNode(const TSNode &node)
     , m_name(nullptr)
     , m_parameters(nullptr)
     , m_body(nullptr)
+    , m_returnType(nullptr)
     , m_async(false)
     , m_static(false)
 {
@@ -2649,6 +2710,9 @@ TypedMethodDeclarationNode::TypedMethodDeclarationNode(const TSNode &node, const
     , m_name(nullptr)
     , m_parameters(nullptr)
     , m_body(nullptr)
+    , m_returnType(nullptr)
+    , m_async(false)
+    , m_static(false)
 {
 }
 

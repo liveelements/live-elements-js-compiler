@@ -47,6 +47,7 @@ class ParameterListNode;
 class EventDeclarationNode;
 class ListenerDeclarationNode;
 class TypedMethodDeclarationNode;
+class TypedFunctionDeclarationNode;
 class MethodDefinitionNode;
 class PublicFieldDeclarationNode;
 class ComponentDeclarationNode;
@@ -198,6 +199,7 @@ private:
     static ListenerDeclarationNode*        visitListenerDeclaration(BaseNode* parent, const TSNode& node);
     static MethodDefinitionNode*           visitMethodDefinition(BaseNode* parent, const TSNode& node);
     static TypedMethodDeclarationNode*     visitTypedMethodDeclaration(BaseNode* parent, const TSNode& node);
+    static TypedFunctionDeclarationNode*   visitTypedFunctionDeclaration(BaseNode* parent, const TSNode& node);
     static PropertyAccessorDeclarationNode*visitPropertyAccessorDeclaration(BaseNode* parent, const TSNode& node);
     static JsBlockNode*                    visitJsScope(BaseNode* parent, const TSNode& node);
     static NumberNode*                     visitNumber(BaseNode* parent, const TSNode& node);
@@ -620,6 +622,7 @@ public:
     IdentifierNode* name() const{ return m_name; }
     ParameterListNode* parameters() const{ return m_parameters; }
     JsBlockNode* body() const{ return m_body; }
+    TypeNode* returnType() const{ return m_returnType; }
 
     void setAsync(bool async){ m_async = async; }
     void setStatic(bool value){ m_static = value; }
@@ -634,8 +637,22 @@ private:
     IdentifierNode*    m_name;
     ParameterListNode* m_parameters;
     JsBlockNode*       m_body;
+    TypeNode*          m_returnType;
     bool               m_async;
     bool               m_static;
+};
+
+class TypedFunctionDeclarationNode : public TypedMethodDeclarationNode{
+    friend class BaseNode;
+    LANGUAGE_NODE_INFO(TypedFunctionDeclarationNode);
+public:
+    TypedFunctionDeclarationNode(const TSNode& node)
+        : TypedMethodDeclarationNode(node, TypedFunctionDeclarationNode::nodeInfo())
+    {}
+    void setMeta(bool value){ m_meta = value; }
+    bool isMeta() const{ return m_meta; }
+private:
+    bool m_meta = false;
 };
 
 class PropertyAccessorDeclarationNode : public TypedMethodDeclarationNode{

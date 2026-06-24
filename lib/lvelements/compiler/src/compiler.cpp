@@ -132,7 +132,7 @@ Compiler::TargetResult Compiler::compileToTarget(const std::string &path, const 
         section->from = 0;
         section->to   = static_cast<int>(contents.size());
 
-        auto ctx = m_d->createConversionContext(target);
+        auto ctx = m_d->createConversionContext(target, nullptr, path);
 
         LanguageNodesToJs lnt;
         lnt.convert(node, contents, section->m_children, 0, ctx);
@@ -560,4 +560,3 @@ void Compiler::Config::initialize(const MLNode &config){
 }
 
 }} // namespace lv, el
-
