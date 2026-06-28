@@ -25,6 +25,7 @@
 #include "tree_sitter/api.h"
 #include "tree_sitter/parser.h"
 #include "elementssections_p.h"
+#include "typerequestsink.h"
 #include "languagenodeinfo_p.h"
 #include "languageparser.h"
 
@@ -129,8 +130,13 @@ public:
         std::string relativePathFromBuild;
         std::string currentImportUri;
         std::string flowModulePath;
+        std::string typesModulePath;
         std::string flowModuleName;
         std::map<FlowCall, std::string> flowCalls;
+        std::string typeResolutionKey;
+        std::string typeResolutionDtsPath;
+        TypeRequestSink* typeRequestSink = nullptr;
+        bool        typeResolutionEnabled = false;
         bool        outputComponentMeta;
         OutputTarget outputTarget;
 

@@ -23,4 +23,11 @@ lv::el::Compiler::Ptr CompilerHandle::getInternalInstance() const {
     return m_compiler;
 }
 
+void CompilerHandle::setTypeResolver(const std::shared_ptr<lv::el::TypeResolver> &resolver){
+    m_typeResolver = resolver;
+    if ( m_compiler ){
+        m_compiler->setTypeResolver(m_typeResolver.get());
+    }
+}
+
 } // namespace

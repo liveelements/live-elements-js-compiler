@@ -22,6 +22,7 @@
 #include "live/fileio.h"
 #include "live/package.h"
 #include "live/module.h"
+#include "typeresolver.h"
 #include <map>
 
 namespace lv{
@@ -73,6 +74,7 @@ public:
         void addImportPath(const std::string& path);
         void setBaseComponent(const std::string& name, const std::string& importUri);
         void setFlowModule(const std::string& path, const std::string& name);
+        void setTypesModule(const std::string& path);
         void setFlowCall(FlowCall role, const std::string& callee);
         void initialize(const MLNode& config);
         void allowUnresolvedTypes(bool allow){ m_allowUnresolved = allow; }
@@ -90,6 +92,7 @@ public:
         std::string            m_importLocalPath;
         std::string            m_packageBuildPath;
         std::string            m_flowModulePath;
+        std::string            m_typesModulePath;
         std::string            m_flowModuleName;
         std::map<FlowCall, std::string> m_flowCalls;
         bool                   m_enableJsImports;
@@ -131,6 +134,7 @@ public:
     const LanguageParser::Ptr& parser() const;
 
     void configureImplicitType(const std::string& type);
+    void setTypeResolver(TypeResolver* resolver);
 
     static std::shared_ptr<ElementsModule> compile(Compiler::Ptr compiler, const std::string& path, Engine* engine = nullptr);
     static std::shared_ptr<ElementsModule> compileModule(Compiler::Ptr compiler, const std::string& path, Engine* engine = nullptr);
@@ -143,6 +147,12 @@ public:
     std::shared_ptr<ElementsModule> findLoadedModuleByPath(const std::string& path) const;
 
 private:
+    static std::shared_ptr<ElementsModule> compileModuleImpl(
+        Compiler::Ptr compiler,
+        const Module::Ptr& module,
+        Engine* engine,
+        const std::string& fileName = std::string());
+
     std::string createModuleBuildPath(const Module::Ptr& plugin);
 
     Compiler(const Config& config, PackageGraph *pg);

@@ -22,7 +22,10 @@
 #include "languagenodestojs_p.h"
 #include "elementssections_p.h"
 #include "elementsmodule.h"
+#include "compilerun.h"
 #include "tracepointexception.h"
+#include <algorithm>
+#include <memory>
 
 namespace lv{ namespace el {
 
@@ -62,12 +65,16 @@ public:
     bool          packageGraphOwn;
     std::map<std::string, ElementsModule::Ptr> loadedModules;
     std::map<std::string, ElementsModule::Ptr> loadedModulesByPath;
+    TypeResolver* typeResolver = nullptr;
+    std::unique_ptr<CompileRun> currentRun;
 
     BaseNode::ConversionContext* createConversionContext(
             BaseNode::ConversionContext::OutputTarget target = BaseNode::ConversionContext::JS,
             const Module::Ptr& module = nullptr,
             const std::string& componentPath = "",
-            const std::string& relativePathFromBuild = "")
+            const std::string& relativePathFromBuild = "",
+            const std::string& typeResolutionKey = "",
+            const std::string& typeResolutionDtsPath = "")
     {
         BaseNode::ConversionContext* ctx = new BaseNode::ConversionContext;
         ctx->implicitTypes = config.m_implicitTypes;
@@ -81,7 +88,12 @@ public:
         ctx->componentPath = componentPath;
         ctx->relativePathFromBuild = relativePathFromBuild;
         ctx->flowModulePath = config.m_flowModulePath;
+        ctx->typesModulePath = config.m_typesModulePath;
         ctx->flowModuleName = config.m_flowModuleName;
+        ctx->typeResolutionKey = typeResolutionKey;
+        ctx->typeResolutionDtsPath = typeResolutionDtsPath;
+        ctx->typeRequestSink = currentRun ? &currentRun->sink() : nullptr;
+        ctx->typeResolutionEnabled = currentRun && currentRun->sink().hasResolver();
         for ( const auto& flowCall : config.m_flowCalls ){
             ctx->flowCalls[toConversionFlowCall(flowCall.first)] = flowCall.second;
         }
@@ -158,17 +170,19 @@ Compiler::TargetResult Compiler::compileToTarget(const std::string &path, const 
 
 Compiler::TargetResult Compiler::compileToTarget(const std::string &path, const std::string &contents, BaseNode *node){
     Compiler::TargetResult result;
+    m_d->currentRun = CompileRun::createUnique(m_d->typeResolver);
 
     auto compileContextTarget = [&](BaseNode::ConversionContext::OutputTarget target, std::string& outStr, const std::string& extension) {
         el::JSSection* section = new el::JSSection;
         section->from = 0;
         section->to   = static_cast<int>(contents.size());
 
-        auto ctx = m_d->createConversionContext(target, nullptr, path);
+        const std::string outputKey = path + extension;
+        const std::string dtsPath = path + ".d.ts";
+        auto ctx = m_d->createConversionContext(target, nullptr, path, "", outputKey, dtsPath);
 
         LanguageNodesToJs lnt;
         lnt.convert(node, contents, section->m_children, 0, ctx);
-        delete ctx;
 
         std::vector<std::string> flatten;
         section->flatten(contents, flatten);
@@ -176,18 +190,32 @@ Compiler::TargetResult Compiler::compileToTarget(const std::string &path, const 
             outStr += s;
         }
 
+        bool deferToFinalize = false;
+        if ( target == BaseNode::ConversionContext::JS ){
+            const bool hasMarkers = m_d->currentRun->sink().hasPendingFor(outputKey);
+            deferToFinalize = hasMarkers && m_d->config.m_fileOutput;
+            m_d->currentRun->sink().storeGeneratedTypeOutput(
+                outputKey,
+                deferToFinalize ? (path + extension) : "",
+                outStr,
+                deferToFinalize
+            );
+        }
+
+        delete ctx;
+
         delete section;
 
-        if ( m_d->config.m_fileOutput ){
+        if ( m_d->config.m_fileOutput && !deferToFinalize ){
             std::string outputPath = path + extension;
             m_d->config.m_fileIO->writeToFile(outputPath, outStr);
         }
     };
 
-    if (m_d->config.m_outputTarget == Compiler::Config::JS || m_d->config.m_outputTarget == Compiler::Config::JS_DTS) {
+    if (m_d->config.m_outputTarget == Compiler::Config::JS) {
         compileContextTarget(BaseNode::ConversionContext::JS, result.js, m_d->config.m_outputExtension);
     }
-    
+
     if (m_d->config.m_outputTarget == Compiler::Config::TS) {
         compileContextTarget(BaseNode::ConversionContext::TS, result.ts, ".ts");
     }
@@ -195,6 +223,13 @@ Compiler::TargetResult Compiler::compileToTarget(const std::string &path, const 
     if (m_d->config.m_outputTarget == Compiler::Config::JS_DTS) {
         compileContextTarget(BaseNode::ConversionContext::JS, result.js, m_d->config.m_outputExtension);
         compileContextTarget(BaseNode::ConversionContext::DTS, result.dts, ".d.ts");
+    }
+
+    m_d->currentRun->finalize(m_d->config.m_fileIO, m_d->config.m_typesModulePath);
+
+    const std::string jsKey = path + m_d->config.m_outputExtension;
+    if ( const auto* generatedJs = m_d->currentRun->sink().generatedOutput(jsKey) ){
+        result.js = generatedJs->content;
     }
 
     return result;
@@ -242,10 +277,18 @@ Compiler::TargetResult Compiler::compileModuleFileToTarget(const Module::Ptr &mo
         section->from = 0;
         section->to   = static_cast<int>(contents.size());
 
-        auto ctx = m_d->createConversionContext(target, module, path, relativePathFromOutput.data());
+        std::string outputFile = outputPath.data() + extension;
+        std::string dtsPath = outputPath.data() + ".d.ts";
+        auto ctx = m_d->createConversionContext(
+            target,
+            module,
+            path,
+            relativePathFromOutput.data(),
+            outputFile,
+            dtsPath
+        );
         LanguageNodesToJs lnt;
         lnt.convert(node, contents, section->m_children, 0, ctx);
-        delete ctx;
 
         std::vector<std::string> flatten;
         section->flatten(contents, flatten);
@@ -256,13 +299,11 @@ Compiler::TargetResult Compiler::compileModuleFileToTarget(const Module::Ptr &mo
 
         delete section;
 
-        if ( m_d->config.m_fileOutput ){
-            std::string outputFile = outputPath.data() + extension;
-
-            std::string displayFilePath = path;
-            Utf8::replaceAll(displayFilePath, module->packagePath(), "");
-
-            bool shouldWrite = true;
+        std::string displayFilePath = path;
+        Utf8::replaceAll(displayFilePath, module->packagePath(), "");
+        bool shouldWrite = false;
+        if ( target == BaseNode::ConversionContext::JS ){
+            shouldWrite = true;
             if ( m_d->config.m_fileOutputOnlyOnModified && Path::exists(outputFile) ){
                 DateTime sourceModifiedStamp = Path::lastModified(path);
                 DateTime outputModifiedStamp = Path::lastModified(outputFile);
@@ -274,21 +315,32 @@ Compiler::TargetResult Compiler::compileModuleFileToTarget(const Module::Ptr &mo
                     shouldWrite = false;
                     if ( extension != ".d.ts" && !Path::exists(outputFile) ){
                         Utf8 msg = Utf8("Released package '%' missing build file: %").format(package->name(), displayFilePath);
+                        delete ctx;
                         THROW_EXCEPTION(lv::Exception, msg, Exception::toCode("~File"));
                     }
                 }
             }
+            m_d->currentRun->sink().storeGeneratedTypeOutput(outputFile, outputFile, outStr, shouldWrite);
+        }
 
-            if ( shouldWrite ){
+        const bool deferToFinalize =
+            shouldWrite && m_d->currentRun->sink().hasPendingFor(outputFile);
+
+        if ( m_d->config.m_fileOutput ){
+            if ( shouldWrite && !deferToFinalize ){
                 m_d->config.m_fileIO->writeToFile(outputFile, outStr);
                 vlog("lvcompiler").v() << "Compiler: Compiled file: " << displayFilePath << extension;
+            } else if ( deferToFinalize ){
+                vlog("lvcompiler").v() << "Compiler: Deferred (type resolution): " << displayFilePath << extension;
             } else {
                 vlog("lvcompiler").v() << "Compiler: Skipped file: " << displayFilePath << extension;
             }
         }
+
+        delete ctx;
     };
 
-    if (m_d->config.m_outputTarget == Compiler::Config::JS || m_d->config.m_outputTarget == Compiler::Config::JS_DTS) {
+    if (m_d->config.m_outputTarget == Compiler::Config::JS) {
         compileContextTarget(BaseNode::ConversionContext::JS, result.js, m_d->config.m_outputExtension);
     }
     
@@ -369,7 +421,26 @@ void Compiler::configureImplicitType(const std::string &type){
     m_d->config.m_implicitTypes.push_back(type);
 }
 
+void Compiler::setTypeResolver(TypeResolver *resolver){
+    m_d->typeResolver = resolver;
+}
+
+std::shared_ptr<ElementsModule> Compiler::compileModuleImpl(
+    Compiler::Ptr compiler,
+    const Module::Ptr& module,
+    Engine* engine,
+    const std::string& fileName)
+{
+    auto epl = engine ? ElementsModule::create(module, compiler, engine) : ElementsModule::create(module, compiler);
+    if ( !fileName.empty() ){
+        ElementsModule::parseModuleFile(epl, fileName);
+    }
+    epl->compile();
+    return epl;
+}
+
 std::shared_ptr<ElementsModule> Compiler::compile(Ptr compiler, const std::string &path, Engine *engine){
+    compiler->m_d->currentRun = CompileRun::createUnique(compiler->m_d->typeResolver);
     std::string modulePath = Path::parent(path);
     std::string fileName = Path::name(path);
 
@@ -424,14 +495,13 @@ std::shared_ptr<ElementsModule> Compiler::compile(Ptr compiler, const std::strin
         }
     }
 
-    auto epl = engine ? ElementsModule::create(module, compiler, engine) : ElementsModule::create(module, compiler);
-    ElementsModule::parseModuleFile(epl, fileName); // add file if it's not there
-    epl->compile();
-
+    auto epl = Compiler::compileModuleImpl(compiler, module, engine, fileName);
+    compiler->m_d->currentRun->finalize(compiler->m_d->config.m_fileIO, compiler->m_d->config.m_typesModulePath);
     return epl;
 }
 
 std::shared_ptr<ElementsModule> Compiler::compileModule(Compiler::Ptr compiler, const std::string &path, Engine *engine){
+    compiler->m_d->currentRun = CompileRun::createUnique(compiler->m_d->typeResolver);
     if ( !Path::exists(path) ){
         THROW_EXCEPTION(lv::Exception, Utf8("Path does not exist: %.").format(path), lv::Exception::toCode("~Path"));
     }
@@ -442,13 +512,13 @@ std::shared_ptr<ElementsModule> Compiler::compileModule(Compiler::Ptr compiler, 
     Module::Ptr module = Module::createFromPath(path);
     Package::Ptr package = Package::createFromPath(module->package());
     compiler->m_d->packageGraph->loadRunningPackageAndModule(package, module);
-
-    auto epl = engine ? ElementsModule::create(module, compiler, engine) : ElementsModule::create(module, compiler);
-    epl->compile();
+    auto epl = Compiler::compileModuleImpl(compiler, module, engine);
+    compiler->m_d->currentRun->finalize(compiler->m_d->config.m_fileIO, compiler->m_d->config.m_typesModulePath);
     return epl;
 }
 
 std::vector<std::shared_ptr<ElementsModule> > Compiler::compilePackage(Compiler::Ptr compiler, const std::string &path, Engine *engine){
+    compiler->m_d->currentRun = CompileRun::createUnique(compiler->m_d->typeResolver);
     if ( !Path::exists(path) ){
         THROW_EXCEPTION(lv::Exception, Utf8("Path doesn't exist: %.").format(path), lv::Exception::toCode("~Path"));
     }
@@ -462,9 +532,13 @@ std::vector<std::shared_ptr<ElementsModule> > Compiler::compilePackage(Compiler:
     std::vector<std::shared_ptr<ElementsModule> > result;
 
     for ( auto it = modules.begin(); it != modules.end(); ++it ){
-        result.push_back(Compiler::compileModule(compiler, *it, engine));
+        Module::Ptr module = Module::createFromPath(*it);
+        Package::Ptr packageForModule = Package::createFromPath(module->package());
+        compiler->m_d->packageGraph->loadRunningPackageAndModule(packageForModule, module);
+        result.push_back(Compiler::compileModuleImpl(compiler, module, engine));
     }
 
+    compiler->m_d->currentRun->finalize(compiler->m_d->config.m_fileIO, compiler->m_d->config.m_typesModulePath);
     return result;
 }
 
@@ -546,6 +620,10 @@ void Compiler::Config::setFlowModule(const std::string &path, const std::string 
     m_flowModuleName = name;
 }
 
+void Compiler::Config::setTypesModule(const std::string &path){
+    m_typesModulePath = path;
+}
+
 void Compiler::Config::setFlowCall(FlowCall role, const std::string &callee){
     m_flowCalls[role] = callee;
 }
@@ -585,6 +663,9 @@ void Compiler::Config::initialize(const MLNode &config){
     }
     if ( config.hasKey("flowModuleName") ){
         m_flowModuleName = config["flowModuleName"].asString();
+    }
+    if ( config.hasKey("typesModulePath") ){
+        m_typesModulePath = config["typesModulePath"].asString();
     }
     if ( config.hasKey("flowCalls") ){
         MLNode::ObjectType calls = config["flowCalls"].asObject();

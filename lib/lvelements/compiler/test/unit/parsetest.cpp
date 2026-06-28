@@ -22,10 +22,76 @@
 
 #include "live/elements/compiler/languageparser.h"
 #include "live/elements/compiler/compiler.h"
+#include "live/elements/compiler/typerequestsink.h"
+#include "live/elements/compiler/typeresolver.h"
 #include <cctype>
+#include <map>
 
 using namespace lv;
 using namespace lv::el;
+
+namespace {
+
+std::string normalizeSpaces(const std::string& value){
+    std::string result;
+    for ( char ch : value ){
+        if ( !std::isspace(static_cast<unsigned char>(ch)) ){
+            result.push_back(ch);
+        }
+    }
+    return result;
+}
+
+class StubTypeResolver : public TypeResolver {
+public:
+    std::map<std::string, Result> responses;
+    std::vector<Request> observedRequests;
+
+    std::vector<Result> resolve(const std::vector<Request>& requests) override{
+        observedRequests = requests;
+        std::vector<Result> result;
+        for ( const Request& request : requests ){
+            auto it = responses.find(request.requestId);
+            if ( it != responses.end() ){
+                result.push_back(it->second);
+            }
+        }
+        return result;
+    }
+};
+
+class ThrowingTypeResolver : public TypeResolver {
+public:
+    std::vector<Request> observedRequests;
+    std::string message = "Type resolver failed.";
+
+    std::vector<Result> resolve(const std::vector<Request>& requests) override{
+        observedRequests = requests;
+        throw lv::Exception(message, lv::Exception::toCode("~Type"));
+    }
+};
+
+class MemoryFileIO : public FileIOInterface {
+public:
+    std::string readFromFile(const std::string& path) override{
+        auto it = files.find(path);
+        return it == files.end() ? std::string() : it->second;
+    }
+
+    bool writeToFile(const std::string& path, const std::string& content) override{
+        files[path] = content;
+        return true;
+    }
+
+    bool writeToFile(const std::string& path, const char* content, size_t length) override{
+        files[path] = std::string(content, length);
+        return true;
+    }
+
+    std::map<std::string, std::string> files;
+};
+
+}
 
 void testFileParseOutput(const std::string& name, const std::string& contents, Compiler::Config::OutputTarget outputTarget, const std::string& expectation) {
     static FileIO fileIO;
@@ -70,21 +136,11 @@ void testFlowFileParse(const std::string& name){
     static std::string scriptPath = Path::join(Path::parent(lv::ApplicationContext::instance().applicationFilePath()), "data");
 
     const std::string contents = fileIO.readFromFile(Path::join(scriptPath, name + ".lv"));
-    auto normalize = [](const std::string& value) {
-        std::string result;
-        for ( char ch : value ){
-            if ( !std::isspace(static_cast<unsigned char>(ch)) ){
-                result.push_back(ch);
-            }
-        }
-        return result;
-    };
-
     auto runExpectation = [&](const std::string& suffix, const std::string& actual) {
         const auto expectationPath = Path::join(scriptPath, name + ".lv" + suffix);
         const auto expectedContent = fileIO.readFromFile(expectationPath);
-        const std::string normalizedActual = normalize(actual);
-        const std::string normalizedExpected = normalize(expectedContent);
+        const std::string normalizedActual = normalizeSpaces(actual);
+        const std::string normalizedExpected = normalizeSpaces(expectedContent);
         if ( normalizedActual != normalizedExpected ){
             vlog().e() << "File: " << name << ".lv" << suffix;
             vlog().e() << actual;
@@ -239,5 +295,231 @@ TEST_CASE( "Parse Test", "[Parse]" ) {
     SECTION("Root Functions"){ testFileParse("ParserTest54"); }
     SECTION("Meta Root Functions"){ testFileParse("ParserTest55"); }
     SECTION("Flow Literals"){ testFlowFileParse("ParserTest56"); }
+    SECTION("Meta Root Functions With Type Resolution"){
+        FileIO fileIO;
+        static std::string sourceDataPath = Path::join(Path::parent(__FILE__), "data");
+        const std::string name = "ParserTest57";
+        const std::string sourcePath = Path::join(sourceDataPath, name + ".lv");
+        const std::string contents = fileIO.readFromFile(sourcePath);
+        const std::string expectedJs = fileIO.readFromFile(Path::join(sourceDataPath, name + ".lv.js"));
+        const std::string expectedDts = fileIO.readFromFile(Path::join(sourceDataPath, name + ".lv.d.ts"));
 
+        Compiler::Config config(false);
+        config.allowUnresolvedTypes(true);
+        config.outputTarget(Compiler::Config::OutputTarget::JS_DTS);
+        config.setTypesModule("@liveelements/types");
+
+        StubTypeResolver resolver;
+        resolver.responses[sourcePath + "::add"] = TypeResolver::Result{
+            sourcePath + "::add",
+            "FunctionType.for(Type.number, Type.number, Type.number)",
+            {"FunctionType", "Type"}
+        };
+        resolver.responses[sourcePath + "::zero"] = TypeResolver::Result{
+            sourcePath + "::zero",
+            "FunctionType.for(Type.number)",
+            {"FunctionType", "Type"}
+        };
+        resolver.responses[sourcePath + "::load"] = TypeResolver::Result{
+            sourcePath + "::load",
+            "FunctionType.for(Type.string, Type.string)",
+            {"FunctionType", "Type"}
+        };
+
+        Compiler::Ptr compiler = Compiler::create(config);
+        compiler->setTypeResolver(&resolver);
+        compiler->configureImplicitType("console");
+        compiler->configureImplicitType("vlog");
+
+        Compiler::TargetResult targetResult = compiler->compileToTarget(sourcePath, contents);
+        REQUIRE(normalizeSpaces(targetResult.js) == normalizeSpaces(expectedJs));
+        REQUIRE(normalizeSpaces(targetResult.dts) == normalizeSpaces(expectedDts));
+    }
+
+}
+
+TEST_CASE("Type Resolution Helpers", "[TypeResolution]"){
+    SECTION("Finalize substitutes markers and injects imports"){
+        StubTypeResolver resolver;
+        resolver.responses["req"] = TypeResolver::Result{
+            "req",
+            "Type.number",
+            {"Type"}
+        };
+
+        TypeRequestSink sink;
+        sink.setResolver(&resolver);
+        sink.recordTypeRequest(
+            TypeResolver::Request{"req", "/tmp/types.d.ts", "fn"},
+            "output.js",
+            "/*@@LVTYPE:x@@*/undefined"
+        );
+        sink.storeGeneratedTypeOutput(
+            "output.js",
+            "",
+            "import {Base} from './base'\nreturn /*@@LVTYPE:x@@*/undefined;",
+            false
+        );
+
+        sink.finalize(nullptr, "@liveelements/types");
+
+        const auto* output = sink.generatedOutput("output.js");
+        REQUIRE(output != nullptr);
+        REQUIRE(output->content.find("return Type.number;") != std::string::npos);
+        REQUIRE(output->content.find("/*@@LVTYPE:") == std::string::npos);
+        REQUIRE(output->content.find("import {Base} from './base'\n") != std::string::npos);
+        REQUIRE(output->content.find("import {Type} from '@liveelements/types'\n") != std::string::npos);
+    }
+
+    SECTION("Finalize keeps content unchanged when marker is missing"){
+        StubTypeResolver resolver;
+        resolver.responses["req"] = TypeResolver::Result{
+            "req",
+            "Type.number",
+            {"Type"}
+        };
+
+        TypeRequestSink sink;
+        sink.setResolver(&resolver);
+        sink.recordTypeRequest(
+            TypeResolver::Request{"req", "/tmp/types.d.ts", "fn"},
+            "output.js",
+            "missing"
+        );
+        sink.storeGeneratedTypeOutput("output.js", "", "return 1;", false);
+
+        sink.finalize(nullptr, "@liveelements/types");
+
+        const auto* output = sink.generatedOutput("output.js");
+        REQUIRE(output != nullptr);
+        REQUIRE(output->content == "import {Type} from '@liveelements/types'\nreturn 1;");
+    }
+
+    SECTION("Finalize writes modified generated outputs through file IO"){
+        StubTypeResolver resolver;
+        resolver.responses["req"] = TypeResolver::Result{
+            "req",
+            "Type.number",
+            {"Type"}
+        };
+
+        MemoryFileIO fileIO;
+        TypeRequestSink sink;
+        sink.setResolver(&resolver);
+        sink.recordTypeRequest(
+            TypeResolver::Request{"req", "/tmp/types.d.ts", "fn"},
+            "output.js",
+            "/*@@LVTYPE:x@@*/undefined"
+        );
+        sink.storeGeneratedTypeOutput("output.js", "/tmp/output.js", "return /*@@LVTYPE:x@@*/undefined;", true);
+
+        sink.finalize(&fileIO, "@liveelements/types");
+
+        auto written = fileIO.files.find("/tmp/output.js");
+        REQUIRE(written != fileIO.files.end());
+        REQUIRE(written->second == "import {Type} from '@liveelements/types'\nreturn Type.number;");
+    }
+
+    SECTION("Collects requests and keeps plain meta unchanged without resolver"){
+        const std::string sourcePath = "/tmp/TypeResolution.lv";
+        const std::string contents =
+            "@fn add(a:int, b:int): int { return a + b }\n"
+            "@fn zero(): int { return 0 }\n"
+            "fn plain(value:int): int { return value }\n";
+
+        Compiler::Config config(false);
+        config.allowUnresolvedTypes(true);
+        config.outputTarget(Compiler::Config::OutputTarget::JS);
+        config.setTypesModule("@liveelements/types");
+
+        StubTypeResolver resolver;
+        resolver.responses[sourcePath + "::add"] = TypeResolver::Result{
+            sourcePath + "::add",
+            "FunctionType.for(Type.number, Type.number, Type.number)",
+            {"FunctionType", "Type"}
+        };
+        resolver.responses[sourcePath + "::zero"] = TypeResolver::Result{
+            sourcePath + "::zero",
+            "FunctionType.for(Type.number)",
+            {"FunctionType", "Type"}
+        };
+
+        Compiler::Ptr compiler = Compiler::create(config);
+        compiler->setTypeResolver(&resolver);
+        Compiler::TargetResult targetResult = compiler->compileToTarget(sourcePath, contents);
+
+        REQUIRE(resolver.observedRequests.size() == 2);
+        REQUIRE(resolver.observedRequests[0].requestId == sourcePath + "::add");
+        REQUIRE(resolver.observedRequests[0].functionName == "add");
+        REQUIRE(resolver.observedRequests[0].dtsPath == sourcePath + ".d.ts");
+        REQUIRE(resolver.observedRequests[1].requestId == sourcePath + "::zero");
+        REQUIRE(targetResult.js.find("FunctionType.for(Type.number, Type.number, Type.number)") != std::string::npos);
+        REQUIRE(targetResult.js.find("FunctionType.for(Type.number)") != std::string::npos);
+        REQUIRE(targetResult.js.find("/*@@LVTYPE:") == std::string::npos);
+        REQUIRE(targetResult.js.find("plain.Meta") == std::string::npos);
+
+        resolver.observedRequests.clear();
+        Compiler::TargetResult secondRunResult = compiler->compileToTarget(sourcePath, contents);
+        REQUIRE(resolver.observedRequests.size() == 2);
+        REQUIRE(secondRunResult.js.find("FunctionType.for(Type.number, Type.number, Type.number)") != std::string::npos);
+        REQUIRE(secondRunResult.js.find("FunctionType.for(Type.number)") != std::string::npos);
+        REQUIRE(secondRunResult.js.find("/*@@LVTYPE:") == std::string::npos);
+
+        Compiler::Ptr withoutResolver = Compiler::create(config);
+        Compiler::TargetResult fallbackResult = withoutResolver->compileToTarget(sourcePath, contents);
+        REQUIRE(fallbackResult.js.find("get type(){") == std::string::npos);
+        REQUIRE(fallbackResult.js.find("/*@@LVTYPE:") == std::string::npos);
+    }
+
+    SECTION("Single-file output writes resolved JS through finalize"){
+        const std::string sourcePath = "/tmp/TypeResolutionWrite.lv";
+        const std::string outputPath = sourcePath + ".js";
+        const std::string contents = "@fn add(a:int, b:int): int { return a + b }\n";
+
+        MemoryFileIO fileIO;
+        Compiler::Config config(true, ".js", &fileIO);
+        config.allowUnresolvedTypes(true);
+        config.outputTarget(Compiler::Config::OutputTarget::JS);
+        config.setTypesModule("@liveelements/types");
+
+        StubTypeResolver resolver;
+        resolver.responses[sourcePath + "::add"] = TypeResolver::Result{
+            sourcePath + "::add",
+            "FunctionType.for(Type.number, Type.number, Type.number)",
+            {"FunctionType", "Type"}
+        };
+
+        Compiler::Ptr compiler = Compiler::create(config);
+        compiler->setTypeResolver(&resolver);
+
+        Compiler::TargetResult result = compiler->compileToTarget(sourcePath, contents);
+
+        auto written = fileIO.files.find(outputPath);
+        REQUIRE(written != fileIO.files.end());
+        REQUIRE(written->second.find("FunctionType.for(Type.number, Type.number, Type.number)") != std::string::npos);
+        REQUIRE(written->second.find("/*@@LVTYPE:") == std::string::npos);
+        REQUIRE(normalizeSpaces(written->second) == normalizeSpaces(result.js));
+    }
+
+    SECTION("Single-file output does not write marker JS when resolver throws"){
+        const std::string sourcePath = "/tmp/TypeResolutionThrow.lv";
+        const std::string outputPath = sourcePath + ".js";
+        const std::string contents = "@fn add(a:int, b:int): int { return a + b }\n";
+
+        MemoryFileIO fileIO;
+        Compiler::Config config(true, ".js", &fileIO);
+        config.allowUnresolvedTypes(true);
+        config.outputTarget(Compiler::Config::OutputTarget::JS);
+        config.setTypesModule("@liveelements/types");
+
+        ThrowingTypeResolver resolver;
+
+        Compiler::Ptr compiler = Compiler::create(config);
+        compiler->setTypeResolver(&resolver);
+
+        REQUIRE_THROWS_AS(compiler->compileToTarget(sourcePath, contents), lv::Exception);
+        REQUIRE(resolver.observedRequests.size() == 1);
+        REQUIRE(resolver.observedRequests[0].requestId == sourcePath + "::add");
+        REQUIRE(fileIO.files.find(outputPath) == fileIO.files.end());
+    }
 }

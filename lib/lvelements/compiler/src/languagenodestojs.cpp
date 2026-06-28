@@ -1490,6 +1490,14 @@ void LanguageNodesToJs::convertRootFunction(
                 *compose << indent(indentValue + 1)
                          << "get module(){ return \'" << ctx->currentImportUri << "\' },\n";
             }
+            if ( ctx->typeResolutionEnabled && ctx->typeRequestSink && !ctx->typeResolutionKey.empty() ){
+                std::string requestId = ctx->componentPath + "::" + fnName;
+                std::string marker = "/*@@LVTYPE:" + requestId + "@@*/undefined";
+                TypeResolver::Request request{requestId, ctx->typeResolutionDtsPath, fnName};
+                ctx->typeRequestSink->recordTypeRequest(request, ctx->typeResolutionKey, marker);
+                *compose << indent(indentValue + 1)
+                         << "get type(){ return " << marker << " },\n";
+            }
             *compose << indent(indentValue + 1)
                      << "get parameterNames(){ return [" << paramNamesArrayLiteral << "] }\n";
             // Future extension point: emit full parameter and return type metadata.

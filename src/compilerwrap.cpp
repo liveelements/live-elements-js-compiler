@@ -21,7 +21,9 @@
 #include "live/elements/compiler/compiler.h"
 #include "live/elements/compiler/modulefile.h"
 #include "live/elements/compiler/tracepointexception.h"
+#include "live/elements/compiler/typeresolver.h"
 #include "live/mlnodetojson.h"
+#include <memory>
 
 namespace lv{
 
@@ -29,6 +31,75 @@ class CompilerAddonData{
 public:
     Napi::FunctionReference CompilerHandleConstructor;
 };
+
+class NapiTypeResolver : public lv::el::TypeResolver {
+public:
+    NapiTypeResolver(Napi::Env env, const Napi::Function& callback)
+        : m_env(env)
+        , m_callback(Napi::Persistent(callback))
+    {}
+
+    std::vector<Result> resolve(const std::vector<Request>& requests) override{
+        Napi::HandleScope scope(m_env);
+
+        Napi::Array requestArray = Napi::Array::New(m_env, requests.size());
+        for ( size_t i = 0; i < requests.size(); ++i ){
+            Napi::Object request = Napi::Object::New(m_env);
+            request.Set("requestId", requests[i].requestId);
+            request.Set("dtsPath", requests[i].dtsPath);
+            request.Set("functionName", requests[i].functionName);
+            requestArray.Set(i, request);
+        }
+
+        Napi::Value value = m_callback.Call(m_env.Global(), {requestArray});
+        std::vector<Result> results;
+        if ( !value.IsArray() ){
+            return results;
+        }
+
+        Napi::Array resultArray = value.As<Napi::Array>();
+        results.reserve(resultArray.Length());
+        for ( uint32_t i = 0; i < resultArray.Length(); ++i ){
+            Napi::Value item = resultArray.Get(i);
+            if ( !item.IsObject() ){
+                continue;
+            }
+            Napi::Object object = item.As<Napi::Object>();
+            Result result;
+            if ( object.Has("requestId") ){
+                result.requestId = object.Get("requestId").As<Napi::String>().Utf8Value();
+            }
+            if ( object.Has("typeExpression") ){
+                result.typeExpression = object.Get("typeExpression").As<Napi::String>().Utf8Value();
+            }
+            Napi::Value importsValue = object.Has("typeImports") ? object.Get("typeImports") : object.Get("imports");
+            if ( importsValue.IsArray() ){
+                Napi::Array imports = importsValue.As<Napi::Array>();
+                for ( uint32_t j = 0; j < imports.Length(); ++j ){
+                    result.typeImports.push_back(imports.Get(j).As<Napi::String>().Utf8Value());
+                }
+            }
+            results.push_back(result);
+        }
+        return results;
+    }
+
+private:
+    Napi::Env m_env;
+    Napi::FunctionReference m_callback;
+};
+
+std::shared_ptr<lv::el::TypeResolver> createResolverFromOptions(Napi::Object& optionsArg){
+    if ( !optionsArg.Has("resolveTypes") ){
+        return nullptr;
+    }
+    Napi::Value resolveTypes = optionsArg.Get("resolveTypes");
+    optionsArg.Delete("resolveTypes");
+    if ( !resolveTypes.IsFunction() ){
+        return nullptr;
+    }
+    return std::make_shared<NapiTypeResolver>(optionsArg.Env(), resolveTypes.As<Napi::Function>());
+}
 
 
 void convertToMLNode(const Napi::Value& v, MLNode& n){
@@ -121,6 +192,7 @@ void compileWrap(const Napi::CallbackInfo& info){
         std::string file = fileArg.Utf8Value();
 
         MLNode compilerOptions;
+        auto typeResolver = createResolverFromOptions(optionsArg);
 
         if ( optionsArg.Has("log") ){
             Napi::Object logOptionsArg = optionsArg.Get("log").As<Napi::Object>();
@@ -140,6 +212,9 @@ void compileWrap(const Napi::CallbackInfo& info){
         lv::el::Compiler::Config config;
         config.initialize(compilerOptions);
         lv::el::Compiler::Ptr compiler = lv::el::Compiler::create(config);
+        if ( typeResolver ){
+            compiler->setTypeResolver(typeResolver.get());
+        }
         std::string scriptFile = Path::resolve(file);
         std::string pluginPath = Path::parent(scriptFile);
 
@@ -224,6 +299,7 @@ void compileModuleWrap(const Napi::CallbackInfo &info){
     try{
         std::string modulePath = modulePathArg.Utf8Value();
         MLNode compilerOptions;
+        auto typeResolver = createResolverFromOptions(optionsArg);
 
         if ( optionsArg.Has("log") ){
             Napi::Object logOptionsArg = optionsArg.Get("log").As<Napi::Object>();
@@ -247,6 +323,9 @@ void compileModuleWrap(const Napi::CallbackInfo &info){
         lv::el::Compiler::Config config;
         config.initialize(compilerOptions);
         lv::el::Compiler::Ptr compiler = lv::el::Compiler::create(config);
+        if ( typeResolver ){
+            compiler->setTypeResolver(typeResolver.get());
+        }
 
         auto module = Module::createFromPath(modulePath);
         Package::Ptr package = Package::createFromPath(module->package());
@@ -313,6 +392,7 @@ Napi::Value createCompilerWrap(const Napi::CallbackInfo &info){
 
     try{
         MLNode compilerOptions;
+        auto typeResolver = createResolverFromOptions(optionsArg);
 
         if ( optionsArg.Has("log") ){
             Napi::Object logOptionsArg = optionsArg.Get("log").As<Napi::Object>();
@@ -340,6 +420,10 @@ Napi::Value createCompilerWrap(const Napi::CallbackInfo &info){
         CompilerAddonData* compilerData = info.Env().GetInstanceData<CompilerAddonData>();
         
         Napi::Object obj = compilerData->CompilerHandleConstructor.New({ externalCompilerPtr });
+        if ( typeResolver ){
+            CompilerHandle* handle = Napi::ObjectWrap<CompilerHandle>::Unwrap(obj);
+            handle->setTypeResolver(typeResolver);
+        }
         Napi::Object result = Napi::Object::New(env);
         result.Set("value", obj);
         return result;
@@ -382,6 +466,10 @@ void runCompilerWrap(const Napi::CallbackInfo &info){
     CompilerHandle* handle = Napi::ObjectWrap<CompilerHandle>::Unwrap(obj);
 
     lv::el::Compiler::Ptr compiler = handle->getInternalInstance();
+    if ( info.Length() > 3 && info[3].IsFunction() ){
+        auto typeResolver = std::make_shared<NapiTypeResolver>(env, info[3].As<Napi::Function>());
+        handle->setTypeResolver(typeResolver);
+    }
     
     Napi::String fileArg = info[1].As<Napi::String>();
 
@@ -456,7 +544,7 @@ void runCompilerWrap(const Napi::CallbackInfo &info){
         err = ob;
     }
 
-    if ( info.Length() > 2 ){
+    if ( info.Length() > 2 && info[2].IsFunction() ){
                 Napi::Function cb = info[2].As<Napi::Function>();
         cb.Call(env.Global(), {res, err});
     }
