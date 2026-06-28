@@ -10869,7 +10869,7 @@
           "name": "input",
           "content": {
             "type": "SYMBOL",
-            "name": "identifier"
+            "name": "flow_parameter"
           }
         },
         {
@@ -10887,7 +10887,7 @@
                   "members": [
                     {
                       "type": "SYMBOL",
-                      "name": "identifier"
+                      "name": "flow_parameter"
                     },
                     {
                       "type": "REPEAT",
@@ -10900,7 +10900,7 @@
                           },
                           {
                             "type": "SYMBOL",
-                            "name": "identifier"
+                            "name": "flow_parameter"
                           }
                         ]
                       }
@@ -10917,6 +10917,27 @@
               "value": ")"
             }
           ]
+        }
+      ]
+    },
+    "flow_parameter": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "FIELD",
+          "name": "name",
+          "content": {
+            "type": "SYMBOL",
+            "name": "identifier"
+          }
+        },
+        {
+          "type": "FIELD",
+          "name": "type",
+          "content": {
+            "type": "SYMBOL",
+            "name": "type_annotation"
+          }
         }
       ]
     },
@@ -11007,10 +11028,10 @@
           "members": [
             {
               "type": "FIELD",
-              "name": "tap",
+              "name": "label",
               "content": {
                 "type": "SYMBOL",
-                "name": "flow_tap"
+                "name": "flow_step_label"
               }
             },
             {
@@ -11031,7 +11052,7 @@
         }
       ]
     },
-    "flow_tap": {
+    "flow_step_label": {
       "type": "SEQ",
       "members": [
         {
@@ -11083,10 +11104,6 @@
         {
           "type": "SYMBOL",
           "name": "flow_literal"
-        },
-        {
-          "type": "SYMBOL",
-          "name": "flow_parenthesized_value"
         },
         {
           "type": "SYMBOL",
@@ -11262,23 +11279,6 @@
         {
           "type": "SYMBOL",
           "name": "flow_object"
-        }
-      ]
-    },
-    "flow_parenthesized_value": {
-      "type": "SEQ",
-      "members": [
-        {
-          "type": "STRING",
-          "value": "("
-        },
-        {
-          "type": "SYMBOL",
-          "name": "_flow_operand"
-        },
-        {
-          "type": "STRING",
-          "value": ")"
         }
       ]
     },
@@ -14183,6 +14183,10 @@
       "property_assignment_expression"
     ],
     [
+      "statement",
+      "object_type"
+    ],
+    [
       "await_expression",
       "binary_expression",
       "instantiation_expression"
@@ -14248,6 +14252,18 @@
       "generator_function"
     ],
     [
+      "flow_parameter",
+      "required_parameter"
+    ],
+    [
+      "flow_parameter",
+      "primary_expression"
+    ],
+    [
+      "pattern",
+      "flow_parameter"
+    ],
+    [
       "flow_parameters",
       "parenthesized_expression"
     ],
@@ -14264,6 +14280,19 @@
       "flow_reference"
     ],
     [
+      "flow_parameter",
+      "flow_reference"
+    ],
+    [
+      "flow_parameters",
+      "formal_parameters"
+    ],
+    [
+      "primary_expression",
+      "pattern",
+      "flow_parameter"
+    ],
+    [
       "primary_expression",
       "pattern",
       "flow_parameters"
@@ -14273,6 +14302,57 @@
       "pattern",
       "primary_type",
       "flow_parameters"
+    ],
+    [
+      "labeled_statement",
+      "_property_name",
+      "flow_parameter"
+    ],
+    [
+      "_property_name",
+      "flow_object_pair"
+    ],
+    [
+      "literal_type",
+      "flow_literal"
+    ],
+    [
+      "object",
+      "object_pattern",
+      "flow_object"
+    ],
+    [
+      "object_pattern",
+      "object_type",
+      "flow_object"
+    ],
+    [
+      "object_type",
+      "flow_object"
+    ],
+    [
+      "tuple_type",
+      "flow_array"
+    ],
+    [
+      "primary_expression",
+      "flow_call"
+    ],
+    [
+      "pattern",
+      "primary_type",
+      "flow_reference"
+    ],
+    [
+      "primary_type",
+      "flow_reference"
+    ],
+    [
+      "primary_expression",
+      "method_definition",
+      "method_signature",
+      "property_signature",
+      "index_signature"
     ],
     [
       "flow_call",
@@ -14289,6 +14369,17 @@
     ],
     [
       "nested_identifier",
+      "flow_reference"
+    ],
+    [
+      "nested_identifier",
+      "nested_type_identifier",
+      "flow_reference"
+    ],
+    [
+      "primary_expression",
+      "nested_identifier",
+      "nested_type_identifier",
       "flow_reference"
     ],
     [
@@ -15045,6 +15136,16 @@
       {
         "type": "SYMBOL",
         "name": "method_signature"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "lexical_declaration"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "primary_type"
       }
     ]
   ],

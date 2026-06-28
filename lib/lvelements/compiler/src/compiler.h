@@ -22,6 +22,7 @@
 #include "live/fileio.h"
 #include "live/package.h"
 #include "live/module.h"
+#include <map>
 
 namespace lv{
 
@@ -52,6 +53,14 @@ public:
             JS_DTS
         };
 
+        enum class FlowCall {
+            Create,
+            Call,
+            Return,
+            Ref,
+            Member
+        };
+
         Config(
             bool fileOutput = true,
             const std::string& outputExtension = ".js",
@@ -63,6 +72,8 @@ public:
         void addImplicitType(const std::string& typeName);
         void addImportPath(const std::string& path);
         void setBaseComponent(const std::string& name, const std::string& importUri);
+        void setFlowModule(const std::string& path, const std::string& name);
+        void setFlowCall(FlowCall role, const std::string& callee);
         void initialize(const MLNode& config);
         void allowUnresolvedTypes(bool allow){ m_allowUnresolved = allow; }
         void outputTarget(OutputTarget target) { m_outputTarget = target; }
@@ -78,6 +89,9 @@ public:
         std::list<std::string> m_importPaths;
         std::string            m_importLocalPath;
         std::string            m_packageBuildPath;
+        std::string            m_flowModulePath;
+        std::string            m_flowModuleName;
+        std::map<FlowCall, std::string> m_flowCalls;
         bool                   m_enableJsImports;
         bool                   m_enableComponentMetaInfo;
         bool                   m_allowUnresolved;

@@ -22,6 +22,7 @@
 
 #include "live/elements/compiler/languageparser.h"
 #include "live/elements/compiler/compiler.h"
+#include <cctype>
 
 using namespace lv;
 using namespace lv::el;
@@ -62,6 +63,66 @@ void testFileParseOutput(const std::string& name, const std::string& contents, C
         vlog().e() << conversion;
     }
     REQUIRE(compare.isEqual());
+}
+
+void testFlowFileParse(const std::string& name){
+    static FileIO fileIO;
+    static std::string scriptPath = Path::join(Path::parent(lv::ApplicationContext::instance().applicationFilePath()), "data");
+
+    const std::string contents = fileIO.readFromFile(Path::join(scriptPath, name + ".lv"));
+    auto normalize = [](const std::string& value) {
+        std::string result;
+        for ( char ch : value ){
+            if ( !std::isspace(static_cast<unsigned char>(ch)) ){
+                result.push_back(ch);
+            }
+        }
+        return result;
+    };
+
+    auto runExpectation = [&](const std::string& suffix, const std::string& actual) {
+        const auto expectationPath = Path::join(scriptPath, name + ".lv" + suffix);
+        const auto expectedContent = fileIO.readFromFile(expectationPath);
+        const std::string normalizedActual = normalize(actual);
+        const std::string normalizedExpected = normalize(expectedContent);
+        if ( normalizedActual != normalizedExpected ){
+            vlog().e() << "File: " << name << ".lv" << suffix;
+            vlog().e() << actual;
+        }
+        REQUIRE(normalizedActual == normalizedExpected);
+    };
+
+    Compiler::Config jsConfig(false);
+    jsConfig.allowUnresolvedTypes(true);
+    jsConfig.outputTarget(Compiler::Config::OutputTarget::JS);
+    jsConfig.setFlowModule("flow/flow.mjs", "Flow");
+    jsConfig.setFlowCall(Compiler::Config::FlowCall::Create, "Flow.create");
+    jsConfig.setFlowCall(Compiler::Config::FlowCall::Call, "Flow.call");
+    jsConfig.setFlowCall(Compiler::Config::FlowCall::Return, "Flow.ret");
+    jsConfig.setFlowCall(Compiler::Config::FlowCall::Ref, "Flow.ref");
+    jsConfig.setFlowCall(Compiler::Config::FlowCall::Member, "Flow.member");
+
+    Compiler::Ptr jsCompiler = Compiler::create(jsConfig);
+    jsCompiler->configureImplicitType("console");
+    jsCompiler->configureImplicitType("vlog");
+    Compiler::TargetResult jsResult = jsCompiler->compileToTarget(Path::join(scriptPath, name + ".lv"), contents);
+    runExpectation(".js", jsResult.js);
+
+    Compiler::Config dtsConfig(false);
+    dtsConfig.allowUnresolvedTypes(true);
+    dtsConfig.outputTarget(Compiler::Config::OutputTarget::JS_DTS);
+    dtsConfig.setFlowModule("flow/flow.mjs", "Flow");
+    dtsConfig.setFlowCall(Compiler::Config::FlowCall::Create, "Flow.create");
+    dtsConfig.setFlowCall(Compiler::Config::FlowCall::Call, "Flow.call");
+    dtsConfig.setFlowCall(Compiler::Config::FlowCall::Return, "Flow.ret");
+    dtsConfig.setFlowCall(Compiler::Config::FlowCall::Ref, "Flow.ref");
+    dtsConfig.setFlowCall(Compiler::Config::FlowCall::Member, "Flow.member");
+
+    Compiler::Ptr dtsCompiler = Compiler::create(dtsConfig);
+    dtsCompiler->configureImplicitType("console");
+    dtsCompiler->configureImplicitType("vlog");
+    Compiler::TargetResult dtsResult = dtsCompiler->compileToTarget(Path::join(scriptPath, name + ".lv"), contents);
+    runExpectation(".d.ts", dtsResult.dts);
 }
 
 void testFileParse(const std::string& name){
@@ -177,5 +238,6 @@ TEST_CASE( "Parse Test", "[Parse]" ) {
     SECTION("TS Declarations Test"){ testFileParse("ParserTest53"); }
     SECTION("Root Functions"){ testFileParse("ParserTest54"); }
     SECTION("Meta Root Functions"){ testFileParse("ParserTest55"); }
+    SECTION("Flow Literals"){ testFlowFileParse("ParserTest56"); }
 
 }

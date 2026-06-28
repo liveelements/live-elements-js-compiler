@@ -26,6 +26,31 @@
 
 namespace lv{ namespace el {
 
+namespace {
+
+bool flowCallFromString(const std::string& role, Compiler::Config::FlowCall& out){
+    if ( role == "create" )      out = Compiler::Config::FlowCall::Create;
+    else if ( role == "call" )   out = Compiler::Config::FlowCall::Call;
+    else if ( role == "return" ) out = Compiler::Config::FlowCall::Return;
+    else if ( role == "ref" )    out = Compiler::Config::FlowCall::Ref;
+    else if ( role == "member" ) out = Compiler::Config::FlowCall::Member;
+    else return false;
+    return true;
+}
+
+BaseNode::ConversionContext::FlowCall toConversionFlowCall(Compiler::Config::FlowCall role){
+    switch ( role ){
+    case Compiler::Config::FlowCall::Create: return BaseNode::ConversionContext::FlowCall::Create;
+    case Compiler::Config::FlowCall::Call:   return BaseNode::ConversionContext::FlowCall::Call;
+    case Compiler::Config::FlowCall::Return: return BaseNode::ConversionContext::FlowCall::Return;
+    case Compiler::Config::FlowCall::Ref:    return BaseNode::ConversionContext::FlowCall::Ref;
+    case Compiler::Config::FlowCall::Member: return BaseNode::ConversionContext::FlowCall::Member;
+    }
+    return BaseNode::ConversionContext::FlowCall::Create;
+}
+
+} // namespace
+
 class CompilerPrivate{
 public:
     CompilerPrivate(const Compiler::Config& pconfig) : config(pconfig), packageGraph(nullptr){}
@@ -55,6 +80,11 @@ public:
         ctx->jsImportsEnabled = config.m_enableJsImports;
         ctx->componentPath = componentPath;
         ctx->relativePathFromBuild = relativePathFromBuild;
+        ctx->flowModulePath = config.m_flowModulePath;
+        ctx->flowModuleName = config.m_flowModuleName;
+        for ( const auto& flowCall : config.m_flowCalls ){
+            ctx->flowCalls[toConversionFlowCall(flowCall.first)] = flowCall.second;
+        }
         if ( config.componentMetaInfoEnabled() ){
             if ( module && module->context() && !(module->context()->importId.isEmpty()) ){
                 ctx->outputComponentMeta = true;
@@ -116,6 +146,8 @@ Compiler::TargetResult Compiler::compileToTarget(const std::string &path, const 
     auto ctx = m_d->createConversionContext();
     root->collectImportTypes(contents, ctx);
     delete ctx;
+
+    root->checkFlowReferences(contents);
 
     result = compileToTarget(path, contents, root);
 
@@ -509,6 +541,15 @@ void Compiler::Config::setBaseComponent(const std::string &name, const std::stri
     m_baseComponentUri = importUri;
 }
 
+void Compiler::Config::setFlowModule(const std::string &path, const std::string &name){
+    m_flowModulePath = path;
+    m_flowModuleName = name;
+}
+
+void Compiler::Config::setFlowCall(FlowCall role, const std::string &callee){
+    m_flowCalls[role] = callee;
+}
+
 void Compiler::Config::initialize(const MLNode &config){
     if ( config.hasKey("baseComponent") ){
         std::string baseComponent = config["baseComponent"].asString();
@@ -538,6 +579,22 @@ void Compiler::Config::initialize(const MLNode &config){
     }
     if ( config.hasKey("packageBuildPath") ){
         m_packageBuildPath = config["packageBuildPath"].asString();
+    }
+    if ( config.hasKey("flowModulePath") ){
+        m_flowModulePath = config["flowModulePath"].asString();
+    }
+    if ( config.hasKey("flowModuleName") ){
+        m_flowModuleName = config["flowModuleName"].asString();
+    }
+    if ( config.hasKey("flowCalls") ){
+        MLNode::ObjectType calls = config["flowCalls"].asObject();
+        for ( auto it = calls.begin(); it != calls.end(); ++it ){
+            FlowCall role;
+            if ( !flowCallFromString(it->first, role) ){
+                THROW_EXCEPTION(lv::Exception, Utf8("Unknown flow call role '%' in flow configuration.").format(it->first), lv::Exception::toCode("~Flow"));
+            }
+            m_flowCalls[role] = it->second.asString();
+        }
     }
     if ( config.hasKey("outputExtension") ){
         m_outputExtension = "." + config["outputExtension"].asString();

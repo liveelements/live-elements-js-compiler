@@ -4,6 +4,17 @@
 
 namespace lv{ namespace el{
 
+std::string LanguageNodesToJs::lowerFlowCallee(const std::string& source, FlowCallNode* node){
+    std::string callee;
+    for ( IdentifierNode* identifier : node->callee() ){
+        if ( !callee.empty() ){
+            callee += ".";
+        }
+        callee += LanguageNodesToJs::slice(source, identifier);
+    }
+    return callee;
+}
+
 std::string LanguageNodesToJs::indent(int i){
     std::string res;
     res.append(4 * i, ' ');
@@ -76,6 +87,8 @@ void LanguageNodesToJs::convert(BaseNode* node, const std::string &source, std::
         convertInterfaceDeclaration(node->as<InterfaceDeclarationNode>(), source, sections, indentValue, ctx);
     } else if ( node->isNodeType<EnumDeclarationNode>() ){
         convertEnumDeclaration(node->as<EnumDeclarationNode>(), source, sections, indentValue, ctx);
+    } else if ( node->isNodeType<FlowExpressionNode>() ){
+        convertFlowExpression(node->as<FlowExpressionNode>(), source, sections, indentValue, ctx);
     }
     else {
         for ( BaseNode* child : node->children() ){
@@ -123,6 +136,21 @@ void LanguageNodesToJs::convertProgram(ProgramNode *node, const std::string &sou
         *importsCompose << "import " << (node->isObjectImport() ? "{" : "") <<
                            importsNames <<
                            (node->isObjectImport() ? "}" : "") << " from \'" << importPath << "\'\n";
+    }
+
+    if ( node->hasFlows() ){
+        if ( !BaseNode::ConversionContext::flowConfigured(ctx) || ctx->flowModulePath.empty() ){
+            delete importsCompose;
+            THROW_EXCEPTION(lv::Exception, "Flow literal found but flow configuration (flowCalls/flowModuleName) is not set.", lv::Exception::toCode("~Flow"));
+        }
+
+        std::string importPath = ctx->flowModulePath;
+        if ( importPath.length() > 2 && importPath[0] == '.' && (importPath[1] == '.' || importPath[1] == '/') ){
+            if ( !ctx->relativePathFromBuild.empty() ){
+                importPath = ctx->relativePathFromBuild + "/" + importPath;
+            }
+        }
+        *importsCompose << "import {" << ctx->flowModuleName << "} from '" << importPath << "'\n";
     }
 
     if ( ctx && !ctx->baseComponentImportUri.empty() && !ctx->baseComponent.empty() ){
@@ -1617,6 +1645,169 @@ void LanguageNodesToJs::convertEnumDeclaration(EnumDeclarationNode *node, const 
     } else {
         if ( newLineFollows(source, node->endByte()) )
              compose->to++;
+    }
+    sections.push_back(compose);
+}
+
+std::string LanguageNodesToJs::lowerFlowValue(FlowValueNode *node, const std::string &source, BaseNode::ConversionContext *ctx, bool allowCall){
+    if ( node->isNodeType<FlowCallNode>() ){
+        if ( !allowCall ){
+            BaseNode::throwError(node, node->current(), "Nested flow calls are not allowed in argument position.");
+        }
+        FlowCallNode* callNode = node->as<FlowCallNode>();
+        std::string result = BaseNode::ConversionContext::flowCall(ctx, BaseNode::ConversionContext::FlowCall::Call);
+        result += "(" + lowerFlowCallee(source, callNode) + ", [";
+        for ( size_t i = 0; i < callNode->arguments().size(); ++i ){
+            if ( i != 0 ){
+                result += ", ";
+            }
+            result += lowerFlowValue(callNode->arguments()[i], source, ctx, false);
+        }
+        result += "])";
+        return result;
+    }
+
+    if ( node->isNodeType<FlowMemberNode>() ){
+        FlowMemberNode* memberNode = node->as<FlowMemberNode>();
+        std::string result = BaseNode::ConversionContext::flowCall(ctx, BaseNode::ConversionContext::FlowCall::Member);
+        result += "(" + lowerFlowValue(memberNode->base(), source, ctx, false) + ", [";
+        for ( size_t i = 0; i < memberNode->properties().size(); ++i ){
+            if ( i != 0 ){
+                result += ", ";
+            }
+            result += "'" + LanguageNodesToJs::slice(source, memberNode->properties()[i]) + "'";
+        }
+        result += "])";
+        return result;
+    }
+
+    if ( node->isNodeType<FlowReferenceNode>() ){
+        FlowReferenceNode* referenceNode = node->as<FlowReferenceNode>();
+        std::string name = referenceNode->isPrevious() ? "%" : LanguageNodesToJs::slice(source, referenceNode->name());
+        return BaseNode::ConversionContext::flowCall(ctx, BaseNode::ConversionContext::FlowCall::Ref) + "('" + name + "')";
+    }
+
+    if ( node->isNodeType<FlowLiteralNode>() ){
+        FlowLiteralNode* literalNode = node->as<FlowLiteralNode>();
+        if ( literalNode->kind() == FlowLiteralNode::Array ){
+            std::string result = "[";
+            for ( size_t i = 0; i < literalNode->items().size(); ++i ){
+                if ( i != 0 ){
+                    result += ", ";
+                }
+                result += lowerFlowValue(literalNode->items()[i], source, ctx, false);
+            }
+            result += "]";
+            return result;
+        }
+        if ( literalNode->kind() == FlowLiteralNode::Object ){
+            std::string result = "{";
+            for ( size_t i = 0; i < literalNode->objectPairs().size(); ++i ){
+                if ( i != 0 ){
+                    result += ", ";
+                }
+                FlowObjectPairNode* pair = literalNode->objectPairs()[i];
+                result += LanguageNodesToJs::slice(source, pair->key()) + ": " + lowerFlowValue(pair->value(), source, ctx, false);
+            }
+            result += "}";
+            return result;
+        }
+        return LanguageNodesToJs::slice(source, literalNode);
+    }
+
+    if ( node->isNodeType<FlowExpressionNode>() ){
+        return lowerFlowExpression(node->as<FlowExpressionNode>(), source, ctx);
+    }
+
+    BaseNode::throwError(node, node->current(), "Unsupported flow value during lowering.");
+    return "";
+}
+
+std::string LanguageNodesToJs::lowerFlowExpression(FlowExpressionNode *node, const std::string &source, BaseNode::ConversionContext *ctx){
+    std::string params;
+    const std::vector<ParameterNode*>& parameters = node->parameters()->parameters();
+    if ( parameters.size() == 1 ){
+        params = "'" + LanguageNodesToJs::slice(source, parameters[0]->identifier()) + "'";
+    } else {
+        params = "[";
+        for ( size_t i = 0; i < parameters.size(); ++i ){
+            if ( i != 0 ){
+                params += ", ";
+            }
+            params += "'" + LanguageNodesToJs::slice(source, parameters[i]->identifier()) + "'";
+        }
+        params += "]";
+    }
+
+    std::vector<std::string> statements;
+    if ( node->isExpressionBody() ){
+        statements.push_back(BaseNode::ConversionContext::flowCall(ctx, BaseNode::ConversionContext::FlowCall::Return) + "(" + lowerFlowValue(node->body()->as<FlowValueNode>(), source, ctx, true) + ")");
+    } else {
+        for ( FlowStatementNode* statement : node->statements() ){
+            if ( statement->isNodeType<FlowReturnNode>() ){
+                FlowReturnNode* returnNode = statement->as<FlowReturnNode>();
+                statements.push_back(BaseNode::ConversionContext::flowCall(ctx, BaseNode::ConversionContext::FlowCall::Return) + "(" + lowerFlowValue(returnNode->value(), source, ctx, true) + ")");
+                continue;
+            }
+
+            FlowStepNode* step = statement->as<FlowStepNode>();
+            FlowCallNode* callNode = step->expression()->as<FlowCallNode>();
+            std::string stepCode = BaseNode::ConversionContext::flowCall(ctx, BaseNode::ConversionContext::FlowCall::Call);
+            stepCode += "(" + lowerFlowCallee(source, callNode) + ", [";
+            for ( size_t i = 0; i < callNode->arguments().size(); ++i ){
+                if ( i != 0 ){
+                    stepCode += ", ";
+                }
+                stepCode += lowerFlowValue(callNode->arguments()[i], source, ctx, false);
+            }
+            stepCode += "]";
+
+            if ( step->label() ){
+                stepCode += ", '" + LanguageNodesToJs::slice(source, step->label()) + "'";
+            } else if ( !step->order().empty() ){
+                stepCode += ", null";
+            }
+
+            if ( !step->order().empty() ){
+                stepCode += ", [";
+                for ( size_t i = 0; i < step->order().size(); ++i ){
+                    if ( i != 0 ){
+                        stepCode += ", ";
+                    }
+                    stepCode += "'" + LanguageNodesToJs::slice(source, step->order()[i]) + "'";
+                }
+                stepCode += "]";
+            }
+
+            stepCode += ")";
+            statements.push_back(stepCode);
+        }
+    }
+
+    std::string result = BaseNode::ConversionContext::flowCall(ctx, BaseNode::ConversionContext::FlowCall::Create);
+    result += "(" + params + ", [";
+    for ( size_t i = 0; i < statements.size(); ++i ){
+        if ( i != 0 ){
+            result += ", ";
+        }
+        result += statements[i];
+    }
+    result += "])";
+    return result;
+}
+
+void LanguageNodesToJs::convertFlowExpression(FlowExpressionNode *node, const std::string &source, std::vector<ElementsInsertion *> &sections, int indentValue, BaseNode::ConversionContext *ctx){
+    if ( !BaseNode::ConversionContext::flowConfigured(ctx) ){
+        THROW_EXCEPTION(lv::Exception, "Flow literal found but flow configuration (flowCalls/flowModuleName) is not set.", lv::Exception::toCode("~Flow"));
+    }
+
+    ElementsInsertion* compose = new ElementsInsertion;
+    compose->from = node->startByte();
+    compose->to = node->endByte();
+    if ( ctx && ctx->outputTarget == BaseNode::ConversionContext::DTS ){
+        *compose << " " << ctx->flowModuleName;
+    } else {
+        *compose << " " << lowerFlowExpression(node, source, ctx);
     }
     sections.push_back(compose);
 }

@@ -2461,10 +2461,6 @@
           "named": true
         },
         {
-          "type": "flow_parenthesized_value",
-          "named": true
-        },
-        {
           "type": "flow_reference",
           "named": true
         }
@@ -2493,10 +2489,6 @@
         },
         {
           "type": "flow_member",
-          "named": true
-        },
-        {
-          "type": "flow_parenthesized_value",
           "named": true
         },
         {
@@ -2577,10 +2569,6 @@
           },
           {
             "type": "flow_member",
-            "named": true
-          },
-          {
-            "type": "flow_parenthesized_value",
             "named": true
           },
           {
@@ -2735,10 +2723,6 @@
             "named": true
           },
           {
-            "type": "flow_parenthesized_value",
-            "named": true
-          },
-          {
             "type": "flow_reference",
             "named": true
           }
@@ -2763,6 +2747,32 @@
     }
   },
   {
+    "type": "flow_parameter",
+    "named": true,
+    "fields": {
+      "name": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      },
+      "type": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "type_annotation",
+            "named": true
+          }
+        ]
+      }
+    }
+  },
+  {
     "type": "flow_parameters",
     "named": true,
     "fields": {
@@ -2771,7 +2781,7 @@
         "required": false,
         "types": [
           {
-            "type": "identifier",
+            "type": "flow_parameter",
             "named": true
           }
         ]
@@ -2782,42 +2792,7 @@
       "required": false,
       "types": [
         {
-          "type": "identifier",
-          "named": true
-        }
-      ]
-    }
-  },
-  {
-    "type": "flow_parenthesized_value",
-    "named": true,
-    "fields": {},
-    "children": {
-      "multiple": false,
-      "required": true,
-      "types": [
-        {
-          "type": "flow_call",
-          "named": true
-        },
-        {
-          "type": "flow_expression",
-          "named": true
-        },
-        {
-          "type": "flow_literal",
-          "named": true
-        },
-        {
-          "type": "flow_member",
-          "named": true
-        },
-        {
-          "type": "flow_parenthesized_value",
-          "named": true
-        },
-        {
-          "type": "flow_reference",
+          "type": "flow_parameter",
           "named": true
         }
       ]
@@ -2879,10 +2854,6 @@
             "named": true
           },
           {
-            "type": "flow_parenthesized_value",
-            "named": true
-          },
-          {
             "type": "flow_reference",
             "named": true
           }
@@ -2934,11 +2905,17 @@
             "named": true
           },
           {
-            "type": "flow_parenthesized_value",
-            "named": true
-          },
-          {
             "type": "flow_reference",
+            "named": true
+          }
+        ]
+      },
+      "label": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "flow_step_label",
             "named": true
           }
         ]
@@ -2952,21 +2929,11 @@
             "named": true
           }
         ]
-      },
-      "tap": {
-        "multiple": false,
-        "required": false,
-        "types": [
-          {
-            "type": "flow_tap",
-            "named": true
-          }
-        ]
       }
     }
   },
   {
-    "type": "flow_tap",
+    "type": "flow_step_label",
     "named": true,
     "fields": {
       "name": {

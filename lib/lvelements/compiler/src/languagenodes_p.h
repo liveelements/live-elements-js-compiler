@@ -84,6 +84,17 @@ class CommentNode;
 class TypeAliasDeclarationNode;
 class InterfaceDeclarationNode;
 class EnumDeclarationNode;
+class FlowStatementNode;
+class FlowValueNode;
+class FlowExpressionNode;
+class FlowReturnNode;
+class FlowStepNode;
+class FlowCallNode;
+class FlowMemberNode;
+class FlowReferenceNode;
+class FlowLiteralNode;
+class FlowObjectPairKeyNode;
+class FlowObjectPairNode;
 
 class BaseNode{
 
@@ -99,6 +110,14 @@ public:
             DTS
         };
 
+        enum class FlowCall {
+            Create,
+            Call,
+            Return,
+            Ref,
+            Member
+        };
+
         ConversionContext() : jsImportsEnabled(true), allowUnresolved(true), outputComponentMeta(false), outputTarget(JS){}
 
         std::string baseComponent;
@@ -109,12 +128,17 @@ public:
         std::string componentPath;
         std::string relativePathFromBuild;
         std::string currentImportUri;
+        std::string flowModulePath;
+        std::string flowModuleName;
+        std::map<FlowCall, std::string> flowCalls;
         bool        outputComponentMeta;
         OutputTarget outputTarget;
 
         static std::string baseComponentName(ConversionContext* ctx);
         static std::string baseComponentImport(ConversionContext* ctx);
         static bool isImplicitType(ConversionContext* ctx, const std::string& type);
+        static std::string flowCall(ConversionContext* ctx, FlowCall role);
+        static bool flowConfigured(ConversionContext* ctx);
     };
 
 public:
@@ -145,8 +169,11 @@ public:
 
     virtual void collectImports(const std::string& source, std::vector<IdentifierNode *> &identifiers, ConversionContext* ctx = nullptr);
 
+    virtual void checkFlowReferences(const std::string& source);
+
     static std::string slice(const std::string& source, uint32_t start, uint32_t end);
     static std::string slice(const std::string& source, BaseNode* node);
+    static std::string slice(const std::string& source, const TSNode& node);
 
     static JsBlockNode* addToDeclarations(BaseNode* parent, IdentifierNode* idNode);
     static JsBlockNode* addUsedIdentifier(BaseNode* parent, IdentifierNode* idNode);
@@ -160,6 +187,7 @@ public:
     static std::vector<IdentifierNode*> fromNestedIdentifier(BaseNode* parent, const TSNode& node);
     static ParameterListNode* scanFormalParameters(BaseNode* parent, const TSNode& formalParameters);
     static ParameterListNode* scanFormalTypeParameters(BaseNode* parent, const TSNode& formalParameters);
+    static ParameterListNode* scanFlowParameters(BaseNode* parent, const TSNode& parameters);
     static BaseNode* resolveBindingBase(BaseNode* node);
 
     static void assertValid(BaseNode* from, const TSNode& node, const std::string& message);
@@ -227,6 +255,11 @@ private:
     static TypeAliasDeclarationNode*       visitTypeAliasDeclaration(BaseNode* parent, const TSNode& node);
     static InterfaceDeclarationNode*       visitInterfaceDeclaration(BaseNode* parent, const TSNode& node);
     static EnumDeclarationNode*            visitEnumDeclaration(BaseNode* parent, const TSNode& node);
+    static FlowExpressionNode*             visitFlowExpression(BaseNode* parent, const TSNode& node);
+    static FlowStatementNode*              buildFlowStatement(BaseNode* parent, const TSNode& node);
+    static FlowValueNode*                  buildFlowValue(BaseNode* parent, const TSNode& node);
+    static FlowLiteralNode*                buildFlowLiteral(BaseNode* parent, const TSNode& node);
+    static FlowObjectPairNode*             buildFlowObjectPair(BaseNode* parent, const TSNode& node);
 
     static VariableDeclarationNode* visitDeclarationForm(BaseNode * parent, const TSNode & node, int form);
 
@@ -341,6 +374,8 @@ public:
     std::string importTypesString() const;
 
     void addImportType(const ImportType& t);
+    bool hasFlows() const { return m_hasFlows; }
+    void setHasFlows(bool value){ m_hasFlows = value; }
 
 protected:
     virtual void addChild(BaseNode *child);
@@ -357,6 +392,187 @@ private:
     bool                       m_importTypesCollected;
     std::map<std::string, std::map<std::string, ImportType> > m_importTypes;
     std::vector<NewComponentExpressionNode*> m_idComponents;
+    bool                       m_hasFlows = false;
+};
+
+class FlowStatementNode : public BaseNode{
+    friend class BaseNode;
+    LANGUAGE_NODE_INFO(FlowStatementNode);
+public:
+    FlowStatementNode(const TSNode& node, const LanguageNodeInfo::ConstPtr& ni = FlowStatementNode::nodeInfo()) : BaseNode(node, ni){}
+};
+
+class FlowValueNode : public BaseNode{
+    friend class BaseNode;
+    LANGUAGE_NODE_INFO(FlowValueNode);
+public:
+    FlowValueNode(const TSNode& node, const LanguageNodeInfo::ConstPtr& ni = FlowValueNode::nodeInfo()) : BaseNode(node, ni){}
+
+    static std::string flowCallRoleName(BaseNode::ConversionContext::FlowCall role);
+};
+
+class FlowExpressionNode : public FlowValueNode{
+    friend class BaseNode;
+    LANGUAGE_NODE_INFO(FlowExpressionNode);
+public:
+    FlowExpressionNode(const TSNode& node)
+        : FlowValueNode(node, FlowExpressionNode::nodeInfo())
+        , m_body(nullptr)
+        , m_expressionBody(false)
+        , m_parenthesized(false)
+    {}
+
+    ParameterListNode* parameters() const{ return m_parameters; }
+    BaseNode* body() const{ return m_body; }
+    const std::vector<FlowStatementNode*>& statements() const{ return m_statements; }
+    bool isExpressionBody() const{ return m_expressionBody; }
+    bool isParenthesized() const{ return m_parenthesized; }
+    void setParenthesized(bool value){ m_parenthesized = value; }
+
+    virtual void collectImports(const std::string& source, std::vector<IdentifierNode *> &identifiers, ConversionContext* ctx = nullptr);
+    virtual void checkFlowReferences(const std::string& source);
+
+private:
+    ParameterListNode*           m_parameters = nullptr;
+    BaseNode*                    m_body;
+    std::vector<FlowStatementNode*> m_statements;
+    bool                         m_expressionBody;
+    bool                         m_parenthesized;
+};
+
+class FlowReturnNode : public FlowStatementNode{
+    friend class BaseNode;
+    LANGUAGE_NODE_INFO(FlowReturnNode);
+public:
+    FlowReturnNode(const TSNode& node)
+        : FlowStatementNode(node, FlowReturnNode::nodeInfo())
+        , m_value(nullptr)
+    {}
+
+    FlowValueNode* value() const{ return m_value; }
+
+private:
+    FlowValueNode* m_value;
+};
+
+class FlowStepNode : public FlowStatementNode{
+    friend class BaseNode;
+    LANGUAGE_NODE_INFO(FlowStepNode);
+public:
+    FlowStepNode(const TSNode& node)
+        : FlowStatementNode(node, FlowStepNode::nodeInfo())
+        , m_expression(nullptr)
+    {}
+
+    FlowValueNode* expression() const{ return m_expression; }
+    IdentifierNode* label() const{ return m_label; }
+    const std::vector<IdentifierNode*>& order() const{ return m_order; }
+
+private:
+    FlowValueNode*                m_expression;
+    IdentifierNode*               m_label = nullptr;
+    std::vector<IdentifierNode*>  m_order;
+};
+
+class FlowCallNode : public FlowValueNode{
+    friend class BaseNode;
+    LANGUAGE_NODE_INFO(FlowCallNode);
+public:
+    FlowCallNode(const TSNode& node)
+        : FlowValueNode(node, FlowCallNode::nodeInfo())
+    {}
+
+    const std::vector<IdentifierNode*>& callee() const{ return m_callee; }
+    const std::vector<FlowValueNode*>& arguments() const{ return m_arguments; }
+    virtual void collectImports(const std::string& source, std::vector<IdentifierNode *> &identifiers, ConversionContext* ctx = nullptr);
+
+private:
+    std::vector<IdentifierNode*> m_callee;
+    std::vector<FlowValueNode*>  m_arguments;
+};
+
+class FlowMemberNode : public FlowValueNode{
+    friend class BaseNode;
+    LANGUAGE_NODE_INFO(FlowMemberNode);
+public:
+    FlowMemberNode(const TSNode& node)
+        : FlowValueNode(node, FlowMemberNode::nodeInfo())
+        , m_base(nullptr)
+    {}
+
+    FlowReferenceNode* base() const{ return m_base; }
+    const std::vector<IdentifierNode*>& properties() const{ return m_properties; }
+
+private:
+    FlowReferenceNode*             m_base;
+    std::vector<IdentifierNode*>   m_properties;
+};
+
+class FlowReferenceNode : public FlowValueNode{
+    friend class BaseNode;
+    LANGUAGE_NODE_INFO(FlowReferenceNode);
+public:
+    FlowReferenceNode(const TSNode& node)
+        : FlowValueNode(node, FlowReferenceNode::nodeInfo())
+    {}
+
+    IdentifierNode* name() const{ return m_name; }
+    bool isPrevious() const{ return m_isPrevious; }
+
+private:
+    IdentifierNode* m_name = nullptr;
+    bool            m_isPrevious = false;
+};
+
+class FlowObjectPairKeyNode : public BaseNode{
+    friend class BaseNode;
+    LANGUAGE_NODE_INFO(FlowObjectPairKeyNode);
+public:
+    FlowObjectPairKeyNode(const TSNode& node)
+        : BaseNode(node, FlowObjectPairKeyNode::nodeInfo())
+    {}
+};
+
+class FlowObjectPairNode : public BaseNode{
+    friend class BaseNode;
+    LANGUAGE_NODE_INFO(FlowObjectPairNode);
+public:
+    FlowObjectPairNode(const TSNode& node)
+        : BaseNode(node, FlowObjectPairNode::nodeInfo())
+        , m_value(nullptr)
+    {}
+
+    FlowObjectPairKeyNode* key() const{ return m_key; }
+    FlowValueNode* value() const{ return m_value; }
+
+private:
+    FlowObjectPairKeyNode* m_key = nullptr;
+    FlowValueNode*         m_value;
+};
+
+class FlowLiteralNode : public FlowValueNode{
+    friend class BaseNode;
+    LANGUAGE_NODE_INFO(FlowLiteralNode);
+public:
+    enum Kind {
+        Primitive,
+        Array,
+        Object
+    };
+
+    FlowLiteralNode(const TSNode& node)
+        : FlowValueNode(node, FlowLiteralNode::nodeInfo())
+        , m_kind(Primitive)
+    {}
+
+    Kind kind() const{ return m_kind; }
+    const std::vector<FlowValueNode*>& items() const{ return m_items; }
+    const std::vector<FlowObjectPairNode*>& objectPairs() const{ return m_objectPairs; }
+
+private:
+    Kind                           m_kind;
+    std::vector<FlowValueNode*>    m_items;
+    std::vector<FlowObjectPairNode*> m_objectPairs;
 };
 
 class IdentifierNode : public BaseNode{
