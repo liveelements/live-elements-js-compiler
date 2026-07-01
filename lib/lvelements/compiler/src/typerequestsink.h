@@ -2,6 +2,7 @@
 #define LVTYPEREQUESTSINK_H
 
 #include "typeresolver.h"
+#include "live/sourcelocation.h"
 #include <map>
 #include <set>
 #include <string>
@@ -15,17 +16,19 @@ namespace el{
 
 class LV_ELEMENTS_COMPILER_EXPORT TypeRequestSink {
 public:
-    class TypeSlot {
-    public:
-        std::string outputKey;
-        std::string marker;
-    };
-
     class GeneratedTypeOutput {
     public:
         std::string outputPath;
         std::string content;
         bool writeToFile = false;
+    };
+
+    class PendingRequest {
+    public:
+        TypeResolver::Request request;
+        std::string outputKey;
+        std::string marker;
+        SourceRangeLocation sourceLocation;
     };
 
     void setResolver(TypeResolver* resolver);
@@ -34,7 +37,8 @@ public:
     void recordTypeRequest(
         const TypeResolver::Request& request,
         const std::string& outputKey,
-        const std::string& marker);
+        const std::string& marker,
+        const SourceRangeLocation& sourceLocation);
 
     void storeGeneratedTypeOutput(
         const std::string& outputKey,
@@ -53,8 +57,7 @@ private:
     static std::string injectTypeImports(const std::string& js, const std::set<std::string>& imports, const std::string& modulePath);
 
     TypeResolver* m_resolver = nullptr;
-    std::vector<TypeResolver::Request> m_pendingRequests;
-    std::map<std::string, TypeSlot> m_slots;
+    std::vector<PendingRequest> m_pending;
     std::map<std::string, GeneratedTypeOutput> m_outputs;
 };
 

@@ -1,0 +1,3 @@
+@fn number(): int {
+    return 1
+}

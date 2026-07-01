@@ -213,6 +213,23 @@ void FlowExpressionNode::collectImports(const std::string &source, std::vector<I
     }
 }
 
+std::vector<FlowExpressionNode*> FlowExpressionNode::collectFlowExpressions(BaseNode* node){
+    std::vector<FlowExpressionNode*> flows;
+    if ( !node ){
+        return flows;
+    }
+
+    if ( node->isNodeType<FlowExpressionNode>() ){
+        flows.push_back(node->as<FlowExpressionNode>());
+    }
+
+    for ( BaseNode* child : node->children() ){
+        std::vector<FlowExpressionNode*> childFlows = FlowExpressionNode::collectFlowExpressions(child);
+        flows.insert(flows.end(), childFlows.begin(), childFlows.end());
+    }
+    return flows;
+}
+
 void FlowCallNode::collectImports(const std::string &source, std::vector<IdentifierNode *> &identifiers, ConversionContext *ctx){
     for ( FlowValueNode* argument : m_arguments ){
         argument->collectImports(source, identifiers, ctx);
@@ -948,6 +965,11 @@ FlowExpressionNode* BaseNode::visitFlowExpression(BaseNode* parent, const TSNode
 
     expressionNode->m_parameters = BaseNode::scanFlowParameters(expressionNode, parameters);
     expressionNode->addChild(expressionNode->m_parameters);
+
+    TSNode returnType = BaseNode::nodeChildByFieldName(parameters, "return");
+    if ( !ts_node_is_null(returnType) ){
+        expressionNode->m_returnType = expressionNode->addCreatedChild(new TypeNode(returnType));
+    }
 
     TSNode body = BaseNode::nodeChildByFieldName(node, "body");
     BaseNode::assertValid(parent, body, "Flow body is missing.");

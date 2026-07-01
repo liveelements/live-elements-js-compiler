@@ -1,5 +1,6 @@
 #include "languagenodestojs_p.h"
 #include "live/exception.h"
+#include "live/path.h"
 #include "live/visuallog.h"
 
 namespace lv{ namespace el{
@@ -19,6 +20,173 @@ std::string LanguageNodesToJs::indent(int i){
     std::string res;
     res.append(4 * i, ' ');
     return res;
+}
+
+std::string LanguageNodesToJs::rebaseImportPathFromBuild(const std::string& rawImportPath, BaseNode::ConversionContext* ctx){
+    if ( !ctx || rawImportPath.length() <= 2 ){
+        return rawImportPath;
+    }
+
+    if ( rawImportPath[0] == '.' && (rawImportPath[1] == '.' || rawImportPath[1] == '/') ){
+        if ( !ctx->relativePathFromBuild.empty() ){
+            return ctx->relativePathFromBuild + "/" + rawImportPath;
+        }
+    }
+    return rawImportPath;
+}
+
+std::string LanguageNodesToJs::renderProgramHeader(ProgramNode* node, const std::string& source, BaseNode::ConversionContext* ctx){
+    if ( !node ){
+        return std::string();
+    }
+
+    if ( ctx && !ctx->jsImportsEnabled && !node->jsImports().empty() ){
+        THROW_EXCEPTION(lv::Exception, "Javascript imports are not enabled.", lv::Exception::toCode("~Enabled"));
+    }
+
+    if ( node->hasFlows() ){
+        if ( !BaseNode::ConversionContext::flowConfigured(ctx) || ctx->flowModulePath.empty() ){
+            THROW_EXCEPTION(lv::Exception, "Flow literal found but flow configuration (flowCalls/flowModuleName) is not set.", lv::Exception::toCode("~Flow"));
+        }
+    }
+
+    if ( ctx && !ctx->baseComponentImportUri.empty() && !ctx->baseComponent.empty() ){
+        ProgramNode::ImportType it;
+        it.name = ctx->baseComponent;
+        it.resolvedPath = ctx->baseComponentImportUri;
+        node->addImportType(it);
+    }
+
+    ElementsInsertion compose;
+    for ( JsImportNode* jsImport : node->jsImports() ){
+        std::string importNames;
+        for ( IdentifierNode* nameNode : jsImport->importNames() ){
+            if ( !importNames.empty() ){
+                importNames += ",";
+            }
+            importNames += LanguageNodesToJs::slice(source, nameNode);
+        }
+
+        std::string importPath = LanguageNodesToJs::slice(source, jsImport->importPath());
+        if ( importPath.length() > 2 ){
+            importPath = importPath.substr(1, importPath.length() - 2);
+        }
+        importPath = LanguageNodesToJs::rebaseImportPathFromBuild(importPath, ctx);
+
+        compose << "import " << (jsImport->isObjectImport() ? "{" : "")
+                << importNames
+                << (jsImport->isObjectImport() ? "}" : "")
+                << " from '" << importPath << "'\n";
+    }
+
+    if ( node->hasFlows() ){
+        std::string importPath = LanguageNodesToJs::rebaseImportPathFromBuild(ctx->flowModulePath, ctx);
+        compose << "import {" << ctx->flowModuleName << "} from '" << importPath << "'\n";
+    }
+
+    for ( auto it = node->importTypes().begin(); it != node->importTypes().end(); ++it ){
+        if ( it->first.empty() ){
+            for ( auto impIt = it->second.begin(); impIt != it->second.end(); ++impIt ){
+                if ( !ctx->allowUnresolved && impIt->second.resolvedPath.empty() ){
+                    THROW_EXCEPTION(
+                        lv::Exception,
+                        Utf8("Identifier not found in imports: \'%\' in %:%:%").format(impIt->second.name, node->filePath(), impIt->second.location.line(), impIt->second.location.column()),
+                        lv::Exception::toCode("~Identifier")
+                    );
+                }
+                std::string impPath = impIt->second.resolvedPath.empty() ? "__UNRESOLVED__" : impIt->second.resolvedPath;
+                if ( ctx && ctx->outputTarget == BaseNode::ConversionContext::DTS && impPath == "__UNRESOLVED__" ){
+                    continue;
+                }
+                compose << "import {" << impIt->second.name << "} from '" << impPath << "'\n";
+            }
+        } else {
+            std::string moduleWrap = "let " + it->first + " = {";
+            for ( auto impIt = it->second.begin(); impIt != it->second.end(); ++impIt ){
+                if ( !ctx->allowUnresolved && impIt->second.resolvedPath.empty() ){
+                    THROW_EXCEPTION(
+                        lv::Exception,
+                        Utf8("Identifier not found in imports: \'%\' in %:%:%").format(impIt->second.name, node->filePath(), impIt->second.location.line(), impIt->second.location.column()),
+                        lv::Exception::toCode("~Identifier")
+                    );
+                }
+                std::string impPath = impIt->second.resolvedPath.empty() ? "__UNRESOLVED__" : impIt->second.resolvedPath;
+                if ( ctx && ctx->outputTarget == BaseNode::ConversionContext::DTS && impPath == "__UNRESOLVED__" ){
+                    continue;
+                }
+                std::string impKey = "__" + it->first + "__" + impIt->second.name;
+                std::string impName = impIt->second.name;
+
+                if ( impIt != it->second.begin() ){
+                    moduleWrap += ", ";
+                }
+                moduleWrap += impIt->second.name + ":" + impKey;
+
+                compose << "import {" << impName << " as " << impKey << "} from '" << impPath << "'\n";
+            }
+            moduleWrap += "}\n";
+            compose << moduleWrap;
+        }
+    }
+
+    std::vector<std::string> parts;
+    compose.flatten(source, parts);
+
+    std::string result;
+    for ( const std::string& part : parts ){
+        result += part;
+    }
+    return result;
+}
+
+std::string LanguageNodesToJs::shadowFlowSourcePath(const std::string& sourcePath){
+    if ( sourcePath.empty() ){
+        return std::string();
+    }
+    return Path::join(Path::parent(sourcePath), Path::baseName(sourcePath) + ".__lvflow.ts");
+}
+
+std::string LanguageNodesToJs::buildFlowShadowDeclaration(
+    const std::string& source,
+    ProgramNode* program,
+    BaseNode::ConversionContext* ctx)
+{
+    if ( !program ){
+        return std::string();
+    }
+
+    BaseNode::ConversionContext dtsCtx = *ctx;
+    dtsCtx.outputTarget = BaseNode::ConversionContext::DTS;
+
+    std::string shadowSource = renderProgramHeader(program, source, &dtsCtx);
+    if ( !shadowSource.empty() && shadowSource.back() != '\n' ){
+        shadowSource += "\n";
+    }
+
+    std::vector<FlowExpressionNode*> flows = FlowExpressionNode::collectFlowExpressions(program);
+
+    for ( FlowExpressionNode* flow : flows ){
+        const std::string flowFunctionName = "__lvflow_" + std::to_string(flow->startByte());
+        shadowSource += "declare function " + flowFunctionName + "(";
+        const std::vector<ParameterNode*>& parameters = flow->parameters()->parameters();
+        for ( size_t i = 0; i < parameters.size(); ++i ){
+            if ( i != 0 ){
+                shadowSource += ", ";
+            }
+            shadowSource += slice(source, parameters[i]->identifier());
+            shadowSource += ": ";
+            shadowSource += TypeNode::sliceWithoutAnnotation(source, parameters[i]->type());
+        }
+        shadowSource += ")";
+        if ( flow->returnType() ){
+            shadowSource += slice(source, flow->returnType());
+        } else {
+            shadowSource += ": any";
+        }
+        shadowSource += ";\n";
+    }
+
+    return shadowSource;
 }
 
 LanguageNodesToJs::LanguageNodesToJs(){
@@ -98,11 +266,6 @@ void LanguageNodesToJs::convert(BaseNode* node, const std::string &source, std::
 }
 
 void LanguageNodesToJs::convertProgram(ProgramNode *node, const std::string &source, std::vector<ElementsInsertion *> &sections, int indentValue, BaseNode::ConversionContext *ctx){
-
-    if ( ctx && !ctx->jsImportsEnabled && !node->jsImports().empty() ){
-        THROW_EXCEPTION(lv::Exception, "Javascript imports are not enabled.", lv::Exception::toCode("~Enabled"));
-    }
-
     ElementsInsertion* importsCompose = new ElementsInsertion;
     importsCompose->from = 0;
     int to = 0;
@@ -115,100 +278,18 @@ void LanguageNodesToJs::convertProgram(ProgramNode *node, const std::string &sou
             to = node->endByte();
     }
     importsCompose->to = to;
-
-    for ( JsImportNode* node : node->jsImports() ){
-        std::string importsNames;
-        for ( IdentifierNode* nameNode : node->importNames() ){
-            if ( !importsNames.empty() )
-                importsNames += ",";
-            importsNames += slice(source, nameNode);
-        }
-
-        std::string importPath = slice(source, node->importPath());
-        if ( importPath.length() > 2 )
-            importPath = importPath.substr(1, importPath.length() - 2);
-        if ( ctx && importPath.length() > 2 ){
-            if ( !ctx->relativePathFromBuild.empty() && importPath[0] == '.' && (importPath[1] == '.' || importPath[1] == '/') ){
-                importPath = ctx->relativePathFromBuild + "/" + importPath;
-            }
-        }
-
-        *importsCompose << "import " << (node->isObjectImport() ? "{" : "") <<
-                           importsNames <<
-                           (node->isObjectImport() ? "}" : "") << " from \'" << importPath << "\'\n";
-    }
-
-    if ( node->hasFlows() ){
-        if ( !BaseNode::ConversionContext::flowConfigured(ctx) || ctx->flowModulePath.empty() ){
-            delete importsCompose;
-            THROW_EXCEPTION(lv::Exception, "Flow literal found but flow configuration (flowCalls/flowModuleName) is not set.", lv::Exception::toCode("~Flow"));
-        }
-
-        std::string importPath = ctx->flowModulePath;
-        if ( importPath.length() > 2 && importPath[0] == '.' && (importPath[1] == '.' || importPath[1] == '/') ){
-            if ( !ctx->relativePathFromBuild.empty() ){
-                importPath = ctx->relativePathFromBuild + "/" + importPath;
-            }
-        }
-        *importsCompose << "import {" << ctx->flowModuleName << "} from '" << importPath << "'\n";
-    }
-
-    if ( ctx && !ctx->baseComponentImportUri.empty() && !ctx->baseComponent.empty() ){
-        ProgramNode::ImportType it;
-        it.name = ctx->baseComponent;
-        it.resolvedPath = ctx->baseComponentImportUri;
-        node->addImportType(it);
-    }
-
-    for ( auto it = node->importTypes().begin(); it != node->importTypes().end(); ++it ){
-        if ( it->first.empty() ){
-            for ( auto impIt = it->second.begin(); impIt != it->second.end(); ++ impIt ){
-                if ( !ctx->allowUnresolved && impIt->second.resolvedPath.empty() ){
-                    delete importsCompose;
-                    THROW_EXCEPTION(
-                        lv::Exception, 
-                        Utf8("Identifier not found in imports: \'%\' in %:%:%").format(impIt->second.name, node->filePath(), impIt->second.location.line(), impIt->second.location.column()), 
-                        lv::Exception::toCode("~Identifier")
-                    );
-                }
-                std::string impPath = impIt->second.resolvedPath.empty() ? "__UNRESOLVED__" : impIt->second.resolvedPath;
-                if (ctx && ctx->outputTarget == BaseNode::ConversionContext::DTS && impPath == "__UNRESOLVED__") {
-                    continue;
-                }
-                *importsCompose << ("import {" + impIt->second.name + "} from '" + impPath + "'\n");
-            }
-        } else {
-            std::string moduleWrap = "let " + it->first + " = {";
-            for ( auto impIt = it->second.begin(); impIt != it->second.end(); ++ impIt ){
-                if ( !ctx->allowUnresolved && impIt->second.resolvedPath.empty() ){
-                    delete importsCompose;
-                    THROW_EXCEPTION(
-                        lv::Exception, 
-                        Utf8("Identifier not found in imports: \'%\' in %:%:%").format(impIt->second.name, node->filePath(), impIt->second.location.line(), impIt->second.location.column()), 
-                        lv::Exception::toCode("~Identifier")
-                    );
-                }
-                std::string impPath = impIt->second.resolvedPath.empty() ? "__UNRESOLVED__" : impIt->second.resolvedPath;
-                if (ctx && ctx->outputTarget == BaseNode::ConversionContext::DTS && impPath == "__UNRESOLVED__") {
-                    continue;
-                }
-                std::string impKey = "__" + it->first + "__" + impIt->second.name;
-                std::string impName = impIt->second.name;
-
-                if ( impIt != it->second.begin() )
-                    moduleWrap += ", ";
-                moduleWrap += impIt->second.name + ":" + impKey;
-
-                *importsCompose << ("import {" + impName + " as " + impKey + "} from '" + impPath + "'\n");
-            }
-            moduleWrap += "}\n";
-            *importsCompose << moduleWrap;
-        }
-    }
+    *importsCompose << renderProgramHeader(node, source, ctx);
 
     sections.push_back(importsCompose);
 
     size_t offset = sections.size();
+
+    if ( ctx && ctx->typeResolutionEnabled && ctx->typeRequestSink
+         && !ctx->typeResolutionKey.empty()
+         && ctx->outputTarget == BaseNode::ConversionContext::JS
+         && node->hasFlows() ){
+        ctx->flowShadowSourceText = buildFlowShadowDeclaration(source, node, ctx);
+    }
 
     for ( BaseNode* child: node->exports() )
         convert(child, source, sections, indentValue, ctx);
@@ -1483,7 +1564,7 @@ void LanguageNodesToJs::convertRootFunction(
 
         if ( funcNode->isMeta() ){
             std::string fnName = slice(source, funcNode->name());
-            *compose << indent(indentValue) << fnName << ".Meta = {\n";
+            *compose << "\n" << indent(indentValue) << fnName << ".Meta = {\n";
             *compose << indent(indentValue + 1)
                      << "get sourceFileName(){ return \'" << Path::name(ctx->componentPath) << "\' },\n";
             if ( !ctx->currentImportUri.empty() ){
@@ -1493,8 +1574,9 @@ void LanguageNodesToJs::convertRootFunction(
             if ( ctx->typeResolutionEnabled && ctx->typeRequestSink && !ctx->typeResolutionKey.empty() ){
                 std::string requestId = ctx->componentPath + "::" + fnName;
                 std::string marker = "/*@@LVTYPE:" + requestId + "@@*/undefined";
-                TypeResolver::Request request{requestId, ctx->typeResolutionDtsPath, fnName};
-                ctx->typeRequestSink->recordTypeRequest(request, ctx->typeResolutionKey, marker);
+                TypeResolver::Request request(requestId, ctx->typeResolutionSourcePath, "", fnName);
+                SourceRangeLocation loc = BaseNode::nodeSourceLocation(funcNode, funcNode->current());
+                ctx->typeRequestSink->recordTypeRequest(request, ctx->typeResolutionKey, marker, loc);
                 *compose << indent(indentValue + 1)
                          << "get type(){ return " << marker << " },\n";
             }
@@ -1773,7 +1855,7 @@ std::string LanguageNodesToJs::lowerFlowExpression(FlowExpressionNode *node, con
             if ( step->label() ){
                 stepCode += ", '" + LanguageNodesToJs::slice(source, step->label()) + "'";
             } else if ( !step->order().empty() ){
-                stepCode += ", null";
+                stepCode += ", undefined";
             }
 
             if ( !step->order().empty() ){
@@ -1792,8 +1874,29 @@ std::string LanguageNodesToJs::lowerFlowExpression(FlowExpressionNode *node, con
         }
     }
 
+    std::string typesArg = "undefined";
+
+    if ( ctx->typeResolutionEnabled && ctx->typeRequestSink && !ctx->typeResolutionKey.empty()
+         && ctx->outputTarget == BaseNode::ConversionContext::JS ){
+        std::string key = std::to_string(node->startByte());
+        std::string requestId = ctx->componentPath + "::flow@" + key;
+        std::string marker = "/*@@LVTYPE:" + requestId + "@@*/undefined";
+        std::string functionName = "__lvflow_" + key;
+
+        TypeResolver::Request request(
+            requestId,
+            LanguageNodesToJs::shadowFlowSourcePath(ctx->typeResolutionSourcePath),
+            ctx->flowShadowSourceText,
+            functionName
+        );
+        SourceRangeLocation loc = BaseNode::nodeSourceLocation(node, node->current());
+
+        ctx->typeRequestSink->recordTypeRequest(request, ctx->typeResolutionKey, marker, loc);
+        typesArg = marker;
+    }
+
     std::string result = BaseNode::ConversionContext::flowCall(ctx, BaseNode::ConversionContext::FlowCall::Create);
-    result += "(" + params + ", [";
+    result += "(" + params + ", " + typesArg + ", [";
     for ( size_t i = 0; i < statements.size(); ++i ){
         if ( i != 0 ){
             result += ", ";

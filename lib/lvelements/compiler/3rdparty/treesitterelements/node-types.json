@@ -2785,6 +2785,16 @@
             "named": true
           }
         ]
+      },
+      "return": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "type_annotation",
+            "named": true
+          }
+        ]
       }
     },
     "children": {

@@ -5,6 +5,7 @@ add_test(NAME lvbasetest COMMAND lvbasetest)
 
 add_output_files(lvelementscompilertest_data ${CMAKE_CURRENT_SOURCE_DIR}/data  ${CMAKE_CURRENT_BINARY_DIR}/data lvelementscompilertest_data_sources)
 target_sources(lvelementscompilertest PRIVATE ${lvelementscompilertest_data_sources})
+add_dependencies(lvelementscompilertest lvelementscompilertest_data)
 
 if(CATCH2_AMALGAMATED_PATH)
     target_compile_definitions(lvelementscompilertest PRIVATE CATCH_AMALGAMATED_CUSTOM_MAIN)
@@ -18,6 +19,8 @@ target_include_directories(lvelementscompilertest PRIVATE "${CMAKE_CURRENT_SOURC
 target_sources(lvelementscompilertest PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/main.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/parsetest.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/typetest.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/flowtest.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/parseerrortest.cpp"
 )
 
@@ -38,7 +41,4 @@ endif()
 if (WIN32 AND (NOT BUILD_LVBASE_STATIC) AND (NOT BUILD_LVELEMENTSCOMPILER_STATIC))
     copy_file_list(LVELEMENTSCOMPILER_TEST_COPY "${LIBRARY_DEPLOY_PATH}/lvbase.dll;${LIBRARY_DEPLOY_PATH}/lvelementscompiler.dll" ${CMAKE_CURRENT_BINARY_DIR})
 endif()
-
-
-
 

@@ -74,7 +74,7 @@ public:
             const std::string& componentPath = "",
             const std::string& relativePathFromBuild = "",
             const std::string& typeResolutionKey = "",
-            const std::string& typeResolutionDtsPath = "")
+            const std::string& typeResolutionSourcePath = "")
     {
         BaseNode::ConversionContext* ctx = new BaseNode::ConversionContext;
         ctx->implicitTypes = config.m_implicitTypes;
@@ -91,7 +91,7 @@ public:
         ctx->typesModulePath = config.m_typesModulePath;
         ctx->flowModuleName = config.m_flowModuleName;
         ctx->typeResolutionKey = typeResolutionKey;
-        ctx->typeResolutionDtsPath = typeResolutionDtsPath;
+        ctx->typeResolutionSourcePath = typeResolutionSourcePath;
         ctx->typeRequestSink = currentRun ? &currentRun->sink() : nullptr;
         ctx->typeResolutionEnabled = currentRun && currentRun->sink().hasResolver();
         for ( const auto& flowCall : config.m_flowCalls ){
@@ -178,8 +178,8 @@ Compiler::TargetResult Compiler::compileToTarget(const std::string &path, const 
         section->to   = static_cast<int>(contents.size());
 
         const std::string outputKey = path + extension;
-        const std::string dtsPath = path + ".d.ts";
-        auto ctx = m_d->createConversionContext(target, nullptr, path, "", outputKey, dtsPath);
+        const std::string typeResolutionSourcePath = path + ".d.ts";
+        auto ctx = m_d->createConversionContext(target, nullptr, path, "", outputKey, typeResolutionSourcePath);
 
         LanguageNodesToJs lnt;
         lnt.convert(node, contents, section->m_children, 0, ctx);
@@ -278,14 +278,14 @@ Compiler::TargetResult Compiler::compileModuleFileToTarget(const Module::Ptr &mo
         section->to   = static_cast<int>(contents.size());
 
         std::string outputFile = outputPath.data() + extension;
-        std::string dtsPath = outputPath.data() + ".d.ts";
+        std::string typeResolutionSourcePath = outputPath.data() + ".d.ts";
         auto ctx = m_d->createConversionContext(
             target,
             module,
             path,
             relativePathFromOutput.data(),
             outputFile,
-            dtsPath
+            typeResolutionSourcePath
         );
         LanguageNodesToJs lnt;
         lnt.convert(node, contents, section->m_children, 0, ctx);

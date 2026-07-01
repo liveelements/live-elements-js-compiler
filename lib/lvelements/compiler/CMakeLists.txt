@@ -13,6 +13,7 @@ set_target_properties(lvelementscompiler PROPERTIES
 target_sources(lvelementscompiler PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/src/compiler.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/compilerun.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/diagnostic.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/typerequestsink.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/cursorcontext.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/elementsmodule.cpp"

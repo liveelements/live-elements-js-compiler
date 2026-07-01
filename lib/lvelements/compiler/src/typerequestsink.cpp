@@ -14,6 +14,7 @@
 ****************************************************************************/
 
 #include "typerequestsink.h"
+#include "languageparser.h"
 #include "live/fileio.h"
 #include <sstream>
 
@@ -30,10 +31,10 @@ bool TypeRequestSink::hasResolver() const{
 void TypeRequestSink::recordTypeRequest(
     const TypeResolver::Request& request,
     const std::string& outputKey,
-    const std::string& marker)
+    const std::string& marker,
+    const SourceRangeLocation& sourceLocation)
 {
-    m_pendingRequests.push_back(request);
-    m_slots[request.requestId] = TypeSlot{outputKey, marker};
+    m_pending.push_back(PendingRequest{request, outputKey, marker, sourceLocation});
 }
 
 void TypeRequestSink::storeGeneratedTypeOutput(
@@ -54,8 +55,8 @@ const TypeRequestSink::GeneratedTypeOutput* TypeRequestSink::generatedOutput(con
 }
 
 bool TypeRequestSink::hasPendingFor(const std::string& outputKey) const{
-    for ( const auto& slot : m_slots ){
-        if ( slot.second.outputKey == outputKey ){
+    for ( const PendingRequest& pending : m_pending ){
+        if ( pending.outputKey == outputKey ){
             return true;
         }
     }
@@ -115,30 +116,59 @@ std::string TypeRequestSink::injectTypeImports(const std::string& js, const std:
 }
 
 void TypeRequestSink::finalize(FileIOInterface* fileIO, const std::string& typesModulePath){
-    if ( !m_resolver || m_pendingRequests.empty() ){
+    if ( !m_resolver || m_pending.empty() ){
         return;
     }
 
-    auto results = m_resolver->resolve(m_pendingRequests);
+    std::vector<TypeResolver::Request> requests;
+    requests.reserve(m_pending.size());
+    for ( const PendingRequest& pending : m_pending ){
+        requests.push_back(pending.request);
+    }
+
+    std::vector<TypeResolver::Result> results = m_resolver->resolve(requests);
+    if ( results.size() != m_pending.size() ){
+        THROW_EXCEPTION(lv::Exception, "Type resolver returned an unexpected number of results.", Exception::toCode("~TypeResolve"));
+    }
+
     std::map<std::string, std::set<std::string>> outputImports;
 
-    for ( const TypeResolver::Result& resolved : results ){
-        auto slotIt = m_slots.find(resolved.requestId);
-        if ( slotIt == m_slots.end() ){
-            continue;
+    for ( size_t i = 0; i < m_pending.size(); ++i ){
+        const PendingRequest& pending = m_pending[i];
+        const TypeResolver::Result& resolved = results[i];
+
+        if ( resolved.requestId() != pending.request.requestId() ){
+            THROW_EXCEPTION(lv::Exception, "Type resolver returned results out of request order.", Exception::toCode("~TypeResolve"));
         }
-        auto outputIt = m_outputs.find(slotIt->second.outputKey);
+
+        if ( resolved.hasError() ){
+            const Diagnostic* diagnostic = nullptr;
+            for ( const Diagnostic& candidate : resolved.diagnostics() ){
+                if ( candidate.severity() == Diagnostic::Severity::Error ){
+                    diagnostic = &candidate;
+                    break;
+                }
+            }
+            throw SyntaxException(
+                diagnostic ? diagnostic->message() : "Type resolution failed.",
+                Exception::toCode(diagnostic && !diagnostic->code().empty() ? diagnostic->code() : "~TypeResolve"),
+                pending.sourceLocation,
+                SOURCE_TRACE()
+            );
+        }
+
+        auto outputIt = m_outputs.find(pending.outputKey);
         if ( outputIt == m_outputs.end() ){
             continue;
         }
         outputIt->second.content = substituteResolvedType(
             outputIt->second.content,
-            slotIt->second.marker,
-            resolved.typeExpression
+            pending.marker,
+            resolved.typeExpression()
         );
-        outputImports[slotIt->second.outputKey].insert(
-            resolved.typeImports.begin(),
-            resolved.typeImports.end()
+        outputImports[pending.outputKey].insert(
+            resolved.typeImports().begin(),
+            resolved.typeImports().end()
         );
     }
 

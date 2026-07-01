@@ -157,6 +157,14 @@ public:
 
 private:
     static std::string indent(int i);
+    static std::string rebaseImportPathFromBuild(const std::string& rawImportPath, BaseNode::ConversionContext* ctx);
+    static std::string renderProgramHeader(ProgramNode* node, const std::string& source, BaseNode::ConversionContext* ctx);
+    static std::string shadowFlowSourcePath(const std::string& sourcePath);
+    static std::string buildFlowShadowDeclaration(
+        const std::string& source,
+        ProgramNode* program,
+        BaseNode::ConversionContext* ctx
+    );
     static std::string getDTSPropertyType(const std::string& source, BaseNode* propOrAss, int indt);
     static std::string getDTSEventType(const std::string& source, EventDeclarationNode* edn);
     static std::string escapeForDoubleQuotedJsString(const std::string& input);

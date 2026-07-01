@@ -1,0 +1,7 @@
+import {add} from './math.mjs'
+
+fn build(): any {
+    const first = (a: int, b: int) %> add(a, b)
+    const second = item: string %> item
+    return [first, second]
+}

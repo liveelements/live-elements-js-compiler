@@ -134,9 +134,10 @@ public:
         std::string flowModuleName;
         std::map<FlowCall, std::string> flowCalls;
         std::string typeResolutionKey;
-        std::string typeResolutionDtsPath;
+        std::string typeResolutionSourcePath;
         TypeRequestSink* typeRequestSink = nullptr;
         bool        typeResolutionEnabled = false;
+        std::string flowShadowSourceText;
         bool        outputComponentMeta;
         OutputTarget outputTarget;
 
@@ -429,6 +430,7 @@ public:
     {}
 
     ParameterListNode* parameters() const{ return m_parameters; }
+    TypeNode* returnType() const{ return m_returnType; }
     BaseNode* body() const{ return m_body; }
     const std::vector<FlowStatementNode*>& statements() const{ return m_statements; }
     bool isExpressionBody() const{ return m_expressionBody; }
@@ -438,8 +440,11 @@ public:
     virtual void collectImports(const std::string& source, std::vector<IdentifierNode *> &identifiers, ConversionContext* ctx = nullptr);
     virtual void checkFlowReferences(const std::string& source);
 
+    static std::vector<FlowExpressionNode*> collectFlowExpressions(BaseNode* node);
+
 private:
     ParameterListNode*           m_parameters = nullptr;
+    TypeNode*                    m_returnType = nullptr;
     BaseNode*                    m_body;
     std::vector<FlowStatementNode*> m_statements;
     bool                         m_expressionBody;
