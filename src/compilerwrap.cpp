@@ -45,41 +45,114 @@ public:
         Napi::Array requestArray = Napi::Array::New(m_env, requests.size());
         for ( size_t i = 0; i < requests.size(); ++i ){
             Napi::Object request = Napi::Object::New(m_env);
-            request.Set("requestId", requests[i].requestId);
-            request.Set("dtsPath", requests[i].dtsPath);
-            request.Set("functionName", requests[i].functionName);
+            request.Set("requestId", requests[i].requestId());
+            request.Set("sourcePath", requests[i].sourcePath());
+            if ( !requests[i].sourceText().empty() ){
+                request.Set("sourceText", requests[i].sourceText());
+            }
+            request.Set("functionName", requests[i].functionName());
             requestArray.Set(i, request);
         }
 
         Napi::Value value = m_callback.Call(m_env.Global(), {requestArray});
-        std::vector<Result> results;
         if ( !value.IsArray() ){
-            return results;
+            THROW_EXCEPTION(lv::Exception, "Type resolver callback must return an array.", Exception::toCode("~TypeResolve"));
         }
 
         Napi::Array resultArray = value.As<Napi::Array>();
-        results.reserve(resultArray.Length());
+        if ( resultArray.Length() != requests.size() ){
+            THROW_EXCEPTION(lv::Exception, "Type resolver callback returned a mismatched number of results.", Exception::toCode("~TypeResolve"));
+        }
+
+        std::vector<Result> results(requests.size());
         for ( uint32_t i = 0; i < resultArray.Length(); ++i ){
             Napi::Value item = resultArray.Get(i);
             if ( !item.IsObject() ){
-                continue;
+                THROW_EXCEPTION(lv::Exception, "Type resolver callback returned a non-object result.", Exception::toCode("~TypeResolve"));
             }
             Napi::Object object = item.As<Napi::Object>();
+            if ( !object.Has("requestId") || !object.Get("requestId").IsString() ){
+                THROW_EXCEPTION(lv::Exception, "Type resolver result is missing a string requestId.", Exception::toCode("~TypeResolve"));
+            }
+
             Result result;
-            if ( object.Has("requestId") ){
-                result.requestId = object.Get("requestId").As<Napi::String>().Utf8Value();
+            result.setRequestId(object.Get("requestId").As<Napi::String>().Utf8Value());
+            if ( result.requestId() != requests[i].requestId() ){
+                THROW_EXCEPTION(lv::Exception, "Type resolver result requestId does not match its input request.", Exception::toCode("~TypeResolve"));
             }
+
             if ( object.Has("typeExpression") ){
-                result.typeExpression = object.Get("typeExpression").As<Napi::String>().Utf8Value();
+                Napi::Value typeExpression = object.Get("typeExpression");
+                if ( !typeExpression.IsString() ){
+                    THROW_EXCEPTION(lv::Exception, "Type resolver result typeExpression must be a string.", Exception::toCode("~TypeResolve"));
+                }
+                result.setTypeExpression(typeExpression.As<Napi::String>().Utf8Value());
             }
+
             Napi::Value importsValue = object.Has("typeImports") ? object.Get("typeImports") : object.Get("imports");
-            if ( importsValue.IsArray() ){
+            if ( !importsValue.IsUndefined() && !importsValue.IsNull() ){
+                if ( !importsValue.IsArray() ){
+                    THROW_EXCEPTION(lv::Exception, "Type resolver result typeImports must be an array.", Exception::toCode("~TypeResolve"));
+                }
                 Napi::Array imports = importsValue.As<Napi::Array>();
                 for ( uint32_t j = 0; j < imports.Length(); ++j ){
-                    result.typeImports.push_back(imports.Get(j).As<Napi::String>().Utf8Value());
+                    Napi::Value importValue = imports.Get(j);
+                    if ( !importValue.IsString() ){
+                        THROW_EXCEPTION(lv::Exception, "Type resolver result typeImports entries must be strings.", Exception::toCode("~TypeResolve"));
+                    }
+                    result.addTypeImport(importValue.As<Napi::String>().Utf8Value());
                 }
             }
-            results.push_back(result);
+
+            if ( object.Has("diagnostics") ){
+                Napi::Value diagnosticsValue = object.Get("diagnostics");
+                if ( !diagnosticsValue.IsArray() ){
+                    THROW_EXCEPTION(lv::Exception, "Type resolver result diagnostics must be an array.", Exception::toCode("~TypeResolve"));
+                }
+
+                Napi::Array diagnostics = diagnosticsValue.As<Napi::Array>();
+                for ( uint32_t j = 0; j < diagnostics.Length(); ++j ){
+                    Napi::Value diagnosticValue = diagnostics.Get(j);
+                    if ( !diagnosticValue.IsObject() ){
+                        THROW_EXCEPTION(lv::Exception, "Type resolver diagnostics entries must be objects.", Exception::toCode("~TypeResolve"));
+                    }
+
+                    Napi::Object diagnostic = diagnosticValue.As<Napi::Object>();
+                    if ( !diagnostic.Has("severity") || !diagnostic.Get("severity").IsString() ){
+                        THROW_EXCEPTION(lv::Exception, "Type resolver diagnostic severity must be a string.", Exception::toCode("~TypeResolve"));
+                    }
+                    if ( !diagnostic.Has("message") || !diagnostic.Get("message").IsString() ){
+                        THROW_EXCEPTION(lv::Exception, "Type resolver diagnostic message must be a string.", Exception::toCode("~TypeResolve"));
+                    }
+
+                    std::string severityString = diagnostic.Get("severity").As<Napi::String>().Utf8Value();
+                    el::Diagnostic::Severity severity = el::Diagnostic::Severity::Error;
+                    if ( severityString == "error" ){
+                        severity = el::Diagnostic::Severity::Error;
+                    } else if ( severityString == "warning" ){
+                        severity = el::Diagnostic::Severity::Warning;
+                    } else {
+                        THROW_EXCEPTION(lv::Exception, "Type resolver diagnostic severity must be 'error' or 'warning'.", Exception::toCode("~TypeResolve"));
+                    }
+
+                    std::string code;
+                    if ( diagnostic.Has("code") ){
+                        Napi::Value codeValue = diagnostic.Get("code");
+                        if ( !codeValue.IsString() ){
+                            THROW_EXCEPTION(lv::Exception, "Type resolver diagnostic code must be a string.", Exception::toCode("~TypeResolve"));
+                        }
+                        code = codeValue.As<Napi::String>().Utf8Value();
+                    }
+
+                    result.addDiagnostic(el::Diagnostic(
+                        severity,
+                        code,
+                        diagnostic.Get("message").As<Napi::String>().Utf8Value()
+                    ));
+                }
+            }
+
+            results[i] = result;
         }
         return results;
     }
@@ -89,12 +162,11 @@ private:
     Napi::FunctionReference m_callback;
 };
 
-std::shared_ptr<lv::el::TypeResolver> createResolverFromOptions(Napi::Object& optionsArg){
+std::shared_ptr<lv::el::TypeResolver> createResolverFromOptions(const Napi::Object& optionsArg){
     if ( !optionsArg.Has("resolveTypes") ){
         return nullptr;
     }
     Napi::Value resolveTypes = optionsArg.Get("resolveTypes");
-    optionsArg.Delete("resolveTypes");
     if ( !resolveTypes.IsFunction() ){
         return nullptr;
     }
@@ -113,6 +185,8 @@ void convertToMLNode(const Napi::Value& v, MLNode& n){
         }
     } else if ( v.IsString() ){
         n = MLNode(v.As<Napi::String>().Utf8Value());
+    } else if ( v.IsFunction() ){
+        n = MLNode();
     } else if ( v.IsObject() ){
         Napi::Object vo = v.As<Napi::Object>();
         n = MLNode(MLNode::Type::Object);

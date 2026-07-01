@@ -4,7 +4,7 @@ function(add_output_files target_name from_path to_path target_sources)
     list(APPEND ADD_DEPENDENCIES_OUTPUT "")
     list(APPEND ADD_DEPENDENCIES_SOURCE "")
 
-    file(GLOB FILES_TO_ADD LIST_DIRECTORIES false ${from_path}/*)
+    file(GLOB FILES_TO_ADD CONFIGURE_DEPENDS LIST_DIRECTORIES false ${from_path}/*)
 
     foreach(FILE_TO_ADD IN LISTS FILES_TO_ADD)
         get_filename_component(FILE_TO_ADD_NAME ${FILE_TO_ADD} NAME)
