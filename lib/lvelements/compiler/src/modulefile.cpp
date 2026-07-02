@@ -323,7 +323,7 @@ ModuleFile *ModuleFile::createFromProgramNode(ElementsModule *module, const std:
                 expression->name()->startByte(),
                 expression->name()->endByte() - expression->name()->startByte()
             );
-            ExportDescriptor expt(name, ExportDescriptor::Function);
+            ExportDescriptor expt(name, ExportDescriptor::Function, expression->isMeta());
             descriptor->addExport(expt);
         }
     }
