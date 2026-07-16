@@ -877,9 +877,12 @@ public:
         : TypedMethodDeclarationNode(node, TypedFunctionDeclarationNode::nodeInfo())
     {}
     void setMeta(bool value){ m_meta = value; }
+    void setDeclared(bool value){ m_declared = value; }
     bool isMeta() const{ return m_meta; }
+    bool isDeclared() const{ return m_declared; }
 private:
     bool m_meta = false;
+    bool m_declared = false;
 };
 
 class PropertyAccessorDeclarationNode : public TypedMethodDeclarationNode{

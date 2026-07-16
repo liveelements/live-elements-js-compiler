@@ -1,0 +1,5 @@
+declare @fn add(a:int, b:int): int
+
+declare fn zero(): int
+
+declare async @fn load(name:string): string

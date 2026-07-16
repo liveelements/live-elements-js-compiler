@@ -18,8 +18,8 @@
 
 namespace lv{ namespace el{
 
-ExportDescriptor::ExportDescriptor(const Utf8& name, ExportDescriptor::Kind kind, bool meta)
-    : m_name(name), m_kind(kind), m_meta(meta)
+ExportDescriptor::ExportDescriptor(const Utf8& name, ExportDescriptor::Kind kind, bool meta, bool declared)
+    : m_name(name), m_kind(kind), m_meta(meta), m_declared(declared)
 {}
 
 Utf8 ExportDescriptor::kindString() const{
@@ -63,7 +63,8 @@ ModuleFileDescriptor::Ptr ModuleFileDescriptor::createFromMLNode(const MLNode &n
     for ( auto it = exports.begin(); it != exports.end(); ++it ){
         ExportDescriptor::Kind kind = ExportDescriptor::kindFromString((*it)["kind"].asString());
         bool meta = (*it).hasKey("meta") ? (*it)["meta"].asBool() : false;
-        mfd->m_exports.push_back(ExportDescriptor((*it)["name"].asString(), kind, meta));
+        bool declared = (*it).hasKey("declared") ? (*it)["declared"].asBool() : false;
+        mfd->m_exports.push_back(ExportDescriptor((*it)["name"].asString(), kind, meta, declared));
     }
 
     MLNode::ArrayType deps = node["dependencies"].asArray();
@@ -95,6 +96,9 @@ MLNode ModuleFileDescriptor::toMLNode() const
         expt["kind"] = it->kindString().data();
         if ( it->meta() ){
             expt["meta"] = true;
+        }
+        if ( it->declared() ){
+            expt["declared"] = true;
         }
         exports.append(expt);
     }

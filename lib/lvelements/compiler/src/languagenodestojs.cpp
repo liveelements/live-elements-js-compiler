@@ -1556,11 +1556,17 @@ void LanguageNodesToJs::convertRootFunction(
     }
 
     if (ctx->outputTarget == BaseNode::ConversionContext::JS) {
-        JSSection* jssection = new JSSection;
-        jssection->from = funcNode->body()->startByte();
-        jssection->to   = funcNode->body()->endByte();
-        convert(funcNode->body(), source, jssection->m_children, indentValue + 1, ctx);
-        *compose << " " << jssection;
+        if ( funcNode->isDeclared() ){
+            *compose << " {\n";
+            *compose << indent(indentValue + 1) << "throw new Error('Function not implemented')\n";
+            *compose << indent(indentValue) << "}";
+        } else {
+            JSSection* jssection = new JSSection;
+            jssection->from = funcNode->body()->startByte();
+            jssection->to   = funcNode->body()->endByte();
+            convert(funcNode->body(), source, jssection->m_children, indentValue + 1, ctx);
+            *compose << " " << jssection;
+        }
 
         if ( funcNode->isMeta() ){
             std::string fnName = slice(source, funcNode->name());
@@ -1570,6 +1576,10 @@ void LanguageNodesToJs::convertRootFunction(
             if ( !ctx->currentImportUri.empty() ){
                 *compose << indent(indentValue + 1)
                          << "get module(){ return \'" << ctx->currentImportUri << "\' },\n";
+            }
+            if ( funcNode->isDeclared() ){
+                *compose << indent(indentValue + 1)
+                         << "get declared(){ return true },\n";
             }
             if ( ctx->typeResolutionEnabled && ctx->typeRequestSink && !ctx->typeResolutionKey.empty() ){
                 std::string requestId = ctx->componentPath + "::" + fnName;

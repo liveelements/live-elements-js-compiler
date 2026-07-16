@@ -31,11 +31,12 @@ public:
     };
 
 public:
-    ExportDescriptor(const Utf8& name, Kind kind, bool meta = false);
+    ExportDescriptor(const Utf8& name, Kind kind, bool meta = false, bool declared = false);
 
     const Utf8& name() const{ return m_name; }
     Kind kind() const{ return m_kind; }
     bool meta() const{ return m_meta; }
+    bool declared() const{ return m_declared; }
 
     Utf8 kindString() const;
     static Kind kindFromString(const Utf8& str);
@@ -44,6 +45,7 @@ private:
     Utf8 m_name;
     Kind m_kind;
     bool m_meta = false;
+    bool m_declared = false;
 };
 
 class LV_ELEMENTS_COMPILER_EXPORT ModuleLibraryDescriptor{

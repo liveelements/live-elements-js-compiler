@@ -23,6 +23,7 @@
 #include "live/utf8.h"
 
 #include "live/elements/compiler/compiler.h"
+#include "live/elements/compiler/languagedescriptors.h"
 #include "live/elements/compiler/typerequestsink.h"
 #include "live/elements/compiler/typeresolver.h"
 #include <map>
@@ -423,5 +424,49 @@ TEST_CASE("Type Resolution", "[TypeResolution]"){
         const std::string jsContents = fileIO.readFromFile(outputJsPath);
         REQUIRE(jsContents.find("FunctionType.for(Type.number, Type.number, Type.number)") != std::string::npos);
         REQUIRE(jsContents.find("/*@@LVTYPE:") == std::string::npos);
+    }
+
+    SECTION("Declared meta root functions reuse type resolution and mark descriptors"){
+        FileIO fileIO;
+        const std::string name = "TypeTest08";
+        const std::string sourcePath = Path::join(typeTestDataPath(), name + ".lv");
+        const std::string contents = fileIO.readFromFile(sourcePath);
+        const std::string expectedJs = fileIO.readFromFile(Path::join(typeTestDataPath(), name + ".lv.js"));
+        const std::string expectedDts = fileIO.readFromFile(Path::join(typeTestDataPath(), name + ".lv.d.ts"));
+
+        Compiler::Config config(false);
+        config.allowUnresolvedTypes(true);
+        config.outputTarget(Compiler::Config::OutputTarget::JS_DTS);
+        config.setTypesModule("types.mjs");
+
+        StubTypeResolver resolver;
+        resolver.responses[sourcePath + "::add"] = TypeResolver::Result{
+            sourcePath + "::add",
+            "FunctionType.for(Type.number, Type.number, Type.number)",
+            {"FunctionType", "Type"}
+        };
+        resolver.responses[sourcePath + "::load"] = TypeResolver::Result{
+            sourcePath + "::load",
+            "FunctionType.for(Type.string, Type.string)",
+            {"FunctionType", "Type"}
+        };
+
+        Compiler::Ptr compiler = Compiler::create(config);
+        compiler->setTypeResolver(&resolver);
+
+        Compiler::TargetResult targetResult = compiler->compileToTarget(sourcePath, contents);
+        requireEquivalentElementsOutput(expectedJs, targetResult.js, name + ".lv.js");
+        requireEquivalentElementsOutput(expectedDts, targetResult.dts, name + ".lv.d.ts");
+
+        ModuleFileDescriptor::Ptr descriptor = ModuleFileDescriptor::create("declared.lv");
+        descriptor->addExport(ExportDescriptor("add", ExportDescriptor::Function, true, true));
+        descriptor->addExport(ExportDescriptor("zero", ExportDescriptor::Function, false, true));
+
+        ModuleFileDescriptor::Ptr roundTrip = ModuleFileDescriptor::createFromMLNode(descriptor->toMLNode());
+        REQUIRE(roundTrip->exports().size() == 2);
+        REQUIRE(roundTrip->exports()[0].meta());
+        REQUIRE(roundTrip->exports()[0].declared());
+        REQUIRE_FALSE(roundTrip->exports()[1].meta());
+        REQUIRE(roundTrip->exports()[1].declared());
     }
 }

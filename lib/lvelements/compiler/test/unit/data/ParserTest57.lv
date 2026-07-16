@@ -1,0 +1,13 @@
+import .module as mod
+
+declare @fn add(a:int, b:int): int
+
+declare fn zero(): int
+
+declare async @fn load(name:string): string
+
+component ParserTest57 < mod.A {
+    fn multiply(value:int): int {
+        return value * 2
+    }
+}

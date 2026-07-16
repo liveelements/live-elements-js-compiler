@@ -554,7 +554,8 @@ BaseNode *BaseNode::visitRecognized(BaseNode *parent, const TSNode &node){
         return visitMethodDefinition(parent, node);
     } else if ( strcmp(ts_node_type(node), "typed_method_declaration") == 0 ){
         return visitTypedMethodDeclaration(parent, node);
-    } else if ( strcmp(ts_node_type(node), "typed_function_declaration") == 0 ){
+    } else if ( strcmp(ts_node_type(node), "typed_function_declaration") == 0 ||
+                strcmp(ts_node_type(node), "declared_typed_function_declaration") == 0 ){
         return visitTypedFunctionDeclaration(parent, node);
     } else if ( strcmp(ts_node_type(node), "property_accessor_declaration") == 0 ){
         return visitPropertyAccessorDeclaration(parent, node);
@@ -1756,6 +1757,9 @@ TypedMethodDeclarationNode* BaseNode::visitTypedMethodDeclaration(BaseNode *pare
 
 TypedFunctionDeclarationNode* BaseNode::visitTypedFunctionDeclaration(BaseNode *parent, const TSNode &node){
     TypedFunctionDeclarationNode* cnode = parent->addCreatedChild(new TypedFunctionDeclarationNode(node));
+    if ( strcmp(ts_node_type(node), "declared_typed_function_declaration") == 0 ){
+        cnode->setDeclared(true);
+    }
     for (auto c : extractPrecedingComments(node)) {
         cnode->addChild(c);
         cnode->m_precedingComments.push_back(c);
@@ -1783,10 +1787,12 @@ TypedFunctionDeclarationNode* BaseNode::visitTypedFunctionDeclaration(BaseNode *
     }
 
     TSNode body = nodeChildByFieldName(node, "body");
-    assertValid(parent, body, "Function body is null.");
-
-    cnode->m_body = cnode->addCreatedChild(new JsBlockNode(body));
-    visitChildren(cnode->m_body, body);
+    if ( !ts_node_is_null(body) ){
+        cnode->m_body = cnode->addCreatedChild(new JsBlockNode(body));
+        visitChildren(cnode->m_body, body);
+    } else if ( !cnode->isDeclared() ){
+        assertValid(parent, body, "Function body is null.");
+    }
 
     uint32_t count = ts_node_child_count(node);
     for ( uint32_t i = 0; i < count; ++i ){
