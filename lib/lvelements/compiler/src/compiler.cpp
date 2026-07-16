@@ -301,8 +301,10 @@ Compiler::TargetResult Compiler::compileModuleFileToTarget(const Module::Ptr &mo
 
         std::string displayFilePath = path;
         Utf8::replaceAll(displayFilePath, module->packagePath(), "");
+        const bool isJs  = target == BaseNode::ConversionContext::JS;
+        const bool isDts = target == BaseNode::ConversionContext::DTS;
         bool shouldWrite = false;
-        if ( target == BaseNode::ConversionContext::JS ){
+        if ( isJs || isDts ){
             shouldWrite = true;
             if ( m_d->config.m_fileOutputOnlyOnModified && Path::exists(outputFile) ){
                 DateTime sourceModifiedStamp = Path::lastModified(path);
@@ -320,11 +322,13 @@ Compiler::TargetResult Compiler::compileModuleFileToTarget(const Module::Ptr &mo
                     }
                 }
             }
-            m_d->currentRun->sink().storeGeneratedTypeOutput(outputFile, outputFile, outStr, shouldWrite);
+            if ( isJs ){
+                m_d->currentRun->sink().storeGeneratedTypeOutput(outputFile, outputFile, outStr, shouldWrite);
+            }
         }
 
         const bool deferToFinalize =
-            shouldWrite && m_d->currentRun->sink().hasPendingFor(outputFile);
+            isJs && shouldWrite && m_d->currentRun->sink().hasPendingFor(outputFile);
 
         if ( m_d->config.m_fileOutput ){
             if ( shouldWrite && !deferToFinalize ){

@@ -19,6 +19,7 @@
 #include "live/applicationcontext.h"
 #include "live/fileio.h"
 #include "live/path.h"
+#include "live/txtar.h"
 #include "live/utf8.h"
 
 #include "live/elements/compiler/compiler.h"
@@ -57,6 +58,40 @@ public:
     std::vector<Result> resolve(const std::vector<Request>& requests) override{
         observedRequests = requests;
         throw lv::Exception(message, lv::Exception::toCode("~Type"));
+    }
+};
+
+class DiskBackedTypeResolver : public TypeResolver {
+public:
+    std::map<std::string, Result> responses;
+    std::vector<Request> observedRequests;
+    std::map<std::string, std::string> sourceContentsAtResolve;
+
+    std::vector<Result> resolve(const std::vector<Request>& requests) override{
+        observedRequests = requests;
+        FileIO fileIO;
+        std::vector<Result> result;
+        for ( const Request& request : requests ){
+            if ( Path::exists(request.sourcePath()) ){
+                sourceContentsAtResolve[request.sourcePath()] = fileIO.readFromFile(request.sourcePath());
+            } else {
+                throw lv::Exception(
+                    Utf8("Missing resolver source file: %").format(request.sourcePath()),
+                    lv::Exception::toCode("~Type")
+                );
+            }
+
+            auto it = responses.find(request.requestId());
+            if ( it != responses.end() ){
+                result.push_back(it->second);
+            } else {
+                throw lv::Exception(
+                    Utf8("Missing resolver response for request: %").format(request.requestId()),
+                    lv::Exception::toCode("~Type")
+                );
+            }
+        }
+        return result;
     }
 };
 
@@ -343,5 +378,50 @@ TEST_CASE("Type Resolution", "[TypeResolution]"){
         Compiler::TargetResult targetResult = compiler->compileToTarget(sourcePath, contents);
         requireEquivalentElementsOutput(expectedJs, targetResult.js, name + ".lv.js");
         requireEquivalentElementsOutput(expectedDts, targetResult.dts, name + ".lv.d.ts");
+    }
+
+    SECTION("Module compile writes dts before finalize type resolution"){
+        FileIO fileIO;
+        const std::string tmpRoot = Path::join(Path::temporaryDirectory(), "lv-compiler-dts-module-compile");
+        Txtar archive = Txtar::parseFile(Path::join(typeTestDataPath(), "TypeTestPack01.txtar"));
+        Txtar::ExtractionGuard extraction = archive.extractTemp(tmpRoot);
+
+        const std::string packageDir = Path::join(tmpRoot, "pkg");
+        const std::string moduleDir = Path::join(packageDir, "sample");
+        const std::string sourcePath = Path::join(moduleDir, "main.lv");
+        const std::string outputJsPath = sourcePath + ".mjs";
+        const std::string outputDtsPath = sourcePath + ".d.ts";
+
+        Compiler::Config config(true, ".mjs", &fileIO);
+        config.allowUnresolvedTypes(true);
+        config.outputTarget(Compiler::Config::OutputTarget::JS_DTS);
+        config.setTypesModule("types.mjs");
+
+        DiskBackedTypeResolver resolver;
+        const std::string resolvedSourcePath = Path::resolve(sourcePath);
+        resolver.responses[resolvedSourcePath + "::add"] = TypeResolver::Result{
+            resolvedSourcePath + "::add",
+            "FunctionType.for(Type.number, Type.number, Type.number)",
+            {"FunctionType", "Type"}
+        };
+
+        Compiler::Ptr compiler = Compiler::create(config);
+        compiler->setTypeResolver(&resolver);
+
+        REQUIRE_NOTHROW(Compiler::compile(compiler, sourcePath));
+
+        REQUIRE(resolver.observedRequests.size() == 1);
+        REQUIRE(Path::resolve(resolver.observedRequests[0].sourcePath()) == Path::resolve(outputDtsPath));
+        REQUIRE(resolver.observedRequests[0].functionName() == "add");
+        REQUIRE(Path::exists(outputDtsPath));
+        REQUIRE(Path::exists(outputJsPath));
+
+        const std::string dtsContents = fileIO.readFromFile(outputDtsPath);
+        REQUIRE(dtsContents.find("export declare function add(a: int, b: int): int;") != std::string::npos);
+        REQUIRE(resolver.sourceContentsAtResolve[resolver.observedRequests[0].sourcePath()] == dtsContents);
+
+        const std::string jsContents = fileIO.readFromFile(outputJsPath);
+        REQUIRE(jsContents.find("FunctionType.for(Type.number, Type.number, Type.number)") != std::string::npos);
+        REQUIRE(jsContents.find("/*@@LVTYPE:") == std::string::npos);
     }
 }

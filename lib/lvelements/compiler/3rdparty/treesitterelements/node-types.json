@@ -2074,6 +2074,52 @@
     "fields": {}
   },
   {
+    "type": "declared_typed_function_declaration",
+    "named": true,
+    "fields": {
+      "meta": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "@fn",
+            "named": false
+          }
+        ]
+      },
+      "name": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      },
+      "parameters": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "formal_type_parameters",
+            "named": true
+          }
+        ]
+      },
+      "return": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "typed_function_return_type",
+            "named": true
+          }
+        ]
+      }
+    }
+  },
+  {
     "type": "decorator",
     "named": true,
     "fields": {},
@@ -5639,6 +5685,10 @@
           "named": true
         },
         {
+          "type": "declared_typed_function_declaration",
+          "named": true
+        },
+        {
           "type": "enum_declaration",
           "named": true
         },
@@ -7826,11 +7876,11 @@
   },
   {
     "type": "number",
-    "named": false
+    "named": true
   },
   {
     "type": "number",
-    "named": true
+    "named": false
   },
   {
     "type": "object",

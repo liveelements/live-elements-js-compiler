@@ -52,6 +52,10 @@
               },
               {
                 "type": "SYMBOL",
+                "name": "declared_typed_function_declaration"
+              },
+              {
+                "type": "SYMBOL",
                 "name": "typed_function_declaration"
               }
             ]
@@ -13876,6 +13880,91 @@
         }
       ]
     },
+    "declared_typed_function_declaration": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "STRING",
+          "value": "declare"
+        },
+        {
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "STRING",
+              "value": "async"
+            },
+            {
+              "type": "BLANK"
+            }
+          ]
+        },
+        {
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "STRING",
+              "value": "fn"
+            },
+            {
+              "type": "FIELD",
+              "name": "meta",
+              "content": {
+                "type": "TOKEN",
+                "content": {
+                  "type": "STRING",
+                  "value": "@fn"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "type": "FIELD",
+          "name": "name",
+          "content": {
+            "type": "SYMBOL",
+            "name": "identifier"
+          }
+        },
+        {
+          "type": "FIELD",
+          "name": "parameters",
+          "content": {
+            "type": "SYMBOL",
+            "name": "formal_type_parameters"
+          }
+        },
+        {
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "FIELD",
+              "name": "return",
+              "content": {
+                "type": "SYMBOL",
+                "name": "typed_function_return_type"
+              }
+            },
+            {
+              "type": "BLANK"
+            }
+          ]
+        },
+        {
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "SYMBOL",
+              "name": "_semicolon"
+            },
+            {
+              "type": "BLANK"
+            }
+          ]
+        }
+      ]
+    },
     "listener_declaration": {
       "type": "SEQ",
       "members": [
@@ -14401,6 +14490,10 @@
     [
       "flow_body",
       "flow_object"
+    ],
+    [
+      "type_annotation",
+      "intersection_type"
     ]
   ],
   "precedences": [

@@ -1,0 +1,9 @@
+Package/module fixture for the module-compile dts ordering test.
+-- pkg/live.package.json --
+{"name":"test.pkg","version":"1.0.0"}
+-- pkg/sample/live.module.json --
+{"name":"sample","package":"..","modules":["main"]}
+-- pkg/sample/main.lv --
+@fn add(a:int, b:int): int {
+    return a + b
+}
