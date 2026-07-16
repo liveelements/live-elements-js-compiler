@@ -20,6 +20,7 @@ target_sources(lvbasetest PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/mlnodetest.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/mlnodetojsontest.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/filesystemtest.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/txtartest.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/visuallogtest.cpp"
 )
 
@@ -37,7 +38,6 @@ endif()
 if (WIN32 AND (NOT BUILD_LVBASE_STATIC))
     copy_file_list(LVBASE_TEST_COPY "${LIBRARY_DEPLOY_PATH}/lvbase.dll" ${CMAKE_CURRENT_BINARY_DIR})
 endif()
-
 
 
 

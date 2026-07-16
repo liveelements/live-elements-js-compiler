@@ -30,6 +30,7 @@ target_sources(lvbase PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/src/sourcelocation.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/stacktrace.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/typename.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/txtar.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/utf8.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/version.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/visuallog.cpp"
