@@ -62,40 +62,6 @@ public:
     }
 };
 
-class DiskBackedTypeResolver : public TypeResolver {
-public:
-    std::map<std::string, Result> responses;
-    std::vector<Request> observedRequests;
-    std::map<std::string, std::string> sourceContentsAtResolve;
-
-    std::vector<Result> resolve(const std::vector<Request>& requests) override{
-        observedRequests = requests;
-        FileIO fileIO;
-        std::vector<Result> result;
-        for ( const Request& request : requests ){
-            if ( Path::exists(request.sourcePath()) ){
-                sourceContentsAtResolve[request.sourcePath()] = fileIO.readFromFile(request.sourcePath());
-            } else {
-                throw lv::Exception(
-                    Utf8("Missing resolver source file: %").format(request.sourcePath()),
-                    lv::Exception::toCode("~Type")
-                );
-            }
-
-            auto it = responses.find(request.requestId());
-            if ( it != responses.end() ){
-                result.push_back(it->second);
-            } else {
-                throw lv::Exception(
-                    Utf8("Missing resolver response for request: %").format(request.requestId()),
-                    lv::Exception::toCode("~Type")
-                );
-            }
-        }
-        return result;
-    }
-};
-
 class MemoryFileIO : public FileIOInterface {
 public:
     std::string readFromFile(const std::string& path) override{
@@ -382,6 +348,40 @@ TEST_CASE("Type Resolution", "[TypeResolution]"){
     }
 
     SECTION("Module compile writes dts before finalize type resolution"){
+        class DiskBackedTypeResolver : public TypeResolver {
+        public:
+            std::map<std::string, Result> responses;
+            std::vector<Request> observedRequests;
+            std::map<std::string, std::string> sourceContentsAtResolve;
+
+            std::vector<Result> resolve(const std::vector<Request>& requests) override{
+                observedRequests = requests;
+                FileIO fileIO;
+                std::vector<Result> result;
+                for ( const Request& request : requests ){
+                    if ( Path::exists(request.sourcePath()) ){
+                        sourceContentsAtResolve[request.sourcePath()] = fileIO.readFromFile(request.sourcePath());
+                    } else {
+                        throw lv::Exception(
+                            Utf8("Missing resolver source file: %").format(request.sourcePath()),
+                            lv::Exception::toCode("~Type")
+                        );
+                    }
+
+                    auto it = responses.find(request.requestId());
+                    if ( it != responses.end() ){
+                        result.push_back(it->second);
+                    } else {
+                        throw lv::Exception(
+                            Utf8("Missing resolver response for request: %").format(request.requestId()),
+                            lv::Exception::toCode("~Type")
+                        );
+                    }
+                }
+                return result;
+            }
+        };
+
         FileIO fileIO;
         const std::string tmpRoot = Path::join(Path::temporaryDirectory(), "lv-compiler-dts-module-compile");
         Txtar archive = Txtar::parseFile(Path::join(typeTestDataPath(), "TypeTestPack01.txtar"));
