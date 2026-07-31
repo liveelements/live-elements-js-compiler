@@ -222,6 +222,31 @@ void testFlowFileParse(const std::string& name){
     runExpectation(".d.ts", dtsResult.dts);
 }
 
+Compiler::TargetResult compileFlowFileWithoutResolver(
+    const std::string& name,
+    Compiler::Config::OutputTarget outputTarget = Compiler::Config::OutputTarget::JS_DTS
+){
+    static FileIO fileIO;
+    const std::string scriptPath = flowTestDataPath();
+    const std::string sourcePath = Path::join(scriptPath, name + ".lv");
+    const std::string contents = fileIO.readFromFile(sourcePath);
+
+    Compiler::Config config = flowConfig(outputTarget);
+    Compiler::Ptr compiler = Compiler::create(config);
+    compiler->configureImplicitType("console");
+    compiler->configureImplicitType("vlog");
+
+    return compiler->compileToTarget(sourcePath, contents);
+}
+
+void requireFlowExpectedOutput(const std::string& name, const std::string& suffix, const std::string& actual){
+    static FileIO fileIO;
+    const std::string scriptPath = flowTestDataPath();
+    const std::string expectationPath = Path::join(scriptPath, name + ".lv" + suffix);
+    const std::string expectedContent = fileIO.readFromFile(expectationPath);
+    requireEquivalentElementsOutput(expectedContent, actual, name + ".lv" + suffix);
+}
+
 } // namespace
 
 TEST_CASE("Flow Type Resolution", "[Flow]"){
@@ -245,6 +270,8 @@ TEST_CASE("Flow Type Resolution", "[Flow]"){
     SECTION("Flow Literals"){ testFlowFileParse("ParserTest56"); }
     SECTION("Flow Literal Type Substitution"){ testFlowFileParse("FlowTest02"); }
     SECTION("Flow Literal Return Type"){ testFlowFileParse("FlowTest03"); }
+    SECTION("Flow explicit import reuse"){ testFlowFileParse("FlowTest04"); }
+    SECTION("Flow tap shadowing keeps module-level callees and flow values"){ testFlowFileParse("FlowTest05"); }
 
     SECTION("Flow literals request function signatures through the type resolver"){
         const std::string sourcePath = Path::join(dataPath, "FlowTest02.lv");
@@ -389,4 +416,56 @@ TEST_CASE("Flow Type Resolution", "[Flow]"){
             REQUIRE(e.parsedLocation().range().start().line() == 4);
         }
     }
+
+    SECTION("Flow.create resolves when flow syntax is present"){
+        Compiler::TargetResult targetResult = compileFlowFileWithoutResolver("FlowTest06");
+
+        requireFlowExpectedOutput("FlowTest06", ".js", targetResult.js);
+        requireFlowExpectedOutput("FlowTest06", ".d.ts", targetResult.dts);
+
+        REQUIRE(targetResult.js.find("const explicit = Flow.create('n', undefined, [Flow.ret(Flow.ref('n'))])") != std::string::npos);
+        const size_t firstFlowImport = targetResult.js.find("import {Flow} from 'flow/flow.mjs'");
+        REQUIRE(firstFlowImport != std::string::npos);
+        REQUIRE(targetResult.js.find("import {Flow} from 'flow/flow.mjs'", firstFlowImport + 1) == std::string::npos);
+    }
+
+    SECTION("Flow.create does not trigger auto-imports without flow syntax"){
+        Compiler::TargetResult targetResult = compileFlowFileWithoutResolver("FlowTest07");
+
+        requireFlowExpectedOutput("FlowTest07", ".js", targetResult.js);
+        requireFlowExpectedOutput("FlowTest07", ".d.ts", targetResult.dts);
+
+        REQUIRE(targetResult.js.find("return Flow.create('n', undefined, [Flow.ret(Flow.ref('n'))])") != std::string::npos);
+        REQUIRE(targetResult.js.find("import {Flow} from 'flow/flow.mjs'") == std::string::npos);
+    }
+
+    SECTION("Flow allows module-level dotted callees"){
+        Compiler::TargetResult targetResult = compileFlowFileWithoutResolver("FlowTest08");
+
+        requireFlowExpectedOutput("FlowTest08", ".js", targetResult.js);
+        requireFlowExpectedOutput("FlowTest08", ".d.ts", targetResult.dts);
+
+        REQUIRE(targetResult.js.find("Flow.call(Math.max, [Flow.ref('n'), 2], 'next')") != std::string::npos);
+    }
+
+    SECTION("Flow allows same-file top-level functions"){
+        Compiler::TargetResult targetResult = compileFlowFileWithoutResolver("FlowTest09");
+
+        requireFlowExpectedOutput("FlowTest09", ".js", targetResult.js);
+        requireFlowExpectedOutput("FlowTest09", ".d.ts", targetResult.dts);
+
+        REQUIRE(targetResult.js.find("Flow.call(add, [Flow.ref('n'), 2])") != std::string::npos);
+    }
+
+    SECTION("Flow allows namespaced callees from module imports"){
+        Compiler::TargetResult targetResult = compileFlowFileWithoutResolver("FlowTest10");
+
+        requireFlowExpectedOutput("FlowTest10", ".js", targetResult.js);
+        requireFlowExpectedOutput("FlowTest10", ".d.ts", targetResult.dts);
+
+        REQUIRE(targetResult.js.find("import {max as __mod__max} from '__UNRESOLVED__'") != std::string::npos);
+        REQUIRE(targetResult.js.find("let mod = {max:__mod__max}") != std::string::npos);
+        REQUIRE(targetResult.js.find("Flow.call(mod.max, [Flow.ref('n'), 2], 'next')") != std::string::npos);
+    }
+
 }

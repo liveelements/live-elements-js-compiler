@@ -1,0 +1,11 @@
+import {add} from './math.mjs'
+import {Flow} from './custom-flow.mjs'
+
+fn build(): any {
+    const explicit = Flow.create('n', undefined, [Flow.ret(Flow.ref('n'))])
+    const nested = (v: int) %> {
+        add(v, 2) @next
+        return next
+    }
+    return [explicit, nested]
+}

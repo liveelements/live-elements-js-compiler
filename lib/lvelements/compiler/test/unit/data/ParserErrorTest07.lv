@@ -1,0 +1,6 @@
+fn build(): any {
+    const flow = n: int %> {
+        return later
+        add(n, 1) @later
+    }
+}

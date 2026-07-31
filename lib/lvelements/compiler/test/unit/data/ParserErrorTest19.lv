@@ -1,0 +1,5 @@
+fn build(): any {
+    return outer: any %> {
+        return inner: any %> outer(inner)
+    }
+}

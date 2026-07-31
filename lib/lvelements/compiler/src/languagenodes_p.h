@@ -157,7 +157,6 @@ public:
     virtual std::string toString(int indent = 0) const;
 
     static BaseNode* visit(const std::string& filePath, const std::string& fileName, LanguageParser::AST* ast);
-    static bool checkIdentifierDeclared(const std::string& source, BaseNode* node, std::string id, ConversionContext* ctx);
 
     template <typename T> T* as(){ return static_cast<T*>(this); }
     template <typename T> bool canCast(){ return dynamic_cast<T*>(this) != nullptr; }
@@ -175,8 +174,6 @@ public:
     template<typename T> bool isNodeType() const { return nodeType() == T::nodeInfoType(); }
 
     virtual void collectImports(const std::string& source, std::vector<IdentifierNode *> &identifiers, ConversionContext* ctx = nullptr);
-
-    virtual void checkFlowReferences(const std::string& source);
 
     static std::string slice(const std::string& source, uint32_t start, uint32_t end);
     static std::string slice(const std::string& source, BaseNode* node);
@@ -336,6 +333,7 @@ public:
     JsBlockNode(const TSNode& node, const LanguageNodeInfo::ConstPtr& ni = JsBlockNode::nodeInfo()) : BaseNode(node, ni){}
     const std::vector<IdentifierNode*>& identifiers() const { return m_declarations; }
     const std::vector<IdentifierNode*>& usedIdentifiers() const{ return m_usedIdentifiers; }
+    bool declaresIdentifier(IdentifierNode* declaration) const;
 
     virtual void collectImports(const std::string& source, std::vector<IdentifierNode *> &identifiers, ConversionContext* ctx = nullptr);
 
@@ -409,6 +407,26 @@ public:
     FlowStatementNode(const TSNode& node, const LanguageNodeInfo::ConstPtr& ni = FlowStatementNode::nodeInfo()) : BaseNode(node, ni){}
 };
 
+class FlowBodyNode : public JsBlockNode{
+    friend class BaseNode;
+    LANGUAGE_NODE_INFO(FlowBodyNode);
+public:
+    FlowBodyNode(const TSNode& node)
+        : JsBlockNode(node, FlowBodyNode::nodeInfo())
+    {}
+
+    BaseNode* body() const{ return m_body; }
+    const std::vector<FlowStatementNode*>& statements() const{ return m_statements; }
+    bool isExpressionBody() const{ return m_expressionBody; }
+
+    virtual void collectImports(const std::string& source, std::vector<IdentifierNode *> &identifiers, ConversionContext* ctx = nullptr);
+
+private:
+    BaseNode*                       m_body = nullptr;
+    std::vector<FlowStatementNode*> m_statements;
+    bool                            m_expressionBody = false;
+};
+
 class FlowValueNode : public BaseNode{
     friend class BaseNode;
     LANGUAGE_NODE_INFO(FlowValueNode);
@@ -424,31 +442,27 @@ class FlowExpressionNode : public FlowValueNode{
 public:
     FlowExpressionNode(const TSNode& node)
         : FlowValueNode(node, FlowExpressionNode::nodeInfo())
-        , m_body(nullptr)
-        , m_expressionBody(false)
         , m_parenthesized(false)
     {}
 
     ParameterListNode* parameters() const{ return m_parameters; }
     TypeNode* returnType() const{ return m_returnType; }
-    BaseNode* body() const{ return m_body; }
-    const std::vector<FlowStatementNode*>& statements() const{ return m_statements; }
-    bool isExpressionBody() const{ return m_expressionBody; }
+    FlowBodyNode* flowBody() const{ return m_flowBody; }
+    BaseNode* body() const{ return m_flowBody ? m_flowBody->body() : nullptr; }
+    const std::vector<FlowStatementNode*>& statements() const{ return m_flowBody->statements(); }
+    bool isExpressionBody() const{ return m_flowBody && m_flowBody->isExpressionBody(); }
     bool isParenthesized() const{ return m_parenthesized; }
     void setParenthesized(bool value){ m_parenthesized = value; }
 
     virtual void collectImports(const std::string& source, std::vector<IdentifierNode *> &identifiers, ConversionContext* ctx = nullptr);
-    virtual void checkFlowReferences(const std::string& source);
 
     static std::vector<FlowExpressionNode*> collectFlowExpressions(BaseNode* node);
 
 private:
-    ParameterListNode*           m_parameters = nullptr;
-    TypeNode*                    m_returnType = nullptr;
-    BaseNode*                    m_body;
-    std::vector<FlowStatementNode*> m_statements;
-    bool                         m_expressionBody;
-    bool                         m_parenthesized;
+    ParameterListNode* m_parameters = nullptr;
+    TypeNode*          m_returnType = nullptr;
+    FlowBodyNode*      m_flowBody = nullptr;
+    bool               m_parenthesized;
 };
 
 class FlowReturnNode : public FlowStatementNode{

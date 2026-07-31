@@ -1,0 +1,3 @@
+fn build(): any {
+    const flow = n: int %> add(n, 1)
+}

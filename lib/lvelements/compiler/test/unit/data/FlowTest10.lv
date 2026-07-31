@@ -1,0 +1,8 @@
+import .module as mod
+
+fn build(): any {
+    return n: int %> {
+        mod.max(n, 2) @next
+        return next
+    }
+}

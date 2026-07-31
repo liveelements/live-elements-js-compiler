@@ -1,0 +1,6 @@
+fn build(): any {
+    return n: int %> {
+        Math.max(n, 2) @next
+        return next
+    }
+}

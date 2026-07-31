@@ -1,0 +1,6 @@
+fn build(): any {
+    const flow = (mod: any, n: int) %> {
+        mod.fn(n) @value
+        return value
+    }
+}

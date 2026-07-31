@@ -1,0 +1,7 @@
+import {map, someImportedFn} from './math.mjs'
+fn build(): any {
+    const flow = values: any %> {
+        map(values, someImportedFn) @mapped
+        return mapped
+    }
+}

@@ -1,0 +1,3 @@
+fn build(): any {
+    return Flow.create('n', undefined, [Flow.ret(Flow.ref('n'))])
+}

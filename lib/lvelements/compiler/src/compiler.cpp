@@ -159,8 +159,6 @@ Compiler::TargetResult Compiler::compileToTarget(const std::string &path, const 
     root->collectImportTypes(contents, ctx);
     delete ctx;
 
-    root->checkFlowReferences(contents);
-
     result = compileToTarget(path, contents, root);
 
     delete root;

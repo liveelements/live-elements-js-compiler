@@ -180,13 +180,25 @@ TEST_CASE( "Parse Error Test", "[ParseError]" ) {
         REQUIRE(hadException);
     }
 
-    SECTION("Flow forward reference"){
-        std::string contents = "fn build(): any {\n    const flow = n: int %> {\n        return later\n        add(n, 1) @later\n    }\n}\n";
+    SECTION("Flow Forward Reference"){
+        std::string name = "ParserErrorTest07";
+        std::string filePath = scriptPath() + "/" + name + ".lv";
+        std::string contents = fileIO().readFromFile(filePath);
+        Compiler::Ptr compiler = Compiler::create(flowErrorCompilerConfig());
+        Compiler::TargetResult targetResult = compiler->compileToTarget(filePath, contents);
+
+        REQUIRE(targetResult.js.find("Flow.ret(Flow.ref('later'))") != std::string::npos);
+    }
+
+    SECTION("Flow Duplicate Tap"){
+        std::string name = "ParserErrorTest08";
+        std::string filePath = scriptPath() + "/" + name + ".lv";
+        std::string contents = fileIO().readFromFile(filePath);
         Compiler::Ptr compiler = Compiler::create(flowErrorCompilerConfig());
         bool hadException = false;
 
         try {
-            compiler->compileToTarget("FlowForwardReference.lv", contents);
+            compiler->compileToTarget(filePath, contents);
         } catch (lv::el::SyntaxException& e) {
             REQUIRE(e.code() == lv::Exception::toCode("~Language"));
             hadException = true;
@@ -194,13 +206,35 @@ TEST_CASE( "Parse Error Test", "[ParseError]" ) {
         REQUIRE(hadException);
     }
 
-    SECTION("Flow duplicate tap"){
-        std::string contents = "fn build(): any {\n    const flow = n: int %> {\n        add(n, 1) @value\n        add(value, 2) @value\n        return value\n    }\n}\n";
+    SECTION("Flow Broken Reference Missing Import"){
+        std::string name = "ParserErrorTest09";
+        std::string filePath = scriptPath() + "/" + name + ".lv";
+        std::string contents = fileIO().readFromFile(filePath);
+
+        Compiler::Config compilerConfig = flowErrorCompilerConfig();
+        compilerConfig.allowUnresolvedTypes(false);
+        Compiler::Ptr compiler = Compiler::create(compilerConfig);
+        bool hadException = false;
+
+        try {
+            compiler->compileToTarget(filePath, contents);
+        } catch (lv::Exception& e) {
+            REQUIRE(e.code() == lv::Exception::toCode("~Identifier"));
+            REQUIRE(e.message().find("Identifier not found in imports: 'missingValue'") != std::string::npos);
+            hadException = true;
+        }
+        REQUIRE(hadException);
+    }
+
+    SECTION("Flow Nested Call In Arguments"){
+        std::string name = "ParserErrorTest10";
+        std::string filePath = scriptPath() + "/" + name + ".lv";
+        std::string contents = fileIO().readFromFile(filePath);
         Compiler::Ptr compiler = Compiler::create(flowErrorCompilerConfig());
         bool hadException = false;
 
         try {
-            compiler->compileToTarget("FlowDuplicateTap.lv", contents);
+            compiler->compileToTarget(filePath, contents);
         } catch (lv::el::SyntaxException& e) {
             REQUIRE(e.code() == lv::Exception::toCode("~Language"));
             hadException = true;
@@ -208,27 +242,83 @@ TEST_CASE( "Parse Error Test", "[ParseError]" ) {
         REQUIRE(hadException);
     }
 
-    SECTION("Flow nested call in arguments"){
-        std::string contents = "fn build(): any {\n    const flow = n: int %> {\n        outer(inner(n)) @value\n        return value\n    }\n}\n";
+    SECTION("Flow Rejects Parameter Callee"){
+        std::string name = "ParserErrorTest11";
+        std::string filePath = scriptPath() + "/" + name + ".lv";
+        std::string contents = fileIO().readFromFile(filePath);
         Compiler::Ptr compiler = Compiler::create(flowErrorCompilerConfig());
-        bool hadException = false;
 
         try {
-            compiler->compileToTarget("FlowNestedCall.lv", contents);
-        } catch (lv::el::SyntaxException& e) {
+            compiler->compileToTarget(filePath, contents);
+            FAIL("Expected a SyntaxException for a flow parameter callee.");
+        } catch ( const lv::el::SyntaxException& e ) {
             REQUIRE(e.code() == lv::Exception::toCode("~Language"));
-            hadException = true;
+            REQUIRE(e.message().find("Cannot call 'fn' as a function") != std::string::npos);
+            REQUIRE(e.parsedLocation().range().start().line() == 3);
+            REQUIRE(e.parsedLocation().range().start().column() == 9);
         }
-        REQUIRE(hadException);
     }
 
-    SECTION("Flow previous with multiple parameters on line one"){
-        std::string contents = "fn build(): any {\n    const flow = (a: int, b: int) %> return %\n}\n";
+    SECTION("Flow Rejects Tap Callee"){
+        std::string name = "ParserErrorTest12";
+        std::string filePath = scriptPath() + "/" + name + ".lv";
+        std::string contents = fileIO().readFromFile(filePath);
+        Compiler::Ptr compiler = Compiler::create(flowErrorCompilerConfig());
+
+        try {
+            compiler->compileToTarget(filePath, contents);
+            FAIL("Expected a SyntaxException for a flow tap callee.");
+        } catch ( const lv::el::SyntaxException& e ) {
+            REQUIRE(e.code() == lv::Exception::toCode("~Language"));
+            REQUIRE(e.message().find("Cannot call 'g' as a function") != std::string::npos);
+            REQUIRE(e.parsedLocation().range().start().line() == 4);
+            REQUIRE(e.parsedLocation().range().start().column() == 9);
+        }
+    }
+
+    SECTION("Flow Rejects Dotted Parameter Callee"){
+        std::string name = "ParserErrorTest13";
+        std::string filePath = scriptPath() + "/" + name + ".lv";
+        std::string contents = fileIO().readFromFile(filePath);
+        Compiler::Ptr compiler = Compiler::create(flowErrorCompilerConfig());
+
+        try {
+            compiler->compileToTarget(filePath, contents);
+            FAIL("Expected a SyntaxException for a dotted flow parameter callee.");
+        } catch ( const lv::el::SyntaxException& e ) {
+            REQUIRE(e.code() == lv::Exception::toCode("~Language"));
+            REQUIRE(e.message().find("Cannot call 'mod' as a function") != std::string::npos);
+            REQUIRE(e.parsedLocation().range().start().line() == 3);
+            REQUIRE(e.parsedLocation().range().start().column() == 9);
+        }
+    }
+
+    SECTION("Flow Rejects Imported Value Reference"){
+        std::string name = "ParserErrorTest14";
+        std::string filePath = scriptPath() + "/" + name + ".lv";
+        std::string contents = fileIO().readFromFile(filePath);
+        Compiler::Ptr compiler = Compiler::create(flowErrorCompilerConfig());
+
+        try {
+            compiler->compileToTarget(filePath, contents);
+            FAIL("Expected a SyntaxException for an imported value used as a flow reference.");
+        } catch ( const lv::el::SyntaxException& e ) {
+            REQUIRE(e.code() == lv::Exception::toCode("~Language"));
+            REQUIRE(e.message().find("'someImportedFn' is not a flow value") != std::string::npos);
+            REQUIRE(e.parsedLocation().range().start().line() == 4);
+            REQUIRE(e.parsedLocation().range().start().column() == 21);
+        }
+    }
+
+    SECTION("Flow Previous With Multiple Parameters On Line One"){
+        std::string name = "ParserErrorTest15";
+        std::string filePath = scriptPath() + "/" + name + ".lv";
+        std::string contents = fileIO().readFromFile(filePath);
         Compiler::Ptr compiler = Compiler::create(flowErrorCompilerConfig());
         bool hadException = false;
 
         try {
-            compiler->compileToTarget("FlowPrevious.lv", contents);
+            compiler->compileToTarget(filePath, contents);
         } catch (lv::el::SyntaxException& e) {
             REQUIRE(e.code() == lv::Exception::toCode("~Language"));
             REQUIRE(e.parsedLocation().range().start().line() == 2);
@@ -238,14 +328,16 @@ TEST_CASE( "Parse Error Test", "[ParseError]" ) {
         REQUIRE(hadException);
     }
 
-    SECTION("Flow missing configuration"){
-        std::string contents = "fn build(): any {\n    const flow = n: int %> add(n, 1)\n}\n";
+    SECTION("Flow Missing Configuration"){
+        std::string name = "ParserErrorTest16";
+        std::string filePath = scriptPath() + "/" + name + ".lv";
+        std::string contents = fileIO().readFromFile(filePath);
         Compiler::Config compilerConfig(false);
         Compiler::Ptr compiler = Compiler::create(compilerConfig);
         bool hadException = false;
 
         try {
-            compiler->compileToTarget("FlowMissingConfig.lv", contents);
+            compiler->compileToTarget(filePath, contents);
         } catch (lv::Exception& e) {
             REQUIRE(e.code() == lv::Exception::toCode("~Flow"));
             hadException = true;
@@ -253,17 +345,49 @@ TEST_CASE( "Parse Error Test", "[ParseError]" ) {
         REQUIRE(hadException);
     }
 
-    SECTION("Flow untyped parameters"){
-        std::string contents = "fn build(): any {\n    const flow = (a, b) %> add(a, b)\n}\n";
+    SECTION("Flow Untyped Parameters"){
+        std::string name = "ParserErrorTest17";
+        std::string filePath = scriptPath() + "/" + name + ".lv";
+        std::string contents = fileIO().readFromFile(filePath);
         Compiler::Ptr compiler = Compiler::create(flowErrorCompilerConfig());
         bool hadException = false;
 
         try {
-            compiler->compileToTarget("FlowUntypedParameters.lv", contents);
+            compiler->compileToTarget(filePath, contents);
         } catch (lv::el::SyntaxException& e) {
             REQUIRE(e.code() == lv::Exception::toCode("~Language"));
             hadException = true;
         }
         REQUIRE(hadException);
+    }
+
+    SECTION("Flow Rejects Captured Locals"){
+        std::string name = "ParserErrorTest18";
+        std::string filePath = scriptPath() + "/" + name + ".lv";
+        std::string contents = fileIO().readFromFile(filePath);
+        Compiler::Ptr compiler = Compiler::create(flowErrorCompilerConfig());
+
+        try {
+            compiler->compileToTarget(filePath, contents);
+            FAIL("Expected a SyntaxException for a captured local.");
+        } catch ( const lv::el::SyntaxException& e ) {
+            REQUIRE(e.code() == lv::Exception::toCode("~Language"));
+            REQUIRE(e.message().find("'helper' is declared outside the flow") != std::string::npos);
+        }
+    }
+
+    SECTION("Flow Rejects Outer Flow Captures"){
+        std::string name = "ParserErrorTest19";
+        std::string filePath = scriptPath() + "/" + name + ".lv";
+        std::string contents = fileIO().readFromFile(filePath);
+        Compiler::Ptr compiler = Compiler::create(flowErrorCompilerConfig());
+
+        try {
+            compiler->compileToTarget(filePath, contents);
+            FAIL("Expected a SyntaxException for an outer-flow capture.");
+        } catch ( const lv::el::SyntaxException& e ) {
+            REQUIRE(e.code() == lv::Exception::toCode("~Language"));
+            REQUIRE(e.message().find("'outer' is declared outside the flow") != std::string::npos);
+        }
     }
 }

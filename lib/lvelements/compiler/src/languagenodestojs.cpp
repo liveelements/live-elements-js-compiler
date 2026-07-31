@@ -79,7 +79,16 @@ std::string LanguageNodesToJs::renderProgramHeader(ProgramNode* node, const std:
                 << " from '" << importPath << "'\n";
     }
 
-    if ( node->hasFlows() ){
+    bool hasExplicitFlowImport = false;
+    for ( JsImportNode* jsImport : node->jsImports() ){
+        for ( IdentifierNode* nameNode : jsImport->importNames() ){
+            if ( LanguageNodesToJs::slice(source, nameNode) == ctx->flowModuleName ){
+                hasExplicitFlowImport = true;
+            }
+        }
+    }
+
+    if ( node->hasFlows() && !hasExplicitFlowImport ){
         std::string importPath = LanguageNodesToJs::rebaseImportPathFromBuild(ctx->flowModulePath, ctx);
         compose << "import {" << ctx->flowModuleName << "} from '" << importPath << "'\n";
     }
@@ -1756,7 +1765,8 @@ std::string LanguageNodesToJs::lowerFlowValue(FlowValueNode *node, const std::st
         }
         FlowCallNode* callNode = node->as<FlowCallNode>();
         std::string result = BaseNode::ConversionContext::flowCall(ctx, BaseNode::ConversionContext::FlowCall::Call);
-        result += "(" + lowerFlowCallee(source, callNode) + ", [";
+        const std::string callee = lowerFlowCallee(source, callNode);
+        result += "(" + callee + ", [";
         for ( size_t i = 0; i < callNode->arguments().size(); ++i ){
             if ( i != 0 ){
                 result += ", ";
@@ -1853,7 +1863,8 @@ std::string LanguageNodesToJs::lowerFlowExpression(FlowExpressionNode *node, con
             FlowStepNode* step = statement->as<FlowStepNode>();
             FlowCallNode* callNode = step->expression()->as<FlowCallNode>();
             std::string stepCode = BaseNode::ConversionContext::flowCall(ctx, BaseNode::ConversionContext::FlowCall::Call);
-            stepCode += "(" + lowerFlowCallee(source, callNode) + ", [";
+            const std::string callee = lowerFlowCallee(source, callNode);
+            stepCode += "(" + callee + ", [";
             for ( size_t i = 0; i < callNode->arguments().size(); ++i ){
                 if ( i != 0 ){
                     stepCode += ", ";

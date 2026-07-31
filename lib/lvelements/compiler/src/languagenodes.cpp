@@ -26,6 +26,59 @@
 
 namespace lv{ namespace el{
 
+namespace {
+
+class DeclarationLookup{
+
+public:
+    DeclarationLookup(IdentifierNode* declaration = nullptr, JsBlockNode* moduleBlock = nullptr)
+        : m_declaration(declaration), m_moduleBlock(moduleBlock){}
+
+    IdentifierNode* declaration() const{ return m_declaration; }
+    JsBlockNode* moduleBlock() const{ return m_moduleBlock; }
+    bool isModuleLevel() const{ return m_moduleBlock != nullptr; }
+    static DeclarationLookup find(const std::string& source, BaseNode* node, const std::string& id);
+
+private:
+    IdentifierNode* m_declaration;
+    JsBlockNode* m_moduleBlock;
+};
+
+DeclarationLookup DeclarationLookup::find(const std::string& source, BaseNode* node, const std::string& id){
+    while ( node ){
+        if ( node->canCast<JsBlockNode>() ){
+            JsBlockNode* block = node->as<JsBlockNode>();
+            for ( IdentifierNode* declaration : block->identifiers() ){
+                if ( BaseNode::slice(source, declaration) == id ){
+                    if ( !block->isNodeType<ProgramNode>() ){
+                        return DeclarationLookup(declaration);
+                    }
+
+                    BaseNode* site = declaration->parent();
+                    if ( site && site->isNodeType<JsImportNode>() ){
+                        return DeclarationLookup(declaration, block);
+                    }
+
+                    while ( site && !site->isNodeType<ProgramNode>() ){
+                        if ( site->isNodeType<TypedFunctionDeclarationNode>() || site->isNodeType<FunctionDeclarationNode>() || site->isNodeType<FunctionNode>() ){
+                            return DeclarationLookup(declaration, block);
+                        }
+                        if ( site->isNodeType<VariableDeclaratorNode>() ){
+                            return DeclarationLookup(declaration);
+                        }
+                        site = site->parent();
+                    }
+
+                    return DeclarationLookup(declaration, block);
+                }
+            }
+        }
+        node = node->parent();
+    }
+    return DeclarationLookup();
+}
+} // namespace
+
 std::string BaseNode::ConversionContext::baseComponentName(BaseNode::ConversionContext *ctx){
     return ctx && !ctx->baseComponent.empty() ? ctx->baseComponent : "Element";
 }
@@ -129,35 +182,6 @@ BaseNode *BaseNode::visit(const std::string &filePath, const std::string &fileNa
     return node;
 }
 
-bool BaseNode::checkIdentifierDeclared(const std::string& source, BaseNode *node, std::string id, ConversionContext *ctx){
-    if (id == "this" || id == "parent" || id == "import" )
-        return true;
-    if ( ConversionContext::isImplicitType(ctx, id) )
-        return true;
-
-    BaseNode* prog = nullptr;
-    while (node){
-        JsBlockNode* hasIds = dynamic_cast<JsBlockNode*>(node);
-
-        if (!node->parent()){
-            prog = node;
-        }
-
-        if (hasIds){
-            for (auto it = hasIds->m_declarations.begin(); it != hasIds->m_declarations.end(); ++it){
-                std::string declaredId = slice(source, *it);
-                if (declaredId == id){
-                    return true;
-                }
-            }
-        }
-
-        node = node->parent();
-    }
-
-    return false;
-}
-
 const std::vector<BaseNode *>& BaseNode::children() const{
     return m_children;
 }
@@ -205,11 +229,8 @@ void BaseNode::collectImports(const std::string &source, std::vector<IdentifierN
 }
 
 void FlowExpressionNode::collectImports(const std::string &source, std::vector<IdentifierNode *> &identifiers, ConversionContext *ctx){
-    if ( m_body ){
-        m_body->collectImports(source, identifiers, ctx);
-    }
-    for ( FlowStatementNode* statement : m_statements ){
-        statement->collectImports(source, identifiers, ctx);
+    if ( m_flowBody ){
+        m_flowBody->collectImports(source, identifiers, ctx);
     }
 }
 
@@ -230,16 +251,100 @@ std::vector<FlowExpressionNode*> FlowExpressionNode::collectFlowExpressions(Base
     return flows;
 }
 
+void FlowBodyNode::collectImports(const std::string &source, std::vector<IdentifierNode *> &identifiers, ConversionContext *ctx){
+    BaseNode::collectImports(source, identifiers, ctx);
+
+    std::set<std::string> seenDeclarations;
+    for ( IdentifierNode* declaration : this->identifiers() ){
+        std::string name = slice(source, declaration);
+        if ( seenDeclarations.find(name) != seenDeclarations.end() ){
+            throwError(
+                declaration,
+                declaration->current(),
+                Utf8("Duplicate flow step label '%'").format(name).data()
+            );
+        }
+        seenDeclarations.insert(name);
+    }
+
+    for ( IdentifierNode* use : usedIdentifiers() ){
+        const std::string name = slice(source, use);
+        const bool isCallee = use->parent() && use->parent()->isNodeType<FlowCallNode>();
+
+        if ( isCallee ){
+            DeclarationLookup callee = DeclarationLookup::find(source, this->parent(), name);
+            if ( callee.declaration() ){
+                if ( callee.isModuleLevel() ){
+                    continue;
+                }
+
+                throwError(
+                    use,
+                    use->current(),
+                    Utf8("'%' is declared outside the flow; a flow can only use its own parameters and taps, imported names, or top-level functions")
+                        .format(name)
+                        .data()
+                );
+            }
+
+            DeclarationLookup flowLocal = DeclarationLookup::find(source, this, name);
+            if ( flowLocal.declaration() && declaresIdentifier(flowLocal.declaration()) ){
+                throwError(
+                    use,
+                    use->current(),
+                    Utf8("Cannot call '%' as a function; flow parameters and step results are values")
+                        .format(name)
+                        .data()
+                );
+            }
+
+            identifiers.push_back(use);
+            continue;
+        }
+
+        DeclarationLookup lookup = DeclarationLookup::find(source, this, name);
+        if ( !lookup.declaration() ){
+            identifiers.push_back(use);
+            continue;
+        }
+
+        if ( declaresIdentifier(lookup.declaration()) ){
+            continue;
+        }
+
+        if ( lookup.isModuleLevel() ){
+            throwError(
+                use,
+                use->current(),
+                Utf8("'%' is not a flow value; only parameters and step results can be referenced")
+                    .format(name)
+                    .data()
+            );
+        }
+
+        throwError(
+            use,
+            use->current(),
+            Utf8("'%' is declared outside the flow; a flow can only use its own parameters and taps, imported names, or top-level functions")
+                .format(name)
+                .data()
+        );
+    }
+}
+
 void FlowCallNode::collectImports(const std::string &source, std::vector<IdentifierNode *> &identifiers, ConversionContext *ctx){
     for ( FlowValueNode* argument : m_arguments ){
         argument->collectImports(source, identifiers, ctx);
     }
-    if ( !m_callee.empty() ){
-        std::string calleeHead = slice(source, m_callee.front());
-        if ( !BaseNode::checkIdentifierDeclared(source, this, calleeHead, ctx) ){
-            identifiers.push_back(m_callee.front());
+}
+
+bool JsBlockNode::declaresIdentifier(IdentifierNode* declaration) const{
+    for ( IdentifierNode* ownDeclaration : m_declarations ){
+        if ( ownDeclaration == declaration ){
+            return true;
         }
     }
+    return false;
 }
 
 std::string BaseNode::slice(const std::string &source, uint32_t start, uint32_t end){
@@ -691,97 +796,7 @@ void checkFlowExpressionShape(FlowExpressionNode* node){
     }
 }
 
-// Flow validation, source pass: name resolution against a scope built from
-// parameters and taps. Nested flow expressions form their own isolated scope and
-// are reached by the checkFlowReferences walk, so the value walk skips them.
-void resolveFlowValueNames(FlowValueNode* value, const std::string& source, const std::set<std::string>& availableNames){
-    if ( value->isNodeType<FlowCallNode>() ){
-        for ( FlowValueNode* argument : value->as<FlowCallNode>()->arguments() ){
-            resolveFlowValueNames(argument, source, availableNames);
-        }
-        return;
-    }
-
-    if ( value->isNodeType<FlowReferenceNode>() ){
-        FlowReferenceNode* reference = value->as<FlowReferenceNode>();
-        if ( reference->isPrevious() ){
-            return;
-        }
-        std::string name = BaseNode::slice(source, reference->name());
-        if ( availableNames.find(name) == availableNames.end() ){
-            BaseNode::throwError(value, reference->name()->current(), Utf8("Unknown flow reference '%'").format(name).data());
-        }
-        return;
-    }
-
-    if ( value->isNodeType<FlowMemberNode>() ){
-        resolveFlowValueNames(value->as<FlowMemberNode>()->base(), source, availableNames);
-        return;
-    }
-
-    if ( value->isNodeType<FlowLiteralNode>() ){
-        FlowLiteralNode* literal = value->as<FlowLiteralNode>();
-        for ( FlowValueNode* item : literal->items() ){
-            resolveFlowValueNames(item, source, availableNames);
-        }
-        for ( FlowObjectPairNode* pair : literal->objectPairs() ){
-            resolveFlowValueNames(pair->value(), source, availableNames);
-        }
-        return;
-    }
-}
-
-void resolveFlowNames(FlowExpressionNode* node, const std::string& source){
-    std::set<std::string> availableNames;
-    if ( node->parameters() ){
-        for ( ParameterNode* parameter : node->parameters()->parameters() ){
-            availableNames.insert(BaseNode::slice(source, parameter->identifier()));
-        }
-    }
-
-    if ( node->isExpressionBody() ){
-        resolveFlowValueNames(node->body()->as<FlowValueNode>(), source, availableNames);
-        return;
-    }
-
-    std::set<std::string> labels;
-    for ( FlowStatementNode* statement : node->statements() ){
-        if ( statement->isNodeType<FlowReturnNode>() ){
-            resolveFlowValueNames(statement->as<FlowReturnNode>()->value(), source, availableNames);
-            continue;
-        }
-
-        FlowStepNode* step = statement->as<FlowStepNode>();
-        resolveFlowValueNames(step->expression(), source, availableNames);
-
-        if ( step->label() ){
-            std::string labelName = BaseNode::slice(source, step->label());
-            if ( labels.find(labelName) != labels.end() ){
-                BaseNode::throwError(step, step->label()->current(), Utf8("Duplicate flow step label '%'").format(labelName).data());
-            }
-            labels.insert(labelName);
-            availableNames.insert(labelName);
-        }
-    }
-}
-
 } // namespace
-
-void BaseNode::checkFlowReferences(const std::string& source){
-    for ( BaseNode* node : m_children ){
-        node->checkFlowReferences(source);
-    }
-}
-
-void FlowExpressionNode::checkFlowReferences(const std::string& source){
-    resolveFlowNames(this, source);
-    if ( m_body ){
-        m_body->checkFlowReferences(source);
-    }
-    for ( FlowStatementNode* statement : m_statements ){
-        statement->checkFlowReferences(source);
-    }
-}
 
 FlowObjectPairNode* BaseNode::buildFlowObjectPair(BaseNode* parent, const TSNode& node){
     FlowObjectPairNode* pairNode = parent->addCreatedChild(new FlowObjectPairNode(node));
@@ -855,6 +870,9 @@ FlowValueNode* BaseNode::buildFlowValue(BaseNode* parent, const TSNode& node){
         for ( IdentifierNode* identifier : callNode->m_callee ){
             callNode->addChild(identifier);
         }
+        if ( !callNode->m_callee.empty() ){
+            addUsedIdentifier(callNode, callNode->m_callee.front());
+        }
 
         TSNode arguments = BaseNode::nodeChildByFieldName(node, "arguments");
         BaseNode::assertValid(parent, arguments, "Failed to find flow arguments.");
@@ -892,6 +910,7 @@ FlowValueNode* BaseNode::buildFlowValue(BaseNode* parent, const TSNode& node){
         TSNode previous = BaseNode::nodeChildByFieldName(node, "previous");
         if ( !ts_node_is_null(name) ){
             referenceNode->m_name = IdentifierNode::createNonEmpty(name, referenceNode);
+            addUsedIdentifier(referenceNode, referenceNode->m_name);
         }
         if ( !ts_node_is_null(previous) ){
             referenceNode->m_isPrevious = true;
@@ -940,6 +959,7 @@ FlowStatementNode* BaseNode::buildFlowStatement(BaseNode* parent, const TSNode& 
             TSNode labelName = BaseNode::nodeChildByFieldName(label, "name");
             BaseNode::assertValid(parent, labelName, "Flow step label name is missing.");
             stepNode->m_label = IdentifierNode::createNonEmpty(labelName, stepNode);
+            addToDeclarations(parent, stepNode->m_label);
         }
 
         uint32_t count = ts_node_child_count(node);
@@ -974,19 +994,26 @@ FlowExpressionNode* BaseNode::visitFlowExpression(BaseNode* parent, const TSNode
 
     TSNode body = BaseNode::nodeChildByFieldName(node, "body");
     BaseNode::assertValid(parent, body, "Flow body is missing.");
+    expressionNode->m_flowBody = expressionNode->addCreatedChild(new FlowBodyNode(body));
+
+    if ( expressionNode->m_parameters ){
+        for ( ParameterNode* parameter : expressionNode->m_parameters->parameters() ){
+            addToDeclarations(expressionNode->m_flowBody, parameter->identifier());
+        }
+    }
 
     if ( strcmp(ts_node_type(body), "flow_body") == 0 ){
-        expressionNode->m_expressionBody = false;
+        expressionNode->m_flowBody->m_expressionBody = false;
         uint32_t statementCount = ts_node_child_count(body);
         for ( uint32_t i = 0; i < statementCount; ++i ){
             TSNode child = ts_node_child(body, i);
             if ( ts_node_is_named(child) ){
-                expressionNode->m_statements.push_back(buildFlowStatement(expressionNode, child));
+                expressionNode->m_flowBody->m_statements.push_back(buildFlowStatement(expressionNode->m_flowBody, child));
             }
         }
     } else {
-        expressionNode->m_expressionBody = true;
-        expressionNode->m_body = buildFlowValue(expressionNode, body);
+        expressionNode->m_flowBody->m_expressionBody = true;
+        expressionNode->m_flowBody->m_body = buildFlowValue(expressionNode->m_flowBody, body);
     }
 
     ProgramNode* program = flowProgramNode(parent);
@@ -3375,9 +3402,26 @@ void JsBlockNode::collectImports(const std::string &source, std::vector<Identifi
 
 void JsBlockNode::collectBlockImports(const std::string &source, std::vector<IdentifierNode *> &identifiers, ConversionContext* ctx){
     for ( auto identifier : m_usedIdentifiers ){
-        if ( !checkIdentifierDeclared(source, this, slice(source, identifier), ctx) ){
-            identifiers.push_back(identifier);
+        const std::string id = slice(source, identifier);
+        if ( id == "this" || id == "parent" || id == "import" ){
+            continue;
         }
+        if ( ConversionContext::isImplicitType(ctx, id) ){
+            continue;
+        }
+        if ( DeclarationLookup::find(source, this, id).declaration() ){
+            continue;
+        }
+
+        BaseNode* prog = this;
+        while ( prog && prog->parent() ){
+            prog = prog->parent();
+        }
+        if ( prog && prog->isNodeType<ProgramNode>() && ctx && !ctx->flowModuleName.empty() && id == ctx->flowModuleName && prog->as<ProgramNode>()->hasFlows() ){
+            continue;
+        }
+
+        identifiers.push_back(identifier);
     }
 }
 
