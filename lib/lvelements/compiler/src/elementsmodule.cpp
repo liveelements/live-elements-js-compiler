@@ -353,9 +353,17 @@ void ElementsModule::compile(){
         THROW_EXCEPTION(lv::Exception, Utf8("Assertion: ElementsModule: Compiler pointer has been released."), Exception::toCode("~Compiler"));
     }
 
-    vlog().v() << "ElementsModule: Saving descriptor:" << descriptorPath;
+    bool descriptorUnchanged = false;
+    if ( Path::exists(descriptorPath) ){
+        descriptorUnchanged = compiler->fileIO()->readFromFile(descriptorPath) == descriptorContent;
+    }
 
-    compiler->fileIO()->writeToFile(descriptorPath, descriptorContent);
+    if ( descriptorUnchanged ){
+        vlog().v() << "ElementsModule: Descriptor unchanged:" << descriptorPath;
+    } else {
+        vlog().v() << "ElementsModule: Saving descriptor:" << descriptorPath;
+        compiler->fileIO()->writeToFile(descriptorPath, descriptorContent);
+    }
     
     m_d->status = ElementsModule::Compiled;
 }
