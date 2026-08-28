@@ -79,11 +79,13 @@ public:
         void initialize(const MLNode& config);
         void allowUnresolvedTypes(bool allow){ m_allowUnresolved = allow; }
         void outputTarget(OutputTarget target) { m_outputTarget = target; }
+        const std::string& declarationExtension() const { return m_declarationExtension; }
     private:
         bool                   m_fileOutput;
         bool                   m_fileOutputOnlyOnModified;
         FileIOInterface*       m_fileIO;
         std::string            m_outputExtension;
+        std::string            m_declarationExtension;
         std::string            m_elementPath;
         std::string            m_baseComponent;
         std::string            m_baseComponentUri;
@@ -130,6 +132,7 @@ public:
     ProgramNode* parseProgramNodes(const std::string& filePath, const std::string &fileName, LanguageParser::AST* ast);
 
     const std::string& outputExtension() const;
+    const std::string& declarationExtension() const;
     const std::string& importLocalPath() const;
     const LanguageParser::Ptr& parser() const;
 

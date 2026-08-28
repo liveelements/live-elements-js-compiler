@@ -31,6 +31,12 @@ namespace lv{ namespace el {
 
 namespace {
 
+std::string declarationExtensionFor(const std::string& outputExtension){
+    if ( outputExtension == ".mjs" ) return ".d.mts";
+    if ( outputExtension == ".cjs" ) return ".d.cts";
+    return ".d.ts";
+}
+
 bool flowCallFromString(const std::string& role, Compiler::Config::FlowCall& out){
     if ( role == "create" )      out = Compiler::Config::FlowCall::Create;
     else if ( role == "call" )   out = Compiler::Config::FlowCall::Call;
@@ -176,7 +182,7 @@ Compiler::TargetResult Compiler::compileToTarget(const std::string &path, const 
         section->to   = static_cast<int>(contents.size());
 
         const std::string outputKey = path + extension;
-        const std::string typeResolutionSourcePath = path + ".d.ts";
+        const std::string typeResolutionSourcePath = path + m_d->config.declarationExtension();
         auto ctx = m_d->createConversionContext(target, nullptr, path, "", outputKey, typeResolutionSourcePath);
 
         LanguageNodesToJs lnt;
@@ -220,7 +226,7 @@ Compiler::TargetResult Compiler::compileToTarget(const std::string &path, const 
 
     if (m_d->config.m_outputTarget == Compiler::Config::JS_DTS) {
         compileContextTarget(BaseNode::ConversionContext::JS, result.js, m_d->config.m_outputExtension);
-        compileContextTarget(BaseNode::ConversionContext::DTS, result.dts, ".d.ts");
+        compileContextTarget(BaseNode::ConversionContext::DTS, result.dts, m_d->config.declarationExtension());
     }
 
     m_d->currentRun->finalize(m_d->config.m_fileIO, m_d->config.m_typesModulePath);
@@ -276,7 +282,7 @@ Compiler::TargetResult Compiler::compileModuleFileToTarget(const Module::Ptr &mo
         section->to   = static_cast<int>(contents.size());
 
         std::string outputFile = outputPath.data() + extension;
-        std::string typeResolutionSourcePath = outputPath.data() + ".d.ts";
+        std::string typeResolutionSourcePath = outputPath.data() + m_d->config.declarationExtension();
         auto ctx = m_d->createConversionContext(
             target,
             module,
@@ -313,7 +319,7 @@ Compiler::TargetResult Compiler::compileModuleFileToTarget(const Module::Ptr &mo
                 auto package = module->context()->packageUnwrapped();
                 if ( !package->release().empty() ){
                     shouldWrite = false;
-                    if ( extension != ".d.ts" && !Path::exists(outputFile) ){
+                    if ( extension != m_d->config.declarationExtension() && !Path::exists(outputFile) ){
                         Utf8 msg = Utf8("Released package '%' missing build file: %").format(package->name(), displayFilePath);
                         delete ctx;
                         THROW_EXCEPTION(lv::Exception, msg, Exception::toCode("~File"));
@@ -352,7 +358,7 @@ Compiler::TargetResult Compiler::compileModuleFileToTarget(const Module::Ptr &mo
 
     if (m_d->config.m_outputTarget == Compiler::Config::JS_DTS) {
         compileContextTarget(BaseNode::ConversionContext::JS, result.js, m_d->config.m_outputExtension);
-        compileContextTarget(BaseNode::ConversionContext::DTS, result.dts, ".d.ts");
+        compileContextTarget(BaseNode::ConversionContext::DTS, result.dts, m_d->config.declarationExtension());
     }
 
     return result;
@@ -406,6 +412,10 @@ ProgramNode *Compiler::parseProgramNodes(const std::string& filePath, const std:
 
 const std::string &Compiler::outputExtension() const{
     return m_d->config.m_outputExtension;
+}
+
+const std::string &Compiler::declarationExtension() const{
+    return m_d->config.m_declarationExtension;
 }
 
 const std::string &Compiler::importLocalPath() const{
@@ -591,6 +601,7 @@ Compiler::Config::Config(bool fileOutput, const std::string &outputExtension, Fi
     , m_fileOutputOnlyOnModified(true)
     , m_fileIO(ioInterface)
     , m_outputExtension(outputExtension)
+    , m_declarationExtension(declarationExtensionFor(outputExtension))
     , m_enableJsImports(true)
     , m_enableComponentMetaInfo(true)
     , m_allowUnresolved(true)
@@ -681,6 +692,7 @@ void Compiler::Config::initialize(const MLNode &config){
     }
     if ( config.hasKey("outputExtension") ){
         m_outputExtension = "." + config["outputExtension"].asString();
+        m_declarationExtension = declarationExtensionFor(m_outputExtension);
     }
     if ( config.hasKey("allowUnresolved") ){
         m_allowUnresolved = config["allowUnresolved"].asBool();
