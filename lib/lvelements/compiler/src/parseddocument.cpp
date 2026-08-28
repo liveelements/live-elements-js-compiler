@@ -371,10 +371,11 @@ TypeInfo::Ptr ParsedDocument::extractType(const std::string& source, TSNode node
                 }
                 else if (strcmp(ts_node_type(component_body_child), "typed_function_declaration") == 0 || strcmp(ts_node_type(component_body_child), "event_declaration") == 0)
                 {
-                    Utf8 funcName = slice(source, ts_node_child(component_body_child, 1));
+                    TSNode nameNode = ts_node_child_by_field_name(component_body_child, "name", 4);
+                    Utf8 funcName = slice(source, nameNode);
                     FunctionInfo fi(funcName);
 
-                    TSNode formal_type_parameters = ts_node_child(component_body_child, 2);
+                    TSNode formal_type_parameters = ts_node_child_by_field_name(component_body_child, "parameters", 10);
                     auto ftpc = ts_node_child_count(formal_type_parameters);
                     for (uint32_t ftpcidx = 1; ftpcidx < ftpc; ftpcidx+=2)
                     {
