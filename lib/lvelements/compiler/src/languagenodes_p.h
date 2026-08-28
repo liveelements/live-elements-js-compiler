@@ -45,6 +45,7 @@ class StaticPropertyDeclarationNode;
 class PropertyAssignmentNode;
 class ParameterNode;
 class ParameterListNode;
+class TypeParameterListNode;
 class EventDeclarationNode;
 class ListenerDeclarationNode;
 class TypedMethodDeclarationNode;
@@ -97,9 +98,30 @@ class FlowLiteralNode;
 class FlowObjectPairKeyNode;
 class FlowObjectPairNode;
 
+class Occurrence{
+public:
+    enum SpaceEnum {
+        SpaceValue = 1 << 0,
+        SpaceType  = 1 << 1
+    };
+
+    typedef int Space;
+
+    Occurrence(IdentifierNode* identifier = nullptr, Space space = SpaceValue)
+        : m_identifier(identifier), m_space(space){}
+
+    IdentifierNode* identifier() const{ return m_identifier; }
+    Space space() const{ return m_space; }
+
+private:
+    IdentifierNode* m_identifier;
+    Space           m_space;
+};
+
 class BaseNode{
 
     friend class JsBlockNode;
+    friend class TypeNode;
     LANGUAGE_NODE_INFO(BaseNode);
 
 public:
@@ -173,14 +195,14 @@ public:
     const std::string& nodeName() const;
     template<typename T> bool isNodeType() const { return nodeType() == T::nodeInfoType(); }
 
-    virtual void collectImports(const std::string& source, std::vector<IdentifierNode *> &identifiers, ConversionContext* ctx = nullptr);
+    virtual void collectImports(const std::string& source, std::vector<Occurrence>& references, ConversionContext* ctx = nullptr);
 
     static std::string slice(const std::string& source, uint32_t start, uint32_t end);
     static std::string slice(const std::string& source, BaseNode* node);
     static std::string slice(const std::string& source, const TSNode& node);
 
-    static JsBlockNode* addToDeclarations(BaseNode* parent, IdentifierNode* idNode);
-    static JsBlockNode* addUsedIdentifier(BaseNode* parent, IdentifierNode* idNode);
+    static JsBlockNode* addToDeclarations(BaseNode* parent, IdentifierNode* idNode, Occurrence::Space space = Occurrence::SpaceValue);
+    static JsBlockNode* addUsedIdentifier(BaseNode* parent, const Occurrence& reference);
 
     BaseNode* parent() const{ return m_parent; }
     void setParent(BaseNode* parent){ m_parent = parent; }
@@ -190,7 +212,7 @@ public:
     static TSNode nodeChildByFieldName(const TSNode& node, const std::string& name);
     static std::vector<IdentifierNode*> fromNestedIdentifier(BaseNode* parent, const TSNode& node);
     static ParameterListNode* scanFormalParameters(BaseNode* parent, const TSNode& formalParameters);
-    static ParameterListNode* scanFormalTypeParameters(BaseNode* parent, const TSNode& formalParameters);
+    static ParameterListNode* scanFormalTypeParameters(BaseNode* parent, const TSNode& formalParameters, bool isMeta = false);
     static ParameterListNode* scanFlowParameters(BaseNode* parent, const TSNode& parameters);
     static BaseNode* resolveBindingBase(BaseNode* node);
 
@@ -204,8 +226,8 @@ protected:
 
     static std::vector<CommentNode*> extractPrecedingComments(const TSNode& tsnode);
 
-private:
     static BaseNode* visit(BaseNode* parent, const TSNode& node);
+private:
     static BaseNode* visitRecognized(BaseNode* parent, const TSNode& node);
     static void visitChildren(BaseNode* parent, const TSNode& node);
 
@@ -331,17 +353,17 @@ class JsBlockNode : public BaseNode{
 
 public:
     JsBlockNode(const TSNode& node, const LanguageNodeInfo::ConstPtr& ni = JsBlockNode::nodeInfo()) : BaseNode(node, ni){}
-    const std::vector<IdentifierNode*>& identifiers() const { return m_declarations; }
-    const std::vector<IdentifierNode*>& usedIdentifiers() const{ return m_usedIdentifiers; }
+    const std::vector<Occurrence>& declarations() const{ return m_declarations; }
+    const std::vector<Occurrence>& references() const{ return m_references; }
     bool declaresIdentifier(IdentifierNode* declaration) const;
 
-    virtual void collectImports(const std::string& source, std::vector<IdentifierNode *> &identifiers, ConversionContext* ctx = nullptr);
+    virtual void collectImports(const std::string& source, std::vector<Occurrence>& references, ConversionContext* ctx = nullptr);
 
 protected:
-    void collectBlockImports(const std::string& source, std::vector<IdentifierNode *> &identifiers, ConversionContext* ctx = nullptr);
+    void collectBlockImports(const std::string& source, std::vector<Occurrence>& references, ConversionContext* ctx = nullptr);
 
-    std::vector<IdentifierNode*> m_declarations;
-    std::vector<IdentifierNode*> m_usedIdentifiers;
+    std::vector<Occurrence> m_declarations;
+    std::vector<Occurrence>   m_references;
 };
 
 class ProgramNode : public JsBlockNode {
@@ -357,6 +379,7 @@ public:
         std::string importNamespace;
         std::string resolvedPath;
         SourcePoint location;
+        Occurrence::Space space = 0;
     };
 
 public:
@@ -385,7 +408,7 @@ public:
 protected:
     virtual void addChild(BaseNode *child);
     virtual std::string toString(int indent = 0) const;
-    virtual void collectImports(const std::string& source, std::vector<IdentifierNode *> &identifiers, ConversionContext* ctx = nullptr);
+    virtual void collectImports(const std::string& source, std::vector<Occurrence>& references, ConversionContext* ctx = nullptr);
 
 private:
     std::string m_fileName;
@@ -419,7 +442,7 @@ public:
     const std::vector<FlowStatementNode*>& statements() const{ return m_statements; }
     bool isExpressionBody() const{ return m_expressionBody; }
 
-    virtual void collectImports(const std::string& source, std::vector<IdentifierNode *> &identifiers, ConversionContext* ctx = nullptr);
+    virtual void collectImports(const std::string& source, std::vector<Occurrence>& references, ConversionContext* ctx = nullptr);
 
 private:
     BaseNode*                       m_body = nullptr;
@@ -454,7 +477,7 @@ public:
     bool isParenthesized() const{ return m_parenthesized; }
     void setParenthesized(bool value){ m_parenthesized = value; }
 
-    virtual void collectImports(const std::string& source, std::vector<IdentifierNode *> &identifiers, ConversionContext* ctx = nullptr);
+    virtual void collectImports(const std::string& source, std::vector<Occurrence>& references, ConversionContext* ctx = nullptr);
 
     static std::vector<FlowExpressionNode*> collectFlowExpressions(BaseNode* node);
 
@@ -509,7 +532,7 @@ public:
 
     const std::vector<IdentifierNode*>& callee() const{ return m_callee; }
     const std::vector<FlowValueNode*>& arguments() const{ return m_arguments; }
-    virtual void collectImports(const std::string& source, std::vector<IdentifierNode *> &identifiers, ConversionContext* ctx = nullptr);
+    virtual void collectImports(const std::string& source, std::vector<Occurrence>& references, ConversionContext* ctx = nullptr);
 
 private:
     std::vector<IdentifierNode*> m_callee;
@@ -614,9 +637,34 @@ class TypeNode : public BaseNode{
     friend class BaseNode;
     LANGUAGE_NODE_INFO(TypeNode);
 public:
-    TypeNode(const TSNode& node) : BaseNode(node, TypeNode::nodeInfo()){}
+    static TypeNode* create(const TSNode& node, BaseNode* parent, bool isMeta = false);
+    static TypeNode* findTypeNode(BaseNode* node);
 
     static std::string sliceWithoutAnnotation(const std::string &source, TypeNode* tn);
+    static bool isReservedTypeName(const std::string& name);
+    const std::vector<Occurrence>& declaredIdentifiers() const{ return m_declaredIdentifiers; }
+
+    IdentifierNode* qualifiedTail(IdentifierNode* head) const;
+
+    bool isMeta() const{ return m_isMeta; }
+
+    Occurrence::Space nameSpace() const{
+        return m_isMeta ? (Occurrence::SpaceType | Occurrence::SpaceValue) : Occurrence::SpaceType;
+    }
+
+private:
+    TypeNode(const TSNode& node, bool isMeta) : BaseNode(node, TypeNode::nodeInfo()), m_isMeta(isMeta){}
+
+    static IdentifierNode* visitTypeIdentifier(BaseNode* parent, const TSNode& node);
+    static IdentifierNode* visitNestedTypeIdentifier(BaseNode* parent, const TSNode& node);
+    static IdentifierNode* visitTypeQuery(BaseNode* parent, const TSNode& node);
+
+    static IdentifierNode* visitQualifiedHead(BaseNode* parent, const TSNode& node);
+    static void declareQualifiedTail(BaseNode* parent, IdentifierNode* head, const TSNode& node);
+
+    bool                    m_isMeta;
+    std::vector<Occurrence> m_declaredIdentifiers;
+    std::vector<std::pair<IdentifierNode*, IdentifierNode*> > m_qualifiedNames;
 };
 
 class VariableDeclaratorNode : public BaseNode{
@@ -632,7 +680,7 @@ public:
 private:
     IdentifierNode* m_name;
     TypeNode*       m_type;
-    ExpressionNode*       m_value;
+    ExpressionNode* m_value;
 };
 
 class VariableDeclarationNode : public BaseNode{
@@ -748,6 +796,20 @@ public:
     StringNode(const TSNode& node) : BaseNode(node, StringNode::nodeInfo()){}
 };
 
+class JsImportName{
+public:
+    JsImportName(IdentifierNode* identifier = nullptr) : m_identifier(identifier), m_usage(0){}
+
+    IdentifierNode* identifier() const{ return m_identifier; }
+    int usage() const{ return m_usage; }
+    void markUsage(Occurrence::Space space){ m_usage |= space; }
+    bool isTypeOnly() const{ return m_usage == Occurrence::SpaceType; }
+
+private:
+    IdentifierNode* m_identifier;
+    int             m_usage;
+};
+
 class JsImportNode : public BaseNode{
     friend class BaseNode;
     LANGUAGE_NODE_INFO(JsImportNode);
@@ -759,37 +821,63 @@ public:
     {}
     virtual std::string toString(int indent = 0) const;
 
-    const std::vector<IdentifierNode*>& importNames() const{ return m_importNames; }
+    const std::vector<JsImportName>& importNames() const{ return m_importNames; }
     BaseNode* importPath() const{ return m_importPath; }
 
     void setIsObjectImport(bool value){ m_isObjectImport = value; }
     bool isObjectImport() const{ return m_isObjectImport; }
+    void markUsage(const std::string& source, const std::string& id, Occurrence::Space space);
 
 private:
-    std::vector<IdentifierNode*> m_importNames;
+    std::vector<JsImportName> m_importNames;
     BaseNode*                    m_importPath;
     bool                         m_isObjectImport;
 };
 
-class TypeAliasDeclarationNode : public BaseNode {
+class TypeAliasDeclarationNode : public JsBlockNode {
     friend class BaseNode;
     LANGUAGE_NODE_INFO(TypeAliasDeclarationNode);
 public:
-    TypeAliasDeclarationNode(const TSNode& node) : BaseNode(node, TypeAliasDeclarationNode::nodeInfo()){}
+    TypeAliasDeclarationNode(const TSNode& node)
+        : JsBlockNode(node, TypeAliasDeclarationNode::nodeInfo())
+    {}
+
+    IdentifierNode* name() const{ return m_name; }
+    TypeParameterListNode* typeParameters() const{ return m_typeParameters; }
+
+private:
+    IdentifierNode*       m_name = nullptr;
+    TypeParameterListNode* m_typeParameters = nullptr;
 };
 
-class InterfaceDeclarationNode : public BaseNode {
+class InterfaceDeclarationNode : public JsBlockNode {
     friend class BaseNode;
     LANGUAGE_NODE_INFO(InterfaceDeclarationNode);
 public:
-    InterfaceDeclarationNode(const TSNode& node) : BaseNode(node, InterfaceDeclarationNode::nodeInfo()){}
+    InterfaceDeclarationNode(const TSNode& node)
+        : JsBlockNode(node, InterfaceDeclarationNode::nodeInfo())
+    {}
+
+    IdentifierNode* name() const{ return m_name; }
+    TypeParameterListNode* typeParameters() const{ return m_typeParameters; }
+
+private:
+    IdentifierNode*        m_name = nullptr;
+    TypeParameterListNode* m_typeParameters = nullptr;
 };
 
 class EnumDeclarationNode : public BaseNode {
     friend class BaseNode;
     LANGUAGE_NODE_INFO(EnumDeclarationNode);
 public:
-    EnumDeclarationNode(const TSNode& node) : BaseNode(node, EnumDeclarationNode::nodeInfo()){}
+    EnumDeclarationNode(const TSNode& node)
+        : BaseNode(node, EnumDeclarationNode::nodeInfo())
+    {}
+
+    IdentifierNode* name() const{ return m_name; }
+
+private:
+    IdentifierNode* m_name = nullptr;
 };
 
 class ImportNode : public BaseNode{
@@ -849,7 +937,7 @@ private:
 
 };
 
-class TypedMethodDeclarationNode : public BaseNode{
+class TypedMethodDeclarationNode : public JsBlockNode{
     friend class BaseNode;
     LANGUAGE_NODE_INFO(TypedMethodDeclarationNode);
 public:
@@ -894,7 +982,12 @@ public:
     void setDeclared(bool value){ m_declared = value; }
     bool isMeta() const{ return m_meta; }
     bool isDeclared() const{ return m_declared; }
+    TypeParameterListNode* typeParameters() const{ return m_typeParameters; }
+
+    virtual void collectImports(const std::string& source, std::vector<Occurrence>& references, ConversionContext* ctx = nullptr);
+
 private:
+    TypeParameterListNode* m_typeParameters = nullptr;
     bool m_meta = false;
     bool m_declared = false;
 };
@@ -1254,6 +1347,7 @@ public:
     MemberExpressionNode(const TSNode& node) : BaseNode(node, MemberExpressionNode::nodeInfo()){}
 
     std::vector<std::string> identifierChain(const std::string& source) const;
+    IdentifierNode* identifierChainHead() const;
 };
 
 class SubscriptExpressionNode : public BaseNode{
@@ -1266,35 +1360,51 @@ class ParameterNode : public BaseNode{
     friend class BaseNode;
     LANGUAGE_NODE_INFO(ParameterNode);
 public:
-    ParameterNode(const TSNode& node, IdentifierNode* identifier, TypeNode* typen = nullptr, bool isOptional = false)
-        : BaseNode(node, ParameterNode::nodeInfo()), m_identifier(identifier), m_type(typen), m_isOptional(isOptional)
-    {
-        if ( m_identifier )
-            addChild(m_identifier);
-        if ( m_type )
-            addChild(m_type);
-    }
+    ParameterNode(const TSNode& node, IdentifierNode* identifier, bool isOptional = false);
+
     IdentifierNode* identifier(){ return m_identifier; }
     TypeNode* type(){ return m_type; }
     bool isOptional(){ return m_isOptional; }
+
+    bool isDestructuringPattern() const{ return m_isDestructuringPattern; }
+
+    bool hasDefaultValue() const{ return m_defaultValue != nullptr; }
+    BaseNode* defaultValue() const{ return m_defaultValue; }
 
 private:
     IdentifierNode* m_identifier;
     TypeNode*       m_type;
     bool            m_isOptional;
+    bool            m_isDestructuringPattern;
+    ExpressionNode* m_defaultValue;
 };
 
-class ParameterListNode : public BaseNode{
+class ParameterListNode : public JsBlockNode{
     friend class BaseNode;
     LANGUAGE_NODE_INFO(ParameterListNode);
 public:
-    ParameterListNode(const TSNode& node) : BaseNode(node, ParameterListNode::nodeInfo()){}
+    ParameterListNode(const TSNode& node) : JsBlockNode(node, ParameterListNode::nodeInfo()){}
     virtual std::string toString(int indent = 0) const;
     const std::vector<ParameterNode*>& parameters() const{ return m_parameters; }
 
     void addParameter(ParameterNode* node){ m_parameters.push_back(node); addChild(node); }
 private:
     std::vector<ParameterNode*> m_parameters;
+};
+
+class TypeParameterListNode : public BaseNode{
+    friend class BaseNode;
+    LANGUAGE_NODE_INFO(TypeParameterListNode);
+public:
+    static TypeParameterListNode* create(const TSNode& typeParameters, BaseNode* parent);
+
+    virtual std::string toString(int indent = 0) const;
+    const std::vector<IdentifierNode*>& names() const{ return m_names; }
+
+private:
+    TypeParameterListNode(const TSNode& node) : BaseNode(node, TypeParameterListNode::nodeInfo()){}
+
+    std::vector<IdentifierNode*> m_names;
 };
 
 class EventDeclarationNode : public BaseNode{

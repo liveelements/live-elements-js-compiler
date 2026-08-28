@@ -1,0 +1,5 @@
+fn f<X>(v: X): X {
+    type X = string
+    const flow = value: X %> value
+    return v
+}

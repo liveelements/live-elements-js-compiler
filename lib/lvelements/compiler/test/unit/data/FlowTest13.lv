@@ -1,0 +1,6 @@
+type Local = string;
+
+fn build(): any {
+    const flow = value: Local %> value
+    return flow
+}

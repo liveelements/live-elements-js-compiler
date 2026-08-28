@@ -1,0 +1,6 @@
+component Foo {
+}
+
+fn f(x: Foo): Foo {
+    return x
+}

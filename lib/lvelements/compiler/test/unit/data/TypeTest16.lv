@@ -1,0 +1,3 @@
+fn f<X>(): any {
+    return X
+}

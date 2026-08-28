@@ -1,6 +1,6 @@
 import {add} from './math.mjs'
 fn build(): any {
-    const flow = n: int %> {
+    const flow = n: number %> {
         add(missingValue, 1) @value
         return value
     }

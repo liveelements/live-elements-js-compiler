@@ -1,9 +1,9 @@
 /** Does something */
 component X {
     /* some number */
-    int a: 20
+    number a: 20
     /// some other number
-    int b: 30
+    number b: 30
     
     /**
      * @brief Adds two numbers together
@@ -11,7 +11,7 @@ component X {
      * @param b Second number
      * @returns The sum of a and b
      */
-    fn add(a:int, b:int){ return a + b }
+    fn add(a:number, b:number){ return a + b }
 
     /*
       A static property example with multi-line

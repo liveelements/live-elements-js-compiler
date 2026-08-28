@@ -1,17 +1,18 @@
+import {Event} from '__UNRESOLVED__'
 /** Does something */
 
 export declare class X extends Element {
     /* some number */
-    a: int;
+    a: number;
     /// some other number
-    b: int;
+    b: number;
     /**
      * @brief Adds two numbers together
      * @param a First number
      * @param b Second number
      * @returns The sum of a and b
      */
-    add(a: int, b: int): any;
+    add(a: number, b: number): any;
     /*
       A static property example with multi-line
       block comment formatting.

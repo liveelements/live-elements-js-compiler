@@ -1,5 +1,5 @@
 fn build(): any {
     const explicit = Flow.create('n', undefined, [Flow.ret(Flow.ref('n'))])
-    const nested = v: int %> add(v, 2)
+    const nested = v: number %> add(v, 2)
     return [explicit, nested]
 }

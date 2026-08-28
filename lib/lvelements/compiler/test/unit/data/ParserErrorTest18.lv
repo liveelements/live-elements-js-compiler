@@ -1,4 +1,4 @@
 fn build(): any {
     const helper = add
-    return n: int %> helper(n)
+    return n: number %> helper(n)
 }

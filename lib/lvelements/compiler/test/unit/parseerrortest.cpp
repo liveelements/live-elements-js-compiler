@@ -390,4 +390,24 @@ TEST_CASE( "Parse Error Test", "[ParseError]" ) {
             REQUIRE(e.message().find("'outer' is declared outside the flow") != std::string::npos);
         }
     }
+
+    SECTION("Duplicate Generic Type Parameters"){
+        std::string name = "ParserErrorTest20";
+        std::string filePath = scriptPath() + "/" + name + ".lv";
+        std::string contents = fileIO().readFromFile(filePath);
+
+        Compiler::Config compilerConfig;
+        compilerConfig.allowUnresolvedTypes(true);
+        compilerConfig.outputTarget(Compiler::Config::OutputTarget::JS_DTS);
+        Compiler::Ptr compiler = Compiler::create(compilerConfig);
+
+        try {
+            compiler->compileToTarget(filePath, contents);
+            FAIL("Expected a SyntaxException for duplicate type parameters.");
+        } catch ( const lv::el::SyntaxException& e ) {
+            REQUIRE(e.code() == lv::Exception::toCode("~Language"));
+            REQUIRE(e.message().find("Duplicate type parameter 'X'.") != std::string::npos);
+            REQUIRE(e.parsedLocation().range().start().line() == 1);
+        }
+    }
 }

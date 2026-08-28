@@ -2,6 +2,7 @@
 #include "live/exception.h"
 #include "live/path.h"
 #include "live/visuallog.h"
+#include <set>
 
 namespace lv{ namespace el{
 
@@ -14,6 +15,12 @@ std::string LanguageNodesToJs::lowerFlowCallee(const std::string& source, FlowCa
         callee += LanguageNodesToJs::slice(source, identifier);
     }
     return callee;
+}
+
+std::string LanguageNodesToJs::parameterDefaultJs(const std::string& source, ParameterNode* param){
+    if ( !param || !param->hasDefaultValue() )
+        return std::string();
+    return " = " + LanguageNodesToJs::slice(source, param->defaultValue()->startByte(), param->defaultValue()->endByte());
 }
 
 std::string LanguageNodesToJs::indent(int i){
@@ -54,17 +61,29 @@ std::string LanguageNodesToJs::renderProgramHeader(ProgramNode* node, const std:
         ProgramNode::ImportType it;
         it.name = ctx->baseComponent;
         it.resolvedPath = ctx->baseComponentImportUri;
+        it.space = Occurrence::SpaceValue | Occurrence::SpaceType;
         node->addImportType(it);
     }
 
     ElementsInsertion compose;
     for ( JsImportNode* jsImport : node->jsImports() ){
+        std::vector<std::string> emittedNames;
+        for ( const JsImportName& importName : jsImport->importNames() ){
+            if ( ctx && ctx->outputTarget == BaseNode::ConversionContext::JS && importName.isTypeOnly() ){
+                continue;
+            }
+            emittedNames.push_back(LanguageNodesToJs::slice(source, importName.identifier()));
+        }
+        if ( emittedNames.empty() ){
+            continue;
+        }
+
         std::string importNames;
-        for ( IdentifierNode* nameNode : jsImport->importNames() ){
+        for ( size_t i = 0; i < emittedNames.size(); ++i ){
             if ( !importNames.empty() ){
                 importNames += ",";
             }
-            importNames += LanguageNodesToJs::slice(source, nameNode);
+            importNames += emittedNames[i];
         }
 
         std::string importPath = LanguageNodesToJs::slice(source, jsImport->importPath());
@@ -81,8 +100,8 @@ std::string LanguageNodesToJs::renderProgramHeader(ProgramNode* node, const std:
 
     bool hasExplicitFlowImport = false;
     for ( JsImportNode* jsImport : node->jsImports() ){
-        for ( IdentifierNode* nameNode : jsImport->importNames() ){
-            if ( LanguageNodesToJs::slice(source, nameNode) == ctx->flowModuleName ){
+        for ( const JsImportName& importName : jsImport->importNames() ){
+            if ( LanguageNodesToJs::slice(source, importName.identifier()) == ctx->flowModuleName ){
                 hasExplicitFlowImport = true;
             }
         }
@@ -96,7 +115,13 @@ std::string LanguageNodesToJs::renderProgramHeader(ProgramNode* node, const std:
     for ( auto it = node->importTypes().begin(); it != node->importTypes().end(); ++it ){
         if ( it->first.empty() ){
             for ( auto impIt = it->second.begin(); impIt != it->second.end(); ++impIt ){
+                if ( !contextMatchesSpace(ctx, impIt->second.space) ){
+                    continue;
+                }
                 if ( !ctx->allowUnresolved && impIt->second.resolvedPath.empty() ){
+                    if ( ctx->outputTarget == BaseNode::ConversionContext::DTS && impIt->second.space == Occurrence::SpaceType ){
+                        continue;
+                    }
                     THROW_EXCEPTION(
                         lv::Exception,
                         Utf8("Identifier not found in imports: \'%\' in %:%:%").format(impIt->second.name, node->filePath(), impIt->second.location.line(), impIt->second.location.column()),
@@ -104,15 +129,18 @@ std::string LanguageNodesToJs::renderProgramHeader(ProgramNode* node, const std:
                     );
                 }
                 std::string impPath = impIt->second.resolvedPath.empty() ? "__UNRESOLVED__" : impIt->second.resolvedPath;
-                if ( ctx && ctx->outputTarget == BaseNode::ConversionContext::DTS && impPath == "__UNRESOLVED__" ){
-                    continue;
-                }
                 compose << "import {" << impIt->second.name << "} from '" << impPath << "'\n";
             }
         } else {
-            std::string moduleWrap = "let " + it->first + " = {";
+            std::vector<std::pair<std::string, std::string> > emittedNames;
             for ( auto impIt = it->second.begin(); impIt != it->second.end(); ++impIt ){
+                if ( !contextMatchesSpace(ctx, impIt->second.space) ){
+                    continue;
+                }
                 if ( !ctx->allowUnresolved && impIt->second.resolvedPath.empty() ){
+                    if ( ctx->outputTarget == BaseNode::ConversionContext::DTS && impIt->second.space == Occurrence::SpaceType ){
+                        continue;
+                    }
                     THROW_EXCEPTION(
                         lv::Exception,
                         Utf8("Identifier not found in imports: \'%\' in %:%:%").format(impIt->second.name, node->filePath(), impIt->second.location.line(), impIt->second.location.column()),
@@ -120,21 +148,37 @@ std::string LanguageNodesToJs::renderProgramHeader(ProgramNode* node, const std:
                     );
                 }
                 std::string impPath = impIt->second.resolvedPath.empty() ? "__UNRESOLVED__" : impIt->second.resolvedPath;
-                if ( ctx && ctx->outputTarget == BaseNode::ConversionContext::DTS && impPath == "__UNRESOLVED__" ){
-                    continue;
-                }
                 std::string impKey = "__" + it->first + "__" + impIt->second.name;
                 std::string impName = impIt->second.name;
-
-                if ( impIt != it->second.begin() ){
-                    moduleWrap += ", ";
-                }
-                moduleWrap += impIt->second.name + ":" + impKey;
-
                 compose << "import {" << impName << " as " << impKey << "} from '" << impPath << "'\n";
+                emittedNames.push_back(std::make_pair(impName, impKey));
             }
-            moduleWrap += "}\n";
-            compose << moduleWrap;
+
+            if ( emittedNames.empty() ){
+                continue;
+            }
+
+            if ( ctx && ctx->outputTarget == BaseNode::ConversionContext::DTS ){
+                std::string namespaceDecl = "declare namespace " + it->first + " { export {";
+                for ( size_t i = 0; i < emittedNames.size(); ++i ){
+                    if ( i != 0 ){
+                        namespaceDecl += ", ";
+                    }
+                    namespaceDecl += emittedNames[i].second + " as " + emittedNames[i].first;
+                }
+                namespaceDecl += "} }\n";
+                compose << namespaceDecl;
+            } else {
+                std::string moduleWrap = "let " + it->first + " = {";
+                for ( size_t i = 0; i < emittedNames.size(); ++i ){
+                    if ( i != 0 ){
+                        moduleWrap += ", ";
+                    }
+                    moduleWrap += emittedNames[i].first + ":" + emittedNames[i].second;
+                }
+                moduleWrap += "}\n";
+                compose << moduleWrap;
+            }
         }
     }
 
@@ -176,7 +220,20 @@ std::string LanguageNodesToJs::buildFlowShadowDeclaration(
 
     for ( FlowExpressionNode* flow : flows ){
         const std::string flowFunctionName = "__lvflow_" + std::to_string(flow->startByte());
-        shadowSource += "declare function " + flowFunctionName + "(";
+        shadowSource += "declare function " + flowFunctionName;
+
+        BaseNode* current = flow ? flow->parent() : nullptr;
+        while ( current ){
+            if ( current->isNodeType<TypedFunctionDeclarationNode>() ){
+                TypedFunctionDeclarationNode* functionNode = current->as<TypedFunctionDeclarationNode>();
+                if ( functionNode->typeParameters() ){
+                    shadowSource += slice(source, functionNode->typeParameters());
+                    break;
+                }
+            }
+            current = current->parent();
+        }
+        shadowSource += "(";
         const std::vector<ParameterNode*>& parameters = flow->parameters()->parameters();
         for ( size_t i = 0; i < parameters.size(); ++i ){
             if ( i != 0 ){
@@ -221,7 +278,7 @@ bool LanguageNodesToJs::newLineFollows(const std::string& source, size_t startPo
 }
 
 bool LanguageNodesToJs::newLinePrecedes(const std::string& source, size_t endPosition){
-    if (endPosition > source.length()) 
+    if (endPosition > source.length())
         return false;
     while (endPosition > 0) {
         --endPosition;
@@ -231,6 +288,19 @@ bool LanguageNodesToJs::newLinePrecedes(const std::string& source, size_t endPos
             return false;
     }
     return false;
+}
+
+bool LanguageNodesToJs::contextMatchesSpace(BaseNode::ConversionContext* ctx, Occurrence::Space space){
+    if ( !ctx ){
+        return true;
+    }
+    if ( ctx->outputTarget == BaseNode::ConversionContext::JS ){
+        return space == 0 || ( space & Occurrence::SpaceValue ) != 0;
+    }
+    if ( ctx->outputTarget == BaseNode::ConversionContext::DTS ){
+        return ( space & Occurrence::SpaceType ) != 0;
+    }
+    return true;
 }
 
 void LanguageNodesToJs::convert(BaseNode* node, const std::string &source, std::vector<ElementsInsertion *> &sections, int indentValue, BaseNode::ConversionContext *ctx){
@@ -359,6 +429,9 @@ void LanguageNodesToJs::convertComponentDeclaration(ComponentDeclarationNode *no
                         *compose << ", ";
                     ParameterNode* param = node->componentBody()->constructor()->parameters()->parameters()[i];
                     *compose << slice(source, param->identifier());
+                    if (param->hasDefaultValue()) {
+                        *compose << "?";
+                    }
                     if (param->type()) {
                         *compose << slice(source, param->type());
                     } else {
@@ -395,6 +468,9 @@ void LanguageNodesToJs::convertComponentDeclaration(ComponentDeclarationNode *no
                     if ( pit != pdn->parameters().begin() )
                         *compose << ", ";
                     *compose << slice(source, (*pit)->identifier());
+                    if ((*pit)->hasDefaultValue()) {
+                        *compose << "?";
+                    }
                     if ((*pit)->type()) {
                         *compose << ": " << TypeNode::sliceWithoutAnnotation(source, (*pit)->type());
                     } else {
@@ -496,6 +572,7 @@ void LanguageNodesToJs::convertComponentDeclaration(ComponentDeclarationNode *no
                     params += ",";
                 ParameterNode* param = node->componentBody()->constructor()->parameters()->parameters()[i];
                 params += slice(source, param->identifier());
+                params += parameterDefaultJs(source, param);
             }
             params += ")";
             *compose << params;
@@ -812,6 +889,7 @@ void LanguageNodesToJs::convertComponentDeclaration(ComponentDeclarationNode *no
                 if ( pit != pdn->parameters().begin() )
                     paramList += ",";
                 paramList += slice(source, (*pit)->identifier());
+                paramList += parameterDefaultJs(source, *pit);
             }
         }
         std::string annotations = "";
@@ -948,6 +1026,7 @@ void LanguageNodesToJs::convertNewComponentExpression(NewComponentExpressionNode
                         for (auto pit = pdn->parameters().begin(); pit != pdn->parameters().end(); ++pit) {
                             if (pit != pdn->parameters().begin()) *compose << ", ";
                             *compose << slice(source, (*pit)->identifier());
+                            if ((*pit)->hasDefaultValue()) *compose << "?";
                             if ((*pit)->type()) *compose << ": " << TypeNode::sliceWithoutAnnotation(source, (*pit)->type());
                             else *compose << ": any";
                         }
@@ -1225,6 +1304,7 @@ void LanguageNodesToJs::convertNewComponentExpression(NewComponentExpressionNode
                 if ( pit != pdn->parameters().begin() )
                     paramList += ",";
                 paramList += slice(source, (*pit)->identifier());
+                paramList += parameterDefaultJs(source, *pit);
             }
         }
         JSSection* jssection = new JSSection;
@@ -1542,8 +1622,13 @@ void LanguageNodesToJs::convertRootFunction(
             if ( pit != pdn->parameters().begin() )
                 paramNamesArrayLiteral += ", ";
             paramNamesArrayLiteral += "'" + slice(source, (*pit)->identifier()) + "'";
-            if (ctx->outputTarget != BaseNode::ConversionContext::JS && (*pit)->type()) {
-                paramList += ": " + TypeNode::sliceWithoutAnnotation(source, (*pit)->type());
+            if (ctx->outputTarget == BaseNode::ConversionContext::JS) {
+                paramList += parameterDefaultJs(source, *pit);
+            } else {
+                if ( (*pit)->hasDefaultValue() )
+                    paramList += "?";
+                if ( (*pit)->type() )
+                    paramList += ": " + TypeNode::sliceWithoutAnnotation(source, (*pit)->type());
             }
         }
     }
@@ -1555,7 +1640,11 @@ void LanguageNodesToJs::convertRootFunction(
     if ( funcNode->isAsync() ){
         *compose << "async ";
     }
-    *compose << "function " << slice(source, funcNode->name()) << "(" << paramList << ")";
+    std::string typeParamList = "";
+    if ( ctx->outputTarget != BaseNode::ConversionContext::JS && funcNode->typeParameters() ){
+        typeParamList = slice(source, funcNode->typeParameters());
+    }
+    *compose << "function " << slice(source, funcNode->name()) << typeParamList << "(" << paramList << ")";
     if (ctx->outputTarget != BaseNode::ConversionContext::JS) {
         if (funcNode->returnType()) {
             *compose << slice(source, funcNode->returnType());
@@ -1993,6 +2082,7 @@ std::string LanguageNodesToJs::getDTSPropertyType(const std::string& source, Bas
                         for (auto pit = pdn->parameters().begin(); pit != pdn->parameters().end(); ++pit) {
                             if (pit != pdn->parameters().begin()) type += ", ";
                             type += slice(source, (*pit)->identifier());
+                            if ((*pit)->hasDefaultValue()) type += "?";
                             if ((*pit)->type()) type += ": " + TypeNode::sliceWithoutAnnotation(source, (*pit)->type());
                             else type += ": any";
                         }

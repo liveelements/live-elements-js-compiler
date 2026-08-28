@@ -156,4 +156,5 @@ TEST_CASE( "Parse Test", "[Parse]" ) {
     SECTION("Root Functions"){ testFileParse("ParserTest54"); }
     SECTION("Meta Root Functions"){ testFileParse("ParserTest55"); }
     SECTION("Declared Root Functions"){ testFileParse("ParserTest57"); }
+    SECTION("Namespaced Types"){ testFileParse("ParserTest58"); }
 }

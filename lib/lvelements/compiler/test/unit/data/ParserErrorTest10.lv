@@ -1,5 +1,5 @@
 fn build(): any {
-    const flow = n: int %> {
+    const flow = n: number %> {
         outer(inner(n)) @value
         return value
     }

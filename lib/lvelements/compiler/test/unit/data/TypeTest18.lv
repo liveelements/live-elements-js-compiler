@@ -1,0 +1,7 @@
+type Foo = string
+
+fn f(): any {
+    const Foo = 3
+    var x: Foo = ""
+    return Foo
+}

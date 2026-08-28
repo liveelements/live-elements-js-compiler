@@ -1,5 +1,5 @@
 import {add} from './math.mjs'
 
 fn build(): any {
-    return (a: int, b: int): int %> add(a, b)
+    return (a: number, b: number): number %> add(a, b)
 }

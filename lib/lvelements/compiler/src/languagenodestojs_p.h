@@ -15,6 +15,8 @@ public:
     static bool newLineFollows(const std::string& source, size_t startPosition);
     static bool newLinePrecedes(const std::string& source, size_t endPosition);
 
+    static bool contextMatchesSpace(BaseNode::ConversionContext* ctx, Occurrence::Space space);
+
     void convert(
         BaseNode* node,
         const std::string &source,
@@ -156,6 +158,7 @@ public:
 
 
 private:
+    static std::string parameterDefaultJs(const std::string& source, ParameterNode* param);
     static std::string indent(int i);
     static std::string rebaseImportPathFromBuild(const std::string& rawImportPath, BaseNode::ConversionContext* ctx);
     static std::string renderProgramHeader(ProgramNode* node, const std::string& source, BaseNode::ConversionContext* ctx);

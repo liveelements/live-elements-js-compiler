@@ -1,0 +1,4 @@
+fn pipe<X>(v: X): X {
+    const f = a: X %> a
+    return v
+}

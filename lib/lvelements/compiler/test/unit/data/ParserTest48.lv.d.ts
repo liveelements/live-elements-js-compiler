@@ -1,3 +1,5 @@
+import { Array } from '__UNRESOLVED__'
+
 export declare class X extends Element {
     x: any;
     y: number;

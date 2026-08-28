@@ -1,0 +1,3 @@
+fn f(a: any = Unknown): any {
+    return a
+}

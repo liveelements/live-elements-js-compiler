@@ -1,4 +1,4 @@
-
+import {Container} from '__UNRESOLVED__'
 export declare class A extends Element {
     constructor(a: any, b: any);
     otherFunction(a: number): any;

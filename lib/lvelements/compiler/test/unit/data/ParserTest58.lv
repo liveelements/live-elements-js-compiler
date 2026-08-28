@@ -1,0 +1,7 @@
+import .module as mod
+
+component ParserTest58 < mod.A{
+    fn convert(value: mod.Point): mod.Size{
+        return value.size
+    }
+}

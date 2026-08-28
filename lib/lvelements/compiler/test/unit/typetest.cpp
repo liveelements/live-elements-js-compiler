@@ -391,7 +391,7 @@ TEST_CASE("Type Resolution", "[TypeResolution]"){
         const std::string moduleDir = Path::join(packageDir, "sample");
         const std::string sourcePath = Path::join(moduleDir, "main.lv");
         const std::string outputJsPath = sourcePath + ".mjs";
-        const std::string outputDtsPath = sourcePath + ".d.ts";
+        const std::string outputDtsPath = sourcePath + ".d.mts";
 
         Compiler::Config config(true, ".mjs", &fileIO);
         config.allowUnresolvedTypes(true);
@@ -416,9 +416,10 @@ TEST_CASE("Type Resolution", "[TypeResolution]"){
         REQUIRE(resolver.observedRequests[0].functionName() == "add");
         REQUIRE(Path::exists(outputDtsPath));
         REQUIRE(Path::exists(outputJsPath));
+        REQUIRE_FALSE(Path::exists(sourcePath + ".d.ts"));
 
         const std::string dtsContents = fileIO.readFromFile(outputDtsPath);
-        REQUIRE(dtsContents.find("export declare function add(a: int, b: int): int;") != std::string::npos);
+        REQUIRE(dtsContents.find("export declare function add(a: number, b: number): number;") != std::string::npos);
         REQUIRE(resolver.sourceContentsAtResolve[resolver.observedRequests[0].sourcePath()] == dtsContents);
 
         const std::string jsContents = fileIO.readFromFile(outputJsPath);
@@ -468,5 +469,248 @@ TEST_CASE("Type Resolution", "[TypeResolution]"){
         REQUIRE(roundTrip->exports()[0].declared());
         REQUIRE_FALSE(roundTrip->exports()[1].meta());
         REQUIRE(roundTrip->exports()[1].declared());
+    }
+
+    SECTION("Generic meta root functions preserve type parameters through dts and resolved JS"){
+        FileIO fileIO;
+        const std::string name = "TypeTest09";
+        const std::string sourcePath = Path::join(typeTestDataPath(), name + ".lv");
+        const std::string contents = fileIO.readFromFile(sourcePath);
+        const std::string expectedJs = fileIO.readFromFile(Path::join(typeTestDataPath(), name + ".lv.js"));
+        const std::string expectedDts = fileIO.readFromFile(Path::join(typeTestDataPath(), name + ".lv.d.ts"));
+
+        Compiler::Config config(false);
+        config.allowUnresolvedTypes(true);
+        config.outputTarget(Compiler::Config::OutputTarget::JS_DTS);
+        config.setTypesModule("types.mjs");
+
+        StubTypeResolver resolver;
+        resolver.responses[sourcePath + "::mapVal"] = TypeResolver::Result{
+            sourcePath + "::mapVal",
+            "FunctionType.for(TypeVariable.for('Y'), TypeVariable.for('X'), GenericType.for(Flow, FunctionType.for(TypeVariable.for('Y'), TypeVariable.for('X')))).withTypeParameters(['X', 'Y'])",
+            {"FunctionType", "GenericType", "Type", "TypeVariable"}
+        };
+
+        Compiler::Ptr compiler = Compiler::create(config);
+        compiler->setTypeResolver(&resolver);
+
+        Compiler::TargetResult targetResult = compiler->compileToTarget(sourcePath, contents);
+        requireEquivalentElementsOutput(expectedJs, targetResult.js, name + ".lv.js");
+        requireEquivalentElementsOutput(expectedDts, targetResult.dts, name + ".lv.d.ts");
+        REQUIRE(resolver.observedRequests.size() == 1);
+        REQUIRE(resolver.observedRequests[0].requestId() == sourcePath + "::mapVal");
+        REQUIRE(resolver.observedRequests[0].functionName() == "mapVal");
+        REQUIRE(resolver.observedRequests[0].sourcePath() == sourcePath + ".d.ts");
+    }
+
+    SECTION("Declared generic meta root functions preserve type parameters through dts and resolved JS"){
+        FileIO fileIO;
+        const std::string name = "TypeTest10";
+        const std::string sourcePath = Path::join(typeTestDataPath(), name + ".lv");
+        const std::string contents = fileIO.readFromFile(sourcePath);
+        const std::string expectedJs = fileIO.readFromFile(Path::join(typeTestDataPath(), name + ".lv.js"));
+        const std::string expectedDts = fileIO.readFromFile(Path::join(typeTestDataPath(), name + ".lv.d.ts"));
+
+        Compiler::Config config(false);
+        config.allowUnresolvedTypes(true);
+        config.outputTarget(Compiler::Config::OutputTarget::JS_DTS);
+        config.setTypesModule("types.mjs");
+
+        StubTypeResolver resolver;
+        resolver.responses[sourcePath + "::identity"] = TypeResolver::Result{
+            sourcePath + "::identity",
+            "FunctionType.for(TypeVariable.for('X'), TypeVariable.for('X')).withTypeParameters(['X'])",
+            {"FunctionType", "Type", "TypeVariable"}
+        };
+
+        Compiler::Ptr compiler = Compiler::create(config);
+        compiler->setTypeResolver(&resolver);
+
+        Compiler::TargetResult targetResult = compiler->compileToTarget(sourcePath, contents);
+        requireEquivalentElementsOutput(expectedJs, targetResult.js, name + ".lv.js");
+        requireEquivalentElementsOutput(expectedDts, targetResult.dts, name + ".lv.d.ts");
+        REQUIRE(resolver.observedRequests.size() == 1);
+        REQUIRE(resolver.observedRequests[0].requestId() == sourcePath + "::identity");
+        REQUIRE(resolver.observedRequests[0].functionName() == "identity");
+        REQUIRE(resolver.observedRequests[0].sourcePath() == sourcePath + ".d.ts");
+    }
+
+    SECTION("Type-only js imports stay in dts and drop from js while same-file interfaces stay local"){
+        FileIO fileIO;
+        const std::string sourcePath = Path::join(typeTestDataPath(), "TypeTest11.lv");
+        const std::string contents = fileIO.readFromFile(sourcePath);
+
+        Compiler::Config config(false);
+        config.allowUnresolvedTypes(true);
+        config.outputTarget(Compiler::Config::OutputTarget::JS_DTS);
+
+        Compiler::Ptr compiler = Compiler::create(config);
+        Compiler::TargetResult targetResult = compiler->compileToTarget(sourcePath, contents);
+
+        REQUIRE(targetResult.js.find("import {PointInterface} from './point.ts'") == std::string::npos);
+        REQUIRE(targetResult.dts.find("import {PointInterface} from './point.ts'") != std::string::npos);
+        REQUIRE(targetResult.dts.find("interface LocalPoint") != std::string::npos);
+        REQUIRE(targetResult.dts.find("import {LocalPoint}") == std::string::npos);
+    }
+
+    SECTION("A type alias satisfies a type annotation"){
+        FileIO fileIO;
+        const std::string name = "TypeTest13";
+        const std::string sourcePath = Path::join(typeTestDataPath(), name + ".lv");
+        const std::string contents = fileIO.readFromFile(sourcePath);
+        const std::string expectedJs = fileIO.readFromFile(Path::join(typeTestDataPath(), name + ".lv.js"));
+        const std::string expectedDts = fileIO.readFromFile(Path::join(typeTestDataPath(), name + ".lv.d.ts"));
+
+        Compiler::Config config(false);
+        config.allowUnresolvedTypes(true);
+        config.outputTarget(Compiler::Config::OutputTarget::JS_DTS);
+
+        Compiler::Ptr compiler = Compiler::create(config);
+        Compiler::TargetResult targetResult = compiler->compileToTarget(sourcePath, contents);
+
+        requireEquivalentElementsOutput(expectedJs, targetResult.js, name + ".lv.js");
+        requireEquivalentElementsOutput(expectedDts, targetResult.dts, name + ".lv.d.ts");
+    }
+
+    SECTION("A component satisfies a type annotation"){
+        FileIO fileIO;
+        const std::string name = "TypeTest14";
+        const std::string sourcePath = Path::join(typeTestDataPath(), name + ".lv");
+        const std::string contents = fileIO.readFromFile(sourcePath);
+        const std::string expectedJs = fileIO.readFromFile(Path::join(typeTestDataPath(), name + ".lv.js"));
+        const std::string expectedDts = fileIO.readFromFile(Path::join(typeTestDataPath(), name + ".lv.d.ts"));
+
+        Compiler::Config config(false);
+        config.allowUnresolvedTypes(true);
+        config.outputTarget(Compiler::Config::OutputTarget::JS_DTS);
+
+        Compiler::Ptr compiler = Compiler::create(config);
+        Compiler::TargetResult targetResult = compiler->compileToTarget(sourcePath, contents);
+
+        requireEquivalentElementsOutput(expectedJs, targetResult.js, name + ".lv.js");
+        requireEquivalentElementsOutput(expectedDts, targetResult.dts, name + ".lv.d.ts");
+    }
+
+    SECTION("A js import satisfies a type annotation"){
+        FileIO fileIO;
+        const std::string name = "TypeTest15";
+        const std::string sourcePath = Path::join(typeTestDataPath(), name + ".lv");
+        const std::string contents = fileIO.readFromFile(sourcePath);
+        const std::string expectedJs = fileIO.readFromFile(Path::join(typeTestDataPath(), name + ".lv.js"));
+        const std::string expectedDts = fileIO.readFromFile(Path::join(typeTestDataPath(), name + ".lv.d.ts"));
+
+        Compiler::Config config(false);
+        config.allowUnresolvedTypes(true);
+        config.outputTarget(Compiler::Config::OutputTarget::JS_DTS);
+
+        Compiler::Ptr compiler = Compiler::create(config);
+        Compiler::TargetResult targetResult = compiler->compileToTarget(sourcePath, contents);
+
+        requireEquivalentElementsOutput(expectedJs, targetResult.js, name + ".lv.js");
+        requireEquivalentElementsOutput(expectedDts, targetResult.dts, name + ".lv.d.ts");
+    }
+
+    SECTION("A type alias used as a value is reported as a mismatch"){
+        FileIO fileIO;
+        const std::string sourcePath = Path::join(typeTestDataPath(), "TypeTest12.lv");
+        const std::string contents = fileIO.readFromFile(sourcePath);
+
+        Compiler::Config config(false);
+        config.allowUnresolvedTypes(true);
+        config.outputTarget(Compiler::Config::OutputTarget::JS_DTS);
+
+        Compiler::Ptr compiler = Compiler::create(config);
+
+        try {
+            compiler->compileToTarget(sourcePath, contents);
+            FAIL("Expected a SyntaxException for TypeTest12.");
+        } catch ( const SyntaxException& e ){
+            REQUIRE(e.message().find("'Alias' refers to a type, but is being used as a value.") != std::string::npos);
+        }
+    }
+
+    SECTION("A type parameter used as a value is reported as a mismatch"){
+        FileIO fileIO;
+        const std::string sourcePath = Path::join(typeTestDataPath(), "TypeTest16.lv");
+        const std::string contents = fileIO.readFromFile(sourcePath);
+
+        Compiler::Config config(false);
+        config.allowUnresolvedTypes(true);
+        config.outputTarget(Compiler::Config::OutputTarget::JS_DTS);
+
+        Compiler::Ptr compiler = Compiler::create(config);
+
+        try {
+            compiler->compileToTarget(sourcePath, contents);
+            FAIL("Expected a SyntaxException for TypeTest16.");
+        } catch ( const SyntaxException& e ){
+            REQUIRE(e.message().find("'X' refers to a type, but is being used as a value.") != std::string::npos);
+        }
+    }
+
+    SECTION("A function used as a type is reported as a mismatch"){
+        FileIO fileIO;
+        const std::string sourcePath = Path::join(typeTestDataPath(), "TypeTest17.lv");
+        const std::string contents = fileIO.readFromFile(sourcePath);
+
+        Compiler::Config config(false);
+        config.allowUnresolvedTypes(true);
+        config.outputTarget(Compiler::Config::OutputTarget::JS_DTS);
+
+        Compiler::Ptr compiler = Compiler::create(config);
+
+        try {
+            compiler->compileToTarget(sourcePath, contents);
+            FAIL("Expected a SyntaxException for TypeTest17.");
+        } catch ( const SyntaxException& e ){
+            REQUIRE(e.message().find("'Qux' refers to a value, but is being used as a type.") != std::string::npos);
+        }
+    }
+
+    SECTION("An unbound name in a parameter default value is reported"){
+        FileIO fileIO;
+        const std::string sourcePath = Path::join(typeTestDataPath(), "TypeTest19.lv");
+        const std::string contents = fileIO.readFromFile(sourcePath);
+
+        Compiler::Config config(false);
+        config.allowUnresolvedTypes(true);
+        config.outputTarget(Compiler::Config::OutputTarget::JS_DTS);
+
+        Compiler::Ptr compiler = Compiler::create(config);
+        Compiler::TargetResult targetResult = compiler->compileToTarget(sourcePath, contents);
+
+        REQUIRE(targetResult.js.find("a = Unknown") != std::string::npos);
+        REQUIRE(targetResult.js.find("import {Unknown} from '__UNRESOLVED__'") != std::string::npos);
+    }
+
+    SECTION("A parameter default value sees the parameters before it"){
+        FileIO fileIO;
+        const std::string sourcePath = Path::join(typeTestDataPath(), "TypeTest20.lv");
+        const std::string contents = fileIO.readFromFile(sourcePath);
+
+        Compiler::Config config(false);
+        config.allowUnresolvedTypes(true);
+        config.outputTarget(Compiler::Config::OutputTarget::JS_DTS);
+
+        Compiler::Ptr compiler = Compiler::create(config);
+        Compiler::TargetResult targetResult = compiler->compileToTarget(sourcePath, contents);
+
+        REQUIRE(targetResult.js.find("b = a") != std::string::npos);
+        REQUIRE(targetResult.js.find("__UNRESOLVED__") == std::string::npos);
+    }
+
+    SECTION("A nearer declaration in the other space does not hide an outer one"){
+        FileIO fileIO;
+        const std::string sourcePath = Path::join(typeTestDataPath(), "TypeTest18.lv");
+        const std::string contents = fileIO.readFromFile(sourcePath);
+
+        Compiler::Config config(false);
+        config.allowUnresolvedTypes(true);
+        config.outputTarget(Compiler::Config::OutputTarget::JS_DTS);
+
+        Compiler::Ptr compiler = Compiler::create(config);
+        Compiler::TargetResult targetResult = compiler->compileToTarget(sourcePath, contents);
+
+        REQUIRE(targetResult.js.find("__UNRESOLVED__") == std::string::npos);
     }
 }

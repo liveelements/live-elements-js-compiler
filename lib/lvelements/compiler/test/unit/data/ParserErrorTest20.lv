@@ -1,0 +1,3 @@
+@fn duplicate<X, X>(value:X): X {
+    return value
+}

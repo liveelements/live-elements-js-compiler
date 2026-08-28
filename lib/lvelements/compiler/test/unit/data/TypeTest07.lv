@@ -1,10 +1,10 @@
 import .module as mod
 
-@fn add(a:int, b:int): int {
+@fn add(a:number, b:number): number {
     return a + b
 }
 
-@fn zero(): int {
+@fn zero(): number {
     return 0
 }
 
@@ -12,6 +12,6 @@ async @fn load(name:string): string {
     return name
 }
 
-fn plain(value:int): int {
+fn plain(value:number): number {
     return value
 }

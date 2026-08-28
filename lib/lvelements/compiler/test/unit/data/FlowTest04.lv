@@ -3,7 +3,7 @@ import {Flow} from './custom-flow.mjs'
 
 fn build(): any {
     const explicit = Flow.create('n', undefined, [Flow.ret(Flow.ref('n'))])
-    const nested = (v: int) %> {
+    const nested = (v: number) %> {
         add(v, 2) @next
         return next
     }

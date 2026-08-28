@@ -1,7 +1,7 @@
 import .module as mod
 
 /// Adds two numbers.
-fn add(a:int, b:int): int {
+fn add(a:number, b:number): number {
     return a + b
 }
 
@@ -17,7 +17,7 @@ instance __add_Meta Element{
 }
 
 component ParserTest54 < mod.A {
-    fn multiply(value:int): int {
+    fn multiply(value:number): number {
         return value * 2
     }
 }

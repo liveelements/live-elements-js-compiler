@@ -1,0 +1,5 @@
+import {Flow} from 'flow/flow.mjs'
+
+@fn mapVal<X, Y>(val:X, flow:Flow<(v:X) => Y>): Y {
+    return flow(val)
+}

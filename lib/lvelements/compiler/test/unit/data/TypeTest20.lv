@@ -1,0 +1,3 @@
+fn f(a: any, b: any = a): any {
+    return b
+}

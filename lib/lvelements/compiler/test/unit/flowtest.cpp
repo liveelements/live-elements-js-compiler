@@ -78,8 +78,7 @@ std::string runtimeTypeForAnnotation(const std::string& annotation){
             normalized.push_back(ch);
         }
     }
-    static const std::array<std::pair<const char*, const char*>, 6> annotationTypes = {{
-        {"int", "Type.number"},
+    static const std::array<std::pair<const char*, const char*>, 5> annotationTypes = {{
         {"number", "Type.number"},
         {"string", "Type.string"},
         {"bool", "Type.boolean"},
@@ -267,7 +266,7 @@ TEST_CASE("Flow Type Resolution", "[Flow]"){
         REQUIRE(targetResult.js.find("types.mjs") == std::string::npos);
     }
 
-    SECTION("Flow Literals"){ testFlowFileParse("ParserTest56"); }
+    SECTION("Flow Literals"){ testFlowFileParse("FlowTest11"); }
     SECTION("Flow Literal Type Substitution"){ testFlowFileParse("FlowTest02"); }
     SECTION("Flow Literal Return Type"){ testFlowFileParse("FlowTest03"); }
     SECTION("Flow explicit import reuse"){ testFlowFileParse("FlowTest04"); }
@@ -277,7 +276,7 @@ TEST_CASE("Flow Type Resolution", "[Flow]"){
         const std::string sourcePath = Path::join(dataPath, "FlowTest02.lv");
         const std::string contents = fileIO.readFromFile(sourcePath);
 
-        const std::string firstFlowSource = "(a: int, b: int) %> add(a, b)";
+        const std::string firstFlowSource = "(a: number, b: number) %> add(a, b)";
         const std::string secondFlowSource = "item: string %> item";
         const size_t firstOffset = contents.find(firstFlowSource);
         const size_t secondOffset = contents.find(secondFlowSource);
@@ -313,7 +312,7 @@ TEST_CASE("Flow Type Resolution", "[Flow]"){
         REQUIRE(resolver.observedRequests[0].sourcePath() == Path::join(Path::parent(sourcePath), "FlowTest02.__lvflow.ts"));
         REQUIRE(resolver.observedRequests[0].sourceText().find("import {add} from './math.mjs'") != std::string::npos);
         REQUIRE(resolver.observedRequests[0].sourceText().find("import {Flow} from 'flow/flow.mjs'") != std::string::npos);
-        REQUIRE(resolver.observedRequests[0].sourceText().find("declare function __lvflow_" + firstKey + "(a: int, b: int): any;") != std::string::npos);
+        REQUIRE(resolver.observedRequests[0].sourceText().find("declare function __lvflow_" + firstKey + "(a: number, b: number): any;") != std::string::npos);
         REQUIRE(resolver.observedRequests[0].sourceText().find("declare function __lvflow_" + secondKey + "(item: string): any;") != std::string::npos);
         REQUIRE(resolver.observedRequests[1].sourcePath() == resolver.observedRequests[0].sourcePath());
         REQUIRE(resolver.observedRequests[1].sourceText() == resolver.observedRequests[0].sourceText());
@@ -326,7 +325,7 @@ TEST_CASE("Flow Type Resolution", "[Flow]"){
         const std::string sourcePath = Path::join(dataPath, "FlowTest03.lv");
         const std::string contents = fileIO.readFromFile(sourcePath);
 
-        const std::string flowSource = "(a: int, b: int): int %> add(a, b)";
+        const std::string flowSource = "(a: number, b: number): number %> add(a, b)";
         const size_t flowOffset = contents.find(flowSource);
         REQUIRE(flowOffset != std::string::npos);
 
@@ -346,15 +345,58 @@ TEST_CASE("Flow Type Resolution", "[Flow]"){
         compiler->compileToTarget(sourcePath, contents);
 
         REQUIRE(resolver.observedRequests.size() == 1);
-        REQUIRE(resolver.observedRequests[0].sourceText().find("declare function __lvflow_" + std::to_string(flowOffset) + "(a: int, b: int): int;") != std::string::npos);
+        REQUIRE(resolver.observedRequests[0].sourceText().find("declare function __lvflow_" + std::to_string(flowOffset) + "(a: number, b: number): number;") != std::string::npos);
+    }
+
+    SECTION("Flow shadow declarations inherit enclosing generic type parameters"){
+        const std::string sourcePath = Path::join(dataPath, "FlowTest12.lv");
+        const std::string contents = fileIO.readFromFile(sourcePath);
+
+        const std::string flowSource = "a: X %> a";
+        const size_t flowOffset = contents.find(flowSource);
+        REQUIRE(flowOffset != std::string::npos);
+
+        const std::string requestId = sourcePath + "::flow@" + std::to_string(flowOffset);
+
+        StubTypeResolver resolver;
+        resolver.responses[requestId] = TypeResolver::Result(
+            requestId,
+            "FunctionType.for(TypeVariable.for('X'), TypeVariable.for('X')).withTypeParameters(['X'])",
+            {"FunctionType", "Type", "TypeVariable"}
+        );
+
+        Compiler::Config config = flowConfig(Compiler::Config::OutputTarget::JS_DTS);
+        Compiler::Ptr compiler = Compiler::create(config);
+        compiler->setTypeResolver(&resolver);
+
+        compiler->compileToTarget(sourcePath, contents);
+
+        REQUIRE(resolver.observedRequests.size() == 1);
+        REQUIRE(resolver.observedRequests[0].requestId() == requestId);
+        REQUIRE(resolver.observedRequests[0].sourceText().find("declare function __lvflow_" + std::to_string(flowOffset) + "<X>(a: X): any;") != std::string::npos);
+    }
+
+    SECTION("Flow type annotations prefer nearer same-file type declarations over outer type parameters"){
+        const std::string sourcePath = Path::join(dataPath, "FlowTest14.lv");
+        const std::string contents = fileIO.readFromFile(sourcePath);
+
+        Compiler::Config config = flowConfig(Compiler::Config::OutputTarget::JS_DTS);
+        Compiler::Ptr compiler = Compiler::create(config);
+
+        try {
+            compiler->compileToTarget(sourcePath, contents);
+            FAIL("Expected a SyntaxException for a same-file flow type shadowing a type parameter.");
+        } catch ( const SyntaxException& e ){
+            REQUIRE(e.message().find("'X' is declared in this file; a flow can only use imported types") != std::string::npos);
+        }
     }
 
     SECTION("Nested flow literals accumulate distinct requests"){
-        const std::string sourcePath = Path::join(dataPath, "ParserTest56.lv");
+        const std::string sourcePath = Path::join(dataPath, "FlowTest11.lv");
         const std::string contents = fileIO.readFromFile(sourcePath);
 
-        const std::string outerFlowSource = "(a: UserContext, b: List<int>) %> {";
-        const std::string innerFlowSource = "x: int %> add(x, 2)";
+        const std::string outerFlowSource = "(a: UserContext, b: List<number>) %> {";
+        const std::string innerFlowSource = "x: number %> add(x, 2)";
         const size_t outerOffset = contents.find(outerFlowSource);
         const size_t innerOffset = contents.find(innerFlowSource);
         REQUIRE(outerOffset != std::string::npos);
@@ -390,10 +432,10 @@ TEST_CASE("Flow Type Resolution", "[Flow]"){
     }
 
     SECTION("Flow resolver diagnostics surface as located syntax exceptions"){
-        const std::string sourcePath = Path::join(dataPath, "ParserTest56.lv");
+        const std::string sourcePath = Path::join(dataPath, "FlowTest11.lv");
         const std::string contents = fileIO.readFromFile(sourcePath);
 
-        const std::string flowSource = "n: int %> add(n, 3)";
+        const std::string flowSource = "n: number %> add(n, 3)";
         const size_t flowOffset = contents.find(flowSource);
         REQUIRE(flowOffset != std::string::npos);
 
@@ -466,6 +508,21 @@ TEST_CASE("Flow Type Resolution", "[Flow]"){
         REQUIRE(targetResult.js.find("import {max as __mod__max} from '__UNRESOLVED__'") != std::string::npos);
         REQUIRE(targetResult.js.find("let mod = {max:__mod__max}") != std::string::npos);
         REQUIRE(targetResult.js.find("Flow.call(mod.max, [Flow.ref('n'), 2], 'next')") != std::string::npos);
+    }
+
+    SECTION("Flow type annotations reject same-file types"){
+        const std::string sourcePath = Path::join(dataPath, "FlowTest13.lv");
+        const std::string contents = fileIO.readFromFile(sourcePath);
+
+        Compiler::Config config = flowConfig(Compiler::Config::OutputTarget::JS_DTS);
+        Compiler::Ptr compiler = Compiler::create(config);
+
+        try {
+            compiler->compileToTarget(sourcePath, contents);
+            FAIL("Expected a SyntaxException for a same-file flow type.");
+        } catch ( const SyntaxException& e ){
+            REQUIRE(e.message().find("'Local' is declared in this file; a flow can only use imported types") != std::string::npos);
+        }
     }
 
 }

@@ -1,4 +1,4 @@
-
+import {Y} from '__UNRESOLVED__'
 export declare class X extends Element {
     dExpr: any;
     dBlk: any;

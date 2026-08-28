@@ -1,13 +1,14 @@
-let mod = {}
+import {A as __mod__A} from '__UNRESOLVED__'
+declare namespace mod { export {__mod__A as A} }
 
-export declare function add(a: int, b: int): int;
+export declare function add(a: number, b: number): number;
 
-export declare function zero(): int;
+export declare function zero(): number;
 
 export declare async function load(name: string): string;
 
-export declare function plain(value: int): int;
+export declare function plain(value: number): number;
 
 export declare class ParserTest55 extends mod.A {
-    multiply(value: int): any;
+    multiply(value: number): any;
 }

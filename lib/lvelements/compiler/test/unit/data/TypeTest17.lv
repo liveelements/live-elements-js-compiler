@@ -1,0 +1,7 @@
+fn Qux(): any {
+    return null
+}
+
+fn f(x: Qux): string {
+    return ""
+}

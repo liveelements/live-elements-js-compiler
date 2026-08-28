@@ -22,6 +22,7 @@
 #include <vector>
 #include <algorithm>
 #include <set>
+#include <functional>
 #include <string.h>
 
 namespace lv{ namespace el{
@@ -31,52 +32,84 @@ namespace {
 class DeclarationLookup{
 
 public:
-    DeclarationLookup(IdentifierNode* declaration = nullptr, JsBlockNode* moduleBlock = nullptr)
-        : m_declaration(declaration), m_moduleBlock(moduleBlock){}
+    DeclarationLookup(
+        const Occurrence& declaration = Occurrence(nullptr, 0),
+        JsBlockNode* moduleBlock = nullptr,
+        JsImportNode* jsImportSite = nullptr,
+        const Occurrence& spaceMismatch = Occurrence(nullptr, 0))
+        : m_declaration(declaration)
+        , m_moduleBlock(moduleBlock)
+        , m_jsImportSite(jsImportSite)
+        , m_spaceMismatch(spaceMismatch)
+    {}
 
-    IdentifierNode* declaration() const{ return m_declaration; }
+    const Occurrence& declaration() const{ return m_declaration; }
+    IdentifierNode* identifier() const{ return m_declaration.identifier(); }
     JsBlockNode* moduleBlock() const{ return m_moduleBlock; }
+    JsImportNode* jsImportSite() const{ return m_jsImportSite; }
     bool isModuleLevel() const{ return m_moduleBlock != nullptr; }
-    static DeclarationLookup find(const std::string& source, BaseNode* node, const std::string& id);
+
+    const Occurrence& spaceMismatch() const{ return m_spaceMismatch; }
+
+    static DeclarationLookup find(
+        const std::string& source,
+        BaseNode* node,
+        const Occurrence& reference,
+        BaseNode* boundary = nullptr);
 
 private:
-    IdentifierNode* m_declaration;
-    JsBlockNode* m_moduleBlock;
+    Occurrence     m_declaration;
+    JsBlockNode*   m_moduleBlock;
+    JsImportNode*  m_jsImportSite;
+    Occurrence     m_spaceMismatch;
 };
 
-DeclarationLookup DeclarationLookup::find(const std::string& source, BaseNode* node, const std::string& id){
-    while ( node ){
+DeclarationLookup DeclarationLookup::find(const std::string& source, BaseNode* node, const Occurrence& reference, BaseNode* boundary){
+    const std::string id = BaseNode::slice(source, reference.identifier());
+    const Occurrence::Space requiredSpace = reference.space();
+
+    Occurrence spaceMismatch;
+    while ( node && node != boundary ){
         if ( node->canCast<JsBlockNode>() ){
             JsBlockNode* block = node->as<JsBlockNode>();
-            for ( IdentifierNode* declaration : block->identifiers() ){
-                if ( BaseNode::slice(source, declaration) == id ){
-                    if ( !block->isNodeType<ProgramNode>() ){
-                        return DeclarationLookup(declaration);
+            for ( const Occurrence& declaration : block->declarations() ){
+                if ( BaseNode::slice(source, declaration.identifier()) != id ){
+                    continue;
+                }
+                if ( requiredSpace != 0 && (declaration.space() & requiredSpace) == 0 ){
+                    if ( !spaceMismatch.identifier() ){
+                        spaceMismatch = declaration;
                     }
+                    continue;
+                }
 
-                    BaseNode* site = declaration->parent();
-                    if ( site && site->isNodeType<JsImportNode>() ){
+                if ( !block->isNodeType<ProgramNode>() ){
+                    return DeclarationLookup(declaration);
+                }
+
+                BaseNode* site = declaration.identifier()->parent();
+                if ( site && site->isNodeType<JsImportNode>() ){
+                    return DeclarationLookup(declaration, block, site->as<JsImportNode>());
+                }
+
+                while ( site && !site->isNodeType<ProgramNode>() ){
+                    if ( site->isNodeType<TypedFunctionDeclarationNode>() || site->isNodeType<FunctionDeclarationNode>() || site->isNodeType<FunctionNode>() ){
                         return DeclarationLookup(declaration, block);
                     }
-
-                    while ( site && !site->isNodeType<ProgramNode>() ){
-                        if ( site->isNodeType<TypedFunctionDeclarationNode>() || site->isNodeType<FunctionDeclarationNode>() || site->isNodeType<FunctionNode>() ){
-                            return DeclarationLookup(declaration, block);
-                        }
-                        if ( site->isNodeType<VariableDeclaratorNode>() ){
-                            return DeclarationLookup(declaration);
-                        }
-                        site = site->parent();
+                    if ( site->isNodeType<VariableDeclaratorNode>() ){
+                        return DeclarationLookup(declaration);
                     }
-
-                    return DeclarationLookup(declaration, block);
+                    site = site->parent();
                 }
+
+                return DeclarationLookup(declaration, block);
             }
         }
         node = node->parent();
     }
-    return DeclarationLookup();
+    return DeclarationLookup(Occurrence(nullptr, 0), nullptr, nullptr, spaceMismatch);
 }
+
 } // namespace
 
 std::string BaseNode::ConversionContext::baseComponentName(BaseNode::ConversionContext *ctx){
@@ -222,15 +255,53 @@ const std::string &BaseNode::nodeName() const{
     return m_nodeInfo->name();
 }
 
-void BaseNode::collectImports(const std::string &source, std::vector<IdentifierNode*> &imp, ConversionContext *ctx){
+void BaseNode::collectImports(const std::string &source, std::vector<Occurrence>& references, ConversionContext *ctx){
     for ( BaseNode* node : m_children ){
-        node->collectImports(source, imp, ctx);
+        node->collectImports(source, references, ctx);
     }
 }
 
-void FlowExpressionNode::collectImports(const std::string &source, std::vector<IdentifierNode *> &identifiers, ConversionContext *ctx){
+void FlowExpressionNode::collectImports(const std::string &source, std::vector<Occurrence>& references, ConversionContext *ctx){
+    std::vector<TypeNode*> signatureTypes;
+    if ( m_parameters ){
+        for ( ParameterNode* parameter : m_parameters->parameters() ){
+            if ( parameter->type() ){
+                signatureTypes.push_back(parameter->type());
+            }
+        }
+    }
+    if ( m_returnType ){
+        signatureTypes.push_back(m_returnType);
+    }
+
+    for ( TypeNode* type : signatureTypes ){
+        for ( const Occurrence& declaration : type->declaredIdentifiers() ){
+            IdentifierNode* name = declaration.identifier();
+            DeclarationLookup lookup = DeclarationLookup::find(source, this->parent(), Occurrence(name, Occurrence::SpaceType));
+            IdentifierNode* found = lookup.identifier();
+            bool isTypeParameter = found && found->parent() && found->parent()->isNodeType<TypeParameterListNode>();
+            if ( !found || lookup.jsImportSite() || isTypeParameter ){
+                continue;
+            }
+
+            throwError(
+                name,
+                name->current(),
+                Utf8("'%' is declared in this file; a flow can only use imported types")
+                    .format(slice(source, name)).data()
+            );
+        }
+    }
+
+
+    if ( m_parameters ){
+        m_parameters->collectImports(source, references, ctx);
+    }
+    if ( m_returnType ){
+        m_returnType->collectImports(source, references, ctx);
+    }
     if ( m_flowBody ){
-        m_flowBody->collectImports(source, identifiers, ctx);
+        m_flowBody->collectImports(source, references, ctx);
     }
 }
 
@@ -251,29 +322,30 @@ std::vector<FlowExpressionNode*> FlowExpressionNode::collectFlowExpressions(Base
     return flows;
 }
 
-void FlowBodyNode::collectImports(const std::string &source, std::vector<IdentifierNode *> &identifiers, ConversionContext *ctx){
-    BaseNode::collectImports(source, identifiers, ctx);
+void FlowBodyNode::collectImports(const std::string &source, std::vector<Occurrence>& references, ConversionContext *ctx){
+    BaseNode::collectImports(source, references, ctx);
 
     std::set<std::string> seenDeclarations;
-    for ( IdentifierNode* declaration : this->identifiers() ){
-        std::string name = slice(source, declaration);
+    for ( const Occurrence& declaration : declarations() ){
+        std::string name = slice(source, declaration.identifier());
         if ( seenDeclarations.find(name) != seenDeclarations.end() ){
             throwError(
-                declaration,
-                declaration->current(),
+                declaration.identifier(),
+                declaration.identifier()->current(),
                 Utf8("Duplicate flow step label '%'").format(name).data()
             );
         }
         seenDeclarations.insert(name);
     }
 
-    for ( IdentifierNode* use : usedIdentifiers() ){
+    for ( const Occurrence& reference : this->references() ){
+        IdentifierNode* use = reference.identifier();
         const std::string name = slice(source, use);
         const bool isCallee = use->parent() && use->parent()->isNodeType<FlowCallNode>();
 
         if ( isCallee ){
-            DeclarationLookup callee = DeclarationLookup::find(source, this->parent(), name);
-            if ( callee.declaration() ){
+            DeclarationLookup callee = DeclarationLookup::find(source, this->parent(), reference);
+            if ( callee.identifier() ){
                 if ( callee.isModuleLevel() ){
                     continue;
                 }
@@ -287,8 +359,8 @@ void FlowBodyNode::collectImports(const std::string &source, std::vector<Identif
                 );
             }
 
-            DeclarationLookup flowLocal = DeclarationLookup::find(source, this, name);
-            if ( flowLocal.declaration() && declaresIdentifier(flowLocal.declaration()) ){
+            DeclarationLookup flowLocal = DeclarationLookup::find(source, this, reference);
+            if ( flowLocal.identifier() && declaresIdentifier(flowLocal.identifier()) ){
                 throwError(
                     use,
                     use->current(),
@@ -298,17 +370,17 @@ void FlowBodyNode::collectImports(const std::string &source, std::vector<Identif
                 );
             }
 
-            identifiers.push_back(use);
+            references.push_back(reference);
             continue;
         }
 
-        DeclarationLookup lookup = DeclarationLookup::find(source, this, name);
-        if ( !lookup.declaration() ){
-            identifiers.push_back(use);
+        DeclarationLookup lookup = DeclarationLookup::find(source, this, reference);
+        if ( !lookup.identifier() ){
+            references.push_back(reference);
             continue;
         }
 
-        if ( declaresIdentifier(lookup.declaration()) ){
+        if ( declaresIdentifier(lookup.identifier()) ){
             continue;
         }
 
@@ -332,15 +404,15 @@ void FlowBodyNode::collectImports(const std::string &source, std::vector<Identif
     }
 }
 
-void FlowCallNode::collectImports(const std::string &source, std::vector<IdentifierNode *> &identifiers, ConversionContext *ctx){
+void FlowCallNode::collectImports(const std::string &source, std::vector<Occurrence>& references, ConversionContext *ctx){
     for ( FlowValueNode* argument : m_arguments ){
-        argument->collectImports(source, identifiers, ctx);
+        argument->collectImports(source, references, ctx);
     }
 }
 
 bool JsBlockNode::declaresIdentifier(IdentifierNode* declaration) const{
-    for ( IdentifierNode* ownDeclaration : m_declarations ){
-        if ( ownDeclaration == declaration ){
+    for ( const Occurrence& ownDeclaration : m_declarations ){
+        if ( ownDeclaration.identifier() == declaration ){
             return true;
         }
     }
@@ -359,26 +431,25 @@ std::string BaseNode::slice(const std::string &source, const TSNode &node){
     return slice(source, ts_node_start_byte(node), ts_node_end_byte(node));
 }
 
-JsBlockNode* BaseNode::addToDeclarations(BaseNode *parent, IdentifierNode *idNode){
+JsBlockNode* BaseNode::addToDeclarations(BaseNode *parent, IdentifierNode *idNode, Occurrence::Space space){
     BaseNode* p = parent;
     while (p){
         JsBlockNode* jsbn = dynamic_cast<JsBlockNode*>(p);
         if (jsbn){
-            jsbn->m_declarations.push_back(idNode);
+            jsbn->m_declarations.push_back(Occurrence(idNode, space));
             return jsbn;
-            break;
         }
         p = p->parent();
     }
     return nullptr;
 }
 
-JsBlockNode *BaseNode::addUsedIdentifier(BaseNode *parent, IdentifierNode *idNode){
+JsBlockNode *BaseNode::addUsedIdentifier(BaseNode *parent, const Occurrence& reference){
     BaseNode* p = parent;
     while (p){
         JsBlockNode* jsbn = dynamic_cast<JsBlockNode*>(p);
         if (jsbn){
-            jsbn->m_usedIdentifiers.push_back(idNode);
+            jsbn->m_references.push_back(reference);
             return jsbn;
         }
         p = p->parent();
@@ -477,7 +548,7 @@ std::vector<IdentifierNode *> BaseNode::fromNestedIdentifier(BaseNode *parent, c
 }
 
 ParameterListNode *BaseNode::scanFormalParameters(BaseNode *parent, const TSNode& formalParameters){
-    ParameterListNode* result = new ParameterListNode(formalParameters);
+    ParameterListNode* result = parent->addCreatedChild(new ParameterListNode(formalParameters));
 
     uint32_t paramterCount = ts_node_child_count(formalParameters);
 
@@ -486,24 +557,33 @@ ParameterListNode *BaseNode::scanFormalParameters(BaseNode *parent, const TSNode
         assertError(parent, ftpc, "Function declaration not supported.");
         if (strcmp(ts_node_type(ftpc), "identifier") == 0){
             auto paramNode = result->addCreatedChild(new ParameterNode(ftpc, IdentifierNode::createNonEmpty(ftpc, result)));
+            if ( paramNode->identifier() && !paramNode->isDestructuringPattern() ){
+                addToDeclarations(result, paramNode->identifier(), Occurrence::SpaceValue);
+            }
             result->m_parameters.push_back(paramNode);
         } else if ( strcmp(ts_node_type(ftpc), "required_parameter") == 0 ){
             auto name = BaseNode::nodeChildByFieldName(ftpc, "pattern");
             auto paramNode = result->addCreatedChild(new ParameterNode(ftpc, IdentifierNode::createNonEmpty(name, result)));
-            
+
             auto type = BaseNode::nodeChildByFieldName(ftpc, "type");
             if (!ts_node_is_null(type)) {
-                paramNode->m_type = paramNode->addCreatedChild(new TypeNode(type));
+                paramNode->m_type = paramNode->addCreatedChild(TypeNode::create(type, paramNode));
+            }
+            if ( paramNode->identifier() && !paramNode->isDestructuringPattern() ){
+                addToDeclarations(result, paramNode->identifier(), Occurrence::SpaceValue);
             }
             result->m_parameters.push_back(paramNode);
         } else if ( strcmp(ts_node_type(ftpc), "optional_parameter") == 0 ){
             auto name = BaseNode::nodeChildByFieldName(ftpc, "pattern");
             auto paramNode = result->addCreatedChild(new ParameterNode(ftpc, IdentifierNode::createNonEmpty(name, result)));
             paramNode->m_isOptional = true;
-            
+
             auto type = BaseNode::nodeChildByFieldName(ftpc, "type");
             if (!ts_node_is_null(type)) {
-                paramNode->m_type = paramNode->addCreatedChild(new TypeNode(type));
+                paramNode->m_type = paramNode->addCreatedChild(TypeNode::create(type, paramNode));
+            }
+            if ( paramNode->identifier() && !paramNode->isDestructuringPattern() ){
+                addToDeclarations(result, paramNode->identifier(), Occurrence::SpaceValue);
             }
             result->m_parameters.push_back(paramNode);
         }
@@ -511,8 +591,8 @@ ParameterListNode *BaseNode::scanFormalParameters(BaseNode *parent, const TSNode
     return result;
 }
 
-ParameterListNode *BaseNode::scanFormalTypeParameters(BaseNode *parent, const TSNode &parameters){
-    auto result = new ParameterListNode(parameters);
+ParameterListNode *BaseNode::scanFormalTypeParameters(BaseNode *parent, const TSNode &parameters, bool isMeta){
+    auto result = parent->addCreatedChild(new ParameterListNode(parameters));
     uint32_t parameterCount = ts_node_child_count(parameters);
 
     for (uint32_t pc = 0; pc < parameterCount; ++pc){
@@ -531,14 +611,28 @@ ParameterListNode *BaseNode::scanFormalTypeParameters(BaseNode *parent, const TS
                 TSNode parameterType = BaseNode::nodeChildByFieldName(typeParameter, "type");
                 assertValid(parent, parameterType, "Parameter type is null.");
 
+                ParameterNode* paramNode = nullptr;
                 if ( strcmp(ts_node_type(typeParameter), "required_type_parameter") == 0 ){
-                    result->m_parameters.push_back(
-                        result->addCreatedChild(new ParameterNode(typeParameter, IdentifierNode::createNonEmpty(parameterName, result), new TypeNode(parameterType), false))
+                    paramNode = result->addCreatedChild(
+                        new ParameterNode(typeParameter, IdentifierNode::createNonEmpty(parameterName, result), false)
                     );
                 } else if ( strcmp(ts_node_type(typeParameter), "optional_type_parameter") == 0){
-                    result->m_parameters.push_back(
-                        result->addCreatedChild(new ParameterNode(typeParameter, IdentifierNode::createNonEmpty(parameterName, result), new TypeNode(parameterType), true))
+                    paramNode = result->addCreatedChild(
+                        new ParameterNode(typeParameter, IdentifierNode::createNonEmpty(parameterName, result), true)
                     );
+                }
+
+                if ( paramNode ){
+                    paramNode->m_type = paramNode->addCreatedChild(TypeNode::create(parameterType, paramNode, isMeta));
+                    TSNode parameterValue = BaseNode::nodeChildByFieldName(typeParameter, "value");
+                    if ( !ts_node_is_null(parameterValue) ){
+                        paramNode->m_defaultValue = paramNode->addCreatedChild(new ExpressionNode(parameterValue));
+                        visit(paramNode->m_defaultValue, parameterValue);
+                    }
+                    if ( paramNode->identifier() && !paramNode->isDestructuringPattern() ){
+                        addToDeclarations(result, paramNode->identifier(), Occurrence::SpaceValue);
+                    }
+                    result->m_parameters.push_back(paramNode);
                 }
             }
         }
@@ -547,7 +641,7 @@ ParameterListNode *BaseNode::scanFormalTypeParameters(BaseNode *parent, const TS
 }
 
 ParameterListNode *BaseNode::scanFlowParameters(BaseNode *parent, const TSNode &parameters){
-    auto result = new ParameterListNode(parameters);
+    auto result = parent->addCreatedChild(new ParameterListNode(parameters));
     uint32_t parameterCount = ts_node_child_count(parameters);
 
     for ( uint32_t pc = 0; pc < parameterCount; ++pc ){
@@ -562,11 +656,11 @@ ParameterListNode *BaseNode::scanFlowParameters(BaseNode *parent, const TSNode &
         TSNode parameterType = BaseNode::nodeChildByFieldName(parameter, "type");
         assertValid(parent, parameterType, "Flow parameter type is null.");
 
-        result->m_parameters.push_back(
-            result->addCreatedChild(
-                new ParameterNode(parameter, IdentifierNode::createNonEmpty(parameterName, result), new TypeNode(parameterType), false)
-            )
+        auto paramNode = result->addCreatedChild(
+            new ParameterNode(parameter, IdentifierNode::createNonEmpty(parameterName, result), false)
         );
+        paramNode->m_type = paramNode->addCreatedChild(TypeNode::create(parameterType, paramNode));
+        result->m_parameters.push_back(paramNode);
     }
 
     return result;
@@ -605,7 +699,15 @@ std::string CommentNode::text(const std::string& source) const {
 }
 
 BaseNode *BaseNode::visitRecognized(BaseNode *parent, const TSNode &node){
-    if ( strcmp(ts_node_type(node), "import_statement") == 0 ){
+    if ( strcmp(ts_node_type(node), "type_identifier") == 0 ){
+        return TypeNode::visitTypeIdentifier(parent, node);
+    } else if ( strcmp(ts_node_type(node), "nested_type_identifier") == 0 ){
+        return TypeNode::visitNestedTypeIdentifier(parent, node);
+    } else if ( strcmp(ts_node_type(node), "type_query") == 0 ){
+        return TypeNode::visitTypeQuery(parent, node);
+    } else if ( parent->isNodeType<TypeNode>() && strcmp(ts_node_type(node), "ERROR") != 0 ){
+        return nullptr;
+    } else if ( strcmp(ts_node_type(node), "import_statement") == 0 ){
         return visitImport(parent, node);
     } else if ( strcmp(ts_node_type(node), "js_import_statement") == 0 ){
         return visitJsImport(parent, node);
@@ -959,7 +1061,7 @@ FlowStatementNode* BaseNode::buildFlowStatement(BaseNode* parent, const TSNode& 
             TSNode labelName = BaseNode::nodeChildByFieldName(label, "name");
             BaseNode::assertValid(parent, labelName, "Flow step label name is missing.");
             stepNode->m_label = IdentifierNode::createNonEmpty(labelName, stepNode);
-            addToDeclarations(parent, stepNode->m_label);
+            addToDeclarations(parent, stepNode->m_label, Occurrence::SpaceValue);
         }
 
         uint32_t count = ts_node_child_count(node);
@@ -985,11 +1087,10 @@ FlowExpressionNode* BaseNode::visitFlowExpression(BaseNode* parent, const TSNode
     BaseNode::assertValid(parent, parameters, "Flow parameters are missing.");
 
     expressionNode->m_parameters = BaseNode::scanFlowParameters(expressionNode, parameters);
-    expressionNode->addChild(expressionNode->m_parameters);
 
     TSNode returnType = BaseNode::nodeChildByFieldName(parameters, "return");
     if ( !ts_node_is_null(returnType) ){
-        expressionNode->m_returnType = expressionNode->addCreatedChild(new TypeNode(returnType));
+        expressionNode->m_returnType = expressionNode->addCreatedChild(TypeNode::create(returnType, expressionNode));
     }
 
     TSNode body = BaseNode::nodeChildByFieldName(node, "body");
@@ -998,7 +1099,7 @@ FlowExpressionNode* BaseNode::visitFlowExpression(BaseNode* parent, const TSNode
 
     if ( expressionNode->m_parameters ){
         for ( ParameterNode* parameter : expressionNode->m_parameters->parameters() ){
-            addToDeclarations(expressionNode->m_flowBody, parameter->identifier());
+            addToDeclarations(expressionNode->m_flowBody, parameter->identifier(), Occurrence::SpaceValue);
         }
     }
 
@@ -1068,8 +1169,8 @@ JsImportNode* BaseNode::visitJsImport(BaseNode *parent, const TSNode &node){
         TSNode child = ts_node_child(node, i);
         if ( strcmp(ts_node_type(child), "identifier" ) == 0 ){
             IdentifierNode* name = importNode->addCreatedChild(IdentifierNode::createNonEmpty(child, importNode));
-            importNode->m_importNames.push_back(name);
-            addToDeclarations(parent, name);
+            importNode->m_importNames.push_back(JsImportName(name));
+            addToDeclarations(parent, name, Occurrence::SpaceValue | Occurrence::SpaceType);
         } else if ( strcmp(ts_node_type(child), "string" ) == 0 ){
             StringNode* path = importNode->addCreatedChild(new StringNode(child));
             importNode->m_importPath = path;
@@ -1128,7 +1229,7 @@ ComponentDeclarationNode* BaseNode::visitComponentDeclaration(BaseNode *parent, 
     TSNode name = nodeChildByFieldName(node, "name");
     if ( !ts_node_is_null(name) ){
         enode->m_name = enode->addCreatedChild(IdentifierNode::createNonEmpty(name, enode));
-        addToDeclarations(parent, enode->m_name);
+        addToDeclarations(parent, enode->m_name, Occurrence::SpaceValue | Occurrence::SpaceType);
     }
 
     TSNode heritage = nodeChildByFieldName(node, "heritage");
@@ -1154,7 +1255,7 @@ ComponentDeclarationNode* BaseNode::visitComponentDeclaration(BaseNode *parent, 
         }
 
         if ( enode->m_heritage.size() > 0 ){
-            addUsedIdentifier(enode, enode->m_heritage[0]);
+            addUsedIdentifier(enode, Occurrence(enode->m_heritage[0], Occurrence::SpaceValue | Occurrence::SpaceType));
         }
     }
 
@@ -1164,7 +1265,7 @@ ComponentDeclarationNode* BaseNode::visitComponentDeclaration(BaseNode *parent, 
         if ( ts_node_named_child_count(identifier) > 0 ){
             TSNode idChild = ts_node_child(identifier, 1);
             enode->m_id = enode->addCreatedChild(IdentifierNode::createNonEmpty(idChild, enode));
-            addToDeclarations(parent, enode->m_id);
+            addToDeclarations(parent, enode->m_id, Occurrence::SpaceValue);
         }
     }
 
@@ -1193,11 +1294,14 @@ ComponentBodyNode* BaseNode::visitComponentBody(BaseNode *parent, const TSNode &
 NewComponentExpressionNode* BaseNode::visitNewComponentExpression(BaseNode *parent, const TSNode &node){
     NewComponentExpressionNode* enode = nullptr;
 
+    int nameSpace = Occurrence::SpaceValue;
+
     if (parent->isNodeType<ComponentInstanceStatementNode>()
         && parent->parent()
         && parent->parent()->isNodeType<ProgramNode>() )
     {
         enode = parent->addCreatedChild(new RootNewComponentExpressionNode(node));
+        nameSpace = Occurrence::SpaceValue | Occurrence::SpaceType;
     } else {
         BaseNode* p = parent;
         while (p && dynamic_cast<JsBlockNode*>(p) == nullptr){
@@ -1217,13 +1321,13 @@ NewComponentExpressionNode* BaseNode::visitNewComponentExpression(BaseNode *pare
             auto iden = enode->addCreatedChild(IdentifierNode::createNonEmpty(child, enode));
             enode->m_name.push_back(iden);
             if ( enode->m_name.size() == 1 )
-                addUsedIdentifier(enode, iden);
+                addUsedIdentifier(enode, Occurrence(iden, nameSpace));
         } else if ( strcmp(ts_node_type(child), "nested_identifier") == 0 ){
             enode->m_name = BaseNode::fromNestedIdentifier(enode, child);
             for( IdentifierNode* name : enode->m_name )
                 enode->addChild(name);
             if ( enode->m_name.size() > 0 ){
-                addUsedIdentifier(enode, enode->m_name.front());
+                addUsedIdentifier(enode, Occurrence(enode->m_name.front(), nameSpace));
             }
         } else if ( strcmp(ts_node_type(child), "new_component_body") == 0 ){
             enode->m_body = enode->addCreatedChild(new ComponentBodyNode(child));
@@ -1256,13 +1360,13 @@ NewComponentExpressionNode* BaseNode::visitNewComponentExpression(BaseNode *pare
                 {
                     auto decl = body->parent()->as<ComponentDeclarationNode>();
                     decl->pushToIdComponents(enode);
-                    addToDeclarations(body, enode->m_id);
+                    addToDeclarations(body, enode->m_id, Occurrence::SpaceValue);
                     break;
                 }
             } else if (p->isNodeType<RootNewComponentExpressionNode>() ){
                 auto rnce = p->as<RootNewComponentExpressionNode>();
                 rnce->m_idComponents.push_back(enode);
-                addToDeclarations(rnce, enode->m_id);
+                addToDeclarations(rnce, enode->m_id, Occurrence::SpaceValue);
                 break;
             }
 
@@ -1309,7 +1413,7 @@ ComponentInstanceStatementNode* BaseNode::visitComponentInstanceStatement(BaseNo
             if (strcmp(ts_node_type(id), "identifier") != 0)
                 continue;
             enode->m_name = enode->addCreatedChild(IdentifierNode::createNonEmpty(id, enode));
-            addToDeclarations(parent, enode->m_name);
+            addToDeclarations(parent, enode->m_name, Occurrence::SpaceValue);
         } else if ( strcmp(ts_node_type(child), "new_component_expression") == 0 ){
             visitNewComponentExpression(enode, child);
         }
@@ -1379,7 +1483,7 @@ PropertyDeclarationNode* BaseNode::visitPropertyDeclaration(BaseNode *parent, co
     pnode->m_name = pnode->addCreatedChild(IdentifierNode::createNonEmpty(propName, pnode));
     TSNode propType = BaseNode::nodeChildByFieldName(node, "type");
     if ( !ts_node_is_null(propType) ){
-        pnode->m_type = pnode->addCreatedChild(new TypeNode(propType));
+        pnode->m_type = pnode->addCreatedChild(TypeNode::create(propType, pnode));
     }
 
     uint32_t count = ts_node_child_count(node);
@@ -1420,7 +1524,7 @@ StaticPropertyDeclarationNode* BaseNode::visitStaticPropertyDeclaration(BaseNode
     pnode->m_name = pnode->addCreatedChild(IdentifierNode::createNonEmpty(propName, pnode));
     TSNode propType = BaseNode::nodeChildByFieldName(node, "type");
     if ( !ts_node_is_null(propType) ){
-        pnode->m_type = pnode->addCreatedChild(new TypeNode(propType));
+        pnode->m_type = pnode->addCreatedChild(TypeNode::create(propType, pnode));
     }
 
     uint32_t count = ts_node_child_count(node);
@@ -1615,7 +1719,7 @@ IdentifierNode* BaseNode::visitIdentifierAssignment(BaseNode *parent, const TSNo
         ComponentDeclarationNode* cdn = componentParent->as<ComponentDeclarationNode>();
         cdn->m_id = parent->addCreatedChild(IdentifierNode::createNonEmpty(idChild, parent));
         // provide id to outside scope
-        addToDeclarations(componentParent, cdn->m_id);
+        addToDeclarations(componentParent, cdn->m_id, Occurrence::SpaceValue);
         return cdn->m_id;
     } else if ( componentParent->isNodeType<NewComponentExpressionNode>() ||
                 componentParent->isNodeType<RootNewComponentExpressionNode>() )
@@ -1623,7 +1727,7 @@ IdentifierNode* BaseNode::visitIdentifierAssignment(BaseNode *parent, const TSNo
         NewComponentExpressionNode* ncen = componentParent->as<NewComponentExpressionNode>();
         ncen->m_id = parent->addCreatedChild(IdentifierNode::createNonEmpty(idChild, parent));
         // provide id to outside scope
-        addToDeclarations(componentParent, ncen->m_id);
+        addToDeclarations(componentParent, ncen->m_id, Occurrence::SpaceValue);
         return ncen->m_id;
     }
 
@@ -1645,8 +1749,7 @@ EventDeclarationNode* BaseNode::visitEventDeclaration(BaseNode *parent, const TS
     TSNode parameters = nodeChildByFieldName(node, "parameters");
     assertValid(parent, parameters, "Event parameters are null.");
 
-    enode->m_parameters = BaseNode::scanFormalTypeParameters(parent, parameters);
-    enode->addChild(enode->m_parameters);
+    enode->m_parameters = BaseNode::scanFormalTypeParameters(enode, parameters);
 
     if (parent->parent() && parent->parent()->isNodeType<ComponentDeclarationNode>() ){
         parent->parent()->as<ComponentDeclarationNode>()->m_events.push_back(enode);
@@ -1668,8 +1771,7 @@ ListenerDeclarationNode* BaseNode::visitListenerDeclaration(BaseNode *parent, co
         } else if ( strcmp(ts_node_type(child), "async") == 0 ){
             enode->m_async = true;
         } else if ( strcmp(ts_node_type(child), "formal_parameters") == 0 ){
-            enode->m_parameters = scanFormalParameters(parent, child);
-            enode->addChild(enode->m_parameters);
+            enode->m_parameters = BaseNode::scanFormalParameters(enode, child);
         }
     }
 
@@ -1718,8 +1820,7 @@ MethodDefinitionNode* BaseNode::visitMethodDefinition(BaseNode *parent, const TS
         if ( strcmp(ts_node_type(child), "property_identifier") == 0 ){
             cnode->m_name = cnode->addCreatedChild(IdentifierNode::createNonEmpty(child, cnode));
         } else if ( strcmp(ts_node_type(child), "formal_parameters") == 0 ){
-            cnode->m_parameters = BaseNode::scanFormalParameters(parent, child);
-            cnode->addChild(cnode->m_parameters);
+            cnode->m_parameters = BaseNode::scanFormalParameters(cnode, child);
         } else if ( strcmp(ts_node_type(child), "statement_block") == 0 ){
             cnode->m_body = cnode->addCreatedChild(new JsBlockNode(child));
             visitChildren(cnode->m_body, child);
@@ -1742,12 +1843,11 @@ TypedMethodDeclarationNode* BaseNode::visitTypedMethodDeclaration(BaseNode *pare
     TSNode parameters = nodeChildByFieldName(node, "parameters");
     assertValid(parent, parameters, "Function parameters are null.");
 
-    cnode->m_parameters = BaseNode::scanFormalTypeParameters(parent, parameters);
-    cnode->addChild(cnode->m_parameters);
+    cnode->m_parameters = BaseNode::scanFormalTypeParameters(cnode, parameters);
 
     TSNode returnType = nodeChildByFieldName(node, "return");
     if ( !ts_node_is_null(returnType) ){
-        cnode->m_returnType = cnode->addCreatedChild(new TypeNode(returnType));
+        cnode->m_returnType = cnode->addCreatedChild(TypeNode::create(returnType, cnode));
     }
 
     TSNode body = nodeChildByFieldName(node, "body");
@@ -1795,22 +1895,30 @@ TypedFunctionDeclarationNode* BaseNode::visitTypedFunctionDeclaration(BaseNode *
     TSNode name = nodeChildByFieldName(node, "name");
     assertValid(parent, name, "Function name is null.");
     cnode->m_name = cnode->addCreatedChild(IdentifierNode::createNonEmpty(name, cnode));
-    addToDeclarations(parent, cnode->m_name);
+    addToDeclarations(parent, cnode->m_name, Occurrence::SpaceValue);
 
-    TSNode parameters = nodeChildByFieldName(node, "parameters");
-    assertValid(parent, parameters, "Function parameters are null.");
+    TSNode typeParameters = nodeChildByFieldName(node, "type_parameters");
+    if ( !ts_node_is_null(typeParameters) ){
+        cnode->m_typeParameters = cnode->addCreatedChild(TypeParameterListNode::create(typeParameters, cnode));
 
-    cnode->m_parameters = BaseNode::scanFormalTypeParameters(parent, parameters);
-    cnode->addChild(cnode->m_parameters);
+        if ( cnode->m_typeParameters->names().empty() ){
+            BaseNode::throwError(cnode, typeParameters, "Type parameter list cannot be empty.");
+        }
+    }
 
     TSNode meta = nodeChildByFieldName(node, "meta");
     if ( !ts_node_is_null(meta) ){
         cnode->setMeta(true);
     }
 
+    TSNode parameters = nodeChildByFieldName(node, "parameters");
+    assertValid(parent, parameters, "Function parameters are null.");
+
+    cnode->m_parameters = BaseNode::scanFormalTypeParameters(cnode, parameters, cnode->isMeta());
+
     TSNode returnType = nodeChildByFieldName(node, "return");
     if ( !ts_node_is_null(returnType) ){
-        cnode->m_returnType = cnode->addCreatedChild(new TypeNode(returnType));
+        cnode->m_returnType = cnode->addCreatedChild(TypeNode::create(returnType, cnode, cnode->isMeta()));
     }
 
     TSNode body = nodeChildByFieldName(node, "body");
@@ -1837,6 +1945,24 @@ TypedFunctionDeclarationNode* BaseNode::visitTypedFunctionDeclaration(BaseNode *
     return cnode;
 }
 
+void TypedFunctionDeclarationNode::collectImports(const std::string &source, std::vector<Occurrence> &references, ConversionContext *ctx){
+    if ( m_typeParameters ){
+        std::set<std::string> seenNames;
+        for ( IdentifierNode* typeParameterName : m_typeParameters->names() ){
+            const std::string name = slice(source, typeParameterName);
+            if ( !seenNames.insert(name).second ){
+                throwError(
+                    typeParameterName,
+                    typeParameterName->current(),
+                    Utf8("Duplicate type parameter '%'.").format(name).data()
+                );
+            }
+        }
+    }
+
+    JsBlockNode::collectImports(source, references, ctx);
+}
+
 PropertyAccessorDeclarationNode* BaseNode::visitPropertyAccessorDeclaration(BaseNode *parent, const TSNode &node){
     PropertyAccessorDeclarationNode* enode = parent->addCreatedChild(new PropertyAccessorDeclarationNode(node));
 
@@ -1856,8 +1982,7 @@ PropertyAccessorDeclarationNode* BaseNode::visitPropertyAccessorDeclaration(Base
     if ( enode->m_access == PropertyAccessorDeclarationNode::Setter ){
         TSNode parameters = nodeChildByFieldName(node, "parameters");
         assertValid(parent, parameters, "Set parameters are null.");
-        enode->m_parameters = scanFormalTypeParameters(enode, parameters);
-        enode->addChild(enode->m_parameters);
+        enode->m_parameters = BaseNode::scanFormalTypeParameters(enode, parameters);
     }
 
     TSNode body = nodeChildByFieldName(node, "body");
@@ -1934,14 +2059,21 @@ ConstructorDefinitionNode* BaseNode::visitConstructorDefinition(BaseNode *parent
                         TSNode parameterType = BaseNode::nodeChildByFieldName(typeParameter, "type");
                         assertValid(cnode, parameterType, "Parameter type is null.");
 
+                        ParameterNode* paramNode = nullptr;
                         if ( strcmp(ts_node_type(typeParameter), "required_type_parameter") == 0 ){
-                            cnode->m_parameters->m_parameters.push_back(
-                                cnode->addCreatedChild(new ParameterNode(typeParameter, IdentifierNode::createNonEmpty(parameterName, cnode), new TypeNode(parameterType), false))
-                            );
+                            paramNode = cnode->addCreatedChild(new ParameterNode(typeParameter, IdentifierNode::createNonEmpty(parameterName, cnode), false));
                         } else if ( strcmp(ts_node_type(typeParameter), "optional_type_parameter") == 0){
-                            cnode->m_parameters->m_parameters.push_back(
-                                cnode->addCreatedChild(new ParameterNode(typeParameter, IdentifierNode::createNonEmpty(parameterName, cnode), new TypeNode(parameterType), true))
-                            );
+                            paramNode = cnode->addCreatedChild(new ParameterNode(typeParameter, IdentifierNode::createNonEmpty(parameterName, cnode), true));
+                        }
+
+                        if ( paramNode ){
+                            paramNode->m_type = paramNode->addCreatedChild(TypeNode::create(parameterType, paramNode));
+                            TSNode parameterValue = BaseNode::nodeChildByFieldName(typeParameter, "value");
+                            if ( !ts_node_is_null(parameterValue) ){
+                                paramNode->m_defaultValue = paramNode->addCreatedChild(new ExpressionNode(parameterValue));
+                                visit(paramNode->m_defaultValue, parameterValue);
+                            }
+                            cnode->m_parameters->m_parameters.push_back(paramNode);
                         }
                     }
                 }
@@ -2090,13 +2222,12 @@ FunctionNode* BaseNode::visitFunction(BaseNode *parent, const TSNode &node){
     const TSNode parameters = BaseNode::nodeChildByFieldName(node, "parameters");
 
     assertValid(parent, parameters, "Function parameters are null.");
-    enode->m_parameters = BaseNode::scanFormalParameters(parent, parameters);
-    enode->addChild(enode->m_parameters);
+    enode->m_parameters = BaseNode::scanFormalParameters(enode, parameters);
 
     // Function return type
     const TSNode returnType = BaseNode::nodeChildByFieldName(node, "return_type");
     if (!ts_node_is_null(returnType)) {
-        enode->m_returnType = enode->addCreatedChild(new TypeNode(returnType));
+        enode->m_returnType = enode->addCreatedChild(TypeNode::create(returnType, enode));
     }
 
     // Function body
@@ -2136,18 +2267,17 @@ FunctionDeclarationNode* BaseNode::visitFunctionDeclaration(BaseNode *parent, co
     const TSNode name = BaseNode::nodeChildByFieldName(node, "name");
     assertValid(parent, name, "Function name is null.");
     fnode->m_name = fnode->addCreatedChild(IdentifierNode::createNonEmpty(name, fnode));
-    addToDeclarations(parent, fnode->m_name);
+    addToDeclarations(parent, fnode->m_name, Occurrence::SpaceValue);
 
     // Function parameters
     const TSNode parameters = BaseNode::nodeChildByFieldName(node, "parameters");
     assertValid(parent, parameters, "Function parameters are null.");
-    fnode->m_parameters = BaseNode::scanFormalParameters(parent, parameters);
-    fnode->addChild(fnode->m_parameters);
+    fnode->m_parameters = BaseNode::scanFormalParameters(fnode, parameters);
 
     // Function return type
     const TSNode returnType = BaseNode::nodeChildByFieldName(node, "return_type");
     if (!ts_node_is_null(returnType)) {
-        fnode->m_returnType = fnode->addCreatedChild(new TypeNode(returnType));
+        fnode->m_returnType = fnode->addCreatedChild(TypeNode::create(returnType, fnode));
     }
 
     // Function properties
@@ -2190,7 +2320,7 @@ ClassDeclarationNode* BaseNode::visitClassDeclaration(BaseNode *parent, const TS
         {
             // this must be the id!
             IdentifierNode* id = static_cast<IdentifierNode*>(*it);
-            addToDeclarations(parent, id);
+            addToDeclarations(parent, id, Occurrence::SpaceValue | Occurrence::SpaceType);
         }
     }
     return fnode;
@@ -2234,10 +2364,10 @@ VariableDeclarationNode* BaseNode::visitDeclarationForm(BaseNode * parent, const
             if (strcmp(ts_node_type(name), "object_pattern") == 0 || strcmp(ts_node_type(name), "array_pattern") == 0) {
                 visitDestructuringPattern(declaratorNode, name);
             } else {
-                addToDeclarations(declaratorNode, declaratorNode->m_name);
+                addToDeclarations(declaratorNode, declaratorNode->m_name, Occurrence::SpaceValue);
             }
             if (!ts_node_is_null(type)) {
-                declaratorNode->m_type = declaratorNode->addCreatedChild(new TypeNode(type));
+                declaratorNode->m_type = declaratorNode->addCreatedChild(TypeNode::create(type, declaratorNode));
             }
             if (!ts_node_is_null(value)) {
                 declaratorNode->m_value = declaratorNode->addCreatedChild(new ExpressionNode(value));
@@ -2260,10 +2390,10 @@ BaseNode* BaseNode::visitDestructuringPattern(BaseNode *parent, const TSNode &no
         const char* type = ts_node_type(child);
         if ( strcmp(type, "identifier") == 0 ){
             auto inode = parent->addCreatedChild(IdentifierNode::createNonEmpty(child, parent));
-            addToDeclarations(parent, inode);
+            addToDeclarations(parent, inode, Occurrence::SpaceValue);
         } else if ( strcmp(type, "shorthand_property_identifier") == 0 || strcmp(type, "shorthand_property_identifier_pattern") == 0 ){
             auto inode = parent->addCreatedChild(IdentifierNode::createNonEmpty(child, parent));
-            addToDeclarations(parent, inode);
+            addToDeclarations(parent, inode, Occurrence::SpaceValue);
         } else if (strcmp(type, "array_pattern") == 0 || strcmp(type, "object_pattern") == 0){
             visitDestructuringPattern(parent, child);
         } else if (strcmp(type, "rest_pattern") == 0){
@@ -2285,19 +2415,10 @@ void BaseNode::addParameterDeclarations(BaseNode *parent, ParameterNode *param){
     if (!parent || !param || !param->identifier())
         return;
 
-    TSNode parameterNode = param->identifier()->current();
-    const char* parameterNodeType = ts_node_type(parameterNode);
-
-    if (strcmp(parameterNodeType, "object_pattern") == 0 ||
-        strcmp(parameterNodeType, "array_pattern") == 0 ||
-        strcmp(parameterNodeType, "assignment_pattern") == 0 ||
-        strcmp(parameterNodeType, "object_assignment_pattern") == 0 ||
-        strcmp(parameterNodeType, "pair_pattern") == 0 ||
-        strcmp(parameterNodeType, "rest_pattern") == 0)
-    {
-        visitDestructuringPattern(parent, parameterNode);
+    if ( param->isDestructuringPattern() ){
+        visitDestructuringPattern(parent, param->identifier()->current());
     } else {
-        addToDeclarations(parent, param->identifier());
+        addToDeclarations(parent, param->identifier(), Occurrence::SpaceValue);
     }
 }
 
@@ -2334,8 +2455,7 @@ ArrowFunctionNode* BaseNode::visitArrowFunction(BaseNode *parent, const TSNode &
     // Function parameters
     const TSNode parameters = BaseNode::nodeChildByFieldName(node, "parameters");
     if (!ts_node_is_null(parameters)) {
-        enode->m_parameters = BaseNode::scanFormalParameters(parent, parameters);
-        enode->addChild(enode->m_parameters);
+        enode->m_parameters = BaseNode::scanFormalParameters(enode, parameters);
     } else {
         const TSNode parameter = BaseNode::nodeChildByFieldName(node, "parameter");
         if (!ts_node_is_null(parameter)) {
@@ -2348,7 +2468,7 @@ ArrowFunctionNode* BaseNode::visitArrowFunction(BaseNode *parent, const TSNode &
     // Function return type
     const TSNode returnType = BaseNode::nodeChildByFieldName(node, "return_type");
     if (!ts_node_is_null(returnType)) {
-        enode->m_returnType = enode->addCreatedChild(new TypeNode(returnType));
+        enode->m_returnType = enode->addCreatedChild(TypeNode::create(returnType, enode));
     }
 
     // Function properties
@@ -2411,16 +2531,19 @@ TryCatchBlockNode* BaseNode::visitTryCatchBlock(BaseNode *parent, const TSNode &
             TSNode parameterNode = BaseNode::nodeChildByFieldName(child, "parameter");
             TSNode parameterTypeNode = BaseNode::nodeChildByFieldName(child, "type");
             if ( !ts_node_is_null(parameterNode) && strcmp(ts_node_type(parameterNode), "identifier") == 0 ){
-                auto typeNode = !ts_node_is_null(parameterTypeNode) ? new TypeNode(parameterTypeNode) : nullptr;
                 enode->m_catchParameter = enode->addCreatedChild(
-                    new ParameterNode(parameterNode, IdentifierNode::createNonEmpty(parameterNode, enode), typeNode)
+                    new ParameterNode(parameterNode, IdentifierNode::createNonEmpty(parameterNode, enode))
                 );
+                if ( !ts_node_is_null(parameterTypeNode) ){
+                    ParameterNode* catchParameter = enode->m_catchParameter;
+                    catchParameter->m_type = catchParameter->addCreatedChild(TypeNode::create(parameterTypeNode, catchParameter));
+                }
             }
             TSNode catchBody = BaseNode::nodeChildByFieldName(child, "body");
             if ( !ts_node_is_null(catchBody) ){
                 enode->m_catchBody = enode->addCreatedChild(new JsBlockNode(catchBody));
                 if ( enode->m_catchParameter ){
-                    addToDeclarations(enode->m_catchBody, enode->m_catchParameter->identifier());
+                    addToDeclarations(enode->m_catchBody, enode->m_catchParameter->identifier(), Occurrence::SpaceValue);
                 } else if (!ts_node_is_null(parameterNode) &&
                            (strcmp(ts_node_type(parameterNode), "object_pattern") == 0 ||
                             strcmp(ts_node_type(parameterNode), "array_pattern") == 0)) {
@@ -2445,7 +2568,7 @@ BaseNode* BaseNode::visitForInStatement(BaseNode *parent, const TSNode &node){
         TSNode child = ts_node_child(node, i);
         if (strcmp(ts_node_type(child), "identifier") == 0) {
             auto inode = enode->addCreatedChild(IdentifierNode::createNonEmpty(child, enode));
-            addToDeclarations(enode, inode);
+            addToDeclarations(enode, inode, Occurrence::SpaceValue);
         } else if (
             strcmp(ts_node_type(child), "statement_block") == 0 || 
             strcmp(ts_node_type(child), "expression_statement") == 0)
@@ -2460,15 +2583,69 @@ BaseNode* BaseNode::visitForInStatement(BaseNode *parent, const TSNode &node){
 }
 
 TypeAliasDeclarationNode* BaseNode::visitTypeAliasDeclaration(BaseNode* parent, const TSNode& node){
-    return parent->addCreatedChild(new TypeAliasDeclarationNode(node));
+    TypeAliasDeclarationNode* declarationNode = parent->addCreatedChild(new TypeAliasDeclarationNode(node));
+    TSNode name = BaseNode::nodeChildByFieldName(node, "name");
+    BaseNode::assertValid(parent, name, "Type alias name is missing.");
+    declarationNode->m_name = declarationNode->addCreatedChild(IdentifierNode::createNonEmpty(name, declarationNode));
+    addToDeclarations(parent, declarationNode->m_name, Occurrence::SpaceType);
+
+    TSNode typeParameters = BaseNode::nodeChildByFieldName(node, "type_parameters");
+    if ( !ts_node_is_null(typeParameters) ){
+        declarationNode->m_typeParameters = declarationNode->addCreatedChild(TypeParameterListNode::create(typeParameters, declarationNode));
+    }
+
+    TSNode value = BaseNode::nodeChildByFieldName(node, "value");
+    if ( !ts_node_is_null(value) ){
+        declarationNode->addCreatedChild(TypeNode::create(value, declarationNode));
+    }
+    return declarationNode;
 }
 
 InterfaceDeclarationNode* BaseNode::visitInterfaceDeclaration(BaseNode* parent, const TSNode& node){
-    return parent->addCreatedChild(new InterfaceDeclarationNode(node));
+    InterfaceDeclarationNode* declarationNode = parent->addCreatedChild(new InterfaceDeclarationNode(node));
+    TSNode name = BaseNode::nodeChildByFieldName(node, "name");
+    BaseNode::assertValid(parent, name, "Interface name is missing.");
+    declarationNode->m_name = declarationNode->addCreatedChild(IdentifierNode::createNonEmpty(name, declarationNode));
+    addToDeclarations(parent, declarationNode->m_name, Occurrence::SpaceType);
+
+    TSNode typeParameters = BaseNode::nodeChildByFieldName(node, "type_parameters");
+    if ( !ts_node_is_null(typeParameters) ){
+        declarationNode->m_typeParameters = declarationNode->addCreatedChild(TypeParameterListNode::create(typeParameters, declarationNode));
+    }
+
+    TSNode body = BaseNode::nodeChildByFieldName(node, "body");
+    if ( !ts_node_is_null(body) ){
+        declarationNode->addCreatedChild(TypeNode::create(body, declarationNode));
+    }
+    for ( uint32_t i = 0; i < ts_node_child_count(node); ++i ){
+        TSNode child = ts_node_child(node, i);
+        if ( strcmp(ts_node_type(child), "extends_type_clause") == 0 ){
+            declarationNode->addCreatedChild(TypeNode::create(child, declarationNode));
+        }
+    }
+    return declarationNode;
 }
 
 EnumDeclarationNode* BaseNode::visitEnumDeclaration(BaseNode* parent, const TSNode& node){
-    return parent->addCreatedChild(new EnumDeclarationNode(node));
+    EnumDeclarationNode* declarationNode = parent->addCreatedChild(new EnumDeclarationNode(node));
+    TSNode name = BaseNode::nodeChildByFieldName(node, "name");
+    BaseNode::assertValid(parent, name, "Enum name is missing.");
+    declarationNode->m_name = declarationNode->addCreatedChild(IdentifierNode::createNonEmpty(name, declarationNode));
+    addToDeclarations(parent, declarationNode->m_name, Occurrence::SpaceValue | Occurrence::SpaceType);
+
+    TSNode body = BaseNode::nodeChildByFieldName(node, "body");
+    if ( !ts_node_is_null(body) ){
+        declarationNode->addCreatedChild(TypeNode::create(body, declarationNode));
+    }
+    return declarationNode;
+}
+
+void JsImportNode::markUsage(const std::string& source, const std::string& id, Occurrence::Space space){
+    for ( JsImportName& importName : m_importNames ){
+        if ( importName.identifier() && BaseNode::slice(source, importName.identifier()) == id ){
+            importName.markUsage(space);
+        }
+    }
 }
 
 std::string JsImportNode::toString(int indent) const{
@@ -2535,10 +2712,11 @@ void ProgramNode::collectImportTypes(const std::string &source, ConversionContex
     if ( m_importTypesCollected )
         return;
 
-    std::vector<IdentifierNode*> identifiers;
-    collectImports(source, identifiers, ctx);
+    std::vector<Occurrence> references;
+    collectImports(source, references, ctx);
 
-    for ( auto identifier : identifiers ){
+    for ( const Occurrence& reference : references ){
+        IdentifierNode* identifier = reference.identifier();
 
         std::string idName = slice(source, identifier);
 
@@ -2557,6 +2735,7 @@ void ProgramNode::collectImportTypes(const std::string &source, ConversionContex
                             impt.importNamespace = idName;
                             impt.name = slice(source, parentCast->heritage()[1]);
                             impt.location = identifier->startPoint();
+                            impt.space = reference.space();
                             addImportType(impt);
                         }
                     } else if ( parent->isNodeType<MemberExpressionNode>() ){
@@ -2566,6 +2745,7 @@ void ProgramNode::collectImportTypes(const std::string &source, ConversionContex
                             impt.importNamespace = idName;
                             impt.name = slice(source, parentCast->children()[1]);
                             impt.location = identifier->startPoint();
+                            impt.space = reference.space();
                             addImportType(impt);
                         }
                     } else if ( parent->isNodeType<NewComponentExpressionNode>() ||
@@ -2577,6 +2757,7 @@ void ProgramNode::collectImportTypes(const std::string &source, ConversionContex
                             impt.importNamespace = idName;
                             impt.name = slice(source, parentCast->name()[1]);
                             impt.location = identifier->startPoint();
+                            impt.space = reference.space();
                             addImportType(impt);
                         }
                     } else if ( parent->isNodeType<FlowCallNode>() ){
@@ -2586,6 +2767,16 @@ void ProgramNode::collectImportTypes(const std::string &source, ConversionContex
                             impt.importNamespace = idName;
                             impt.name = slice(source, parentCast->callee()[1]);
                             impt.location = identifier->startPoint();
+                            impt.space = reference.space();
+                            addImportType(impt);
+                        }
+                    } else if ( parent->isNodeType<TypeNode>() ){
+                        if ( IdentifierNode* qualifiedTail = parent->as<TypeNode>()->qualifiedTail(identifier) ){
+                            ProgramNode::ImportType impt;
+                            impt.importNamespace = idName;
+                            impt.name = slice(source, qualifiedTail);
+                            impt.location = identifier->startPoint();
+                            impt.space = reference.space();
                             addImportType(impt);
                         }
                     }
@@ -2597,6 +2788,7 @@ void ProgramNode::collectImportTypes(const std::string &source, ConversionContex
             ProgramNode::ImportType impt;
             impt.name = idName;
             impt.location = identifier->startPoint();
+            impt.space = reference.space();
             addImportType(impt);
         }
     }
@@ -2691,20 +2883,23 @@ std::string ProgramNode::toString(int indent) const{
     return result;
 }
 
-void ProgramNode::collectImports(const std::string &source, std::vector<IdentifierNode *> &identifiers, ConversionContext *ctx){
+void ProgramNode::collectImports(const std::string &source, std::vector<Occurrence>& references, ConversionContext *ctx){
     for ( BaseNode* child: m_exports ){
-        child->collectImports(source, identifiers, ctx);
+        child->collectImports(source, references, ctx);
     }
+    collectBlockImports(source, references, ctx);
 }
 
 void ProgramNode::addImportType(const ProgramNode::ImportType &t){
-    auto asIt = m_importTypes.find(t.importNamespace);
-    if ( asIt == m_importTypes.end() ){
-        std::map<std::string, ProgramNode::ImportType> imports;
-        imports[t.name] = t;
-        m_importTypes[t.importNamespace] = imports;
-    } else {
-        asIt->second[t.name] = t;
+    ProgramNode::ImportType& existing = m_importTypes[t.importNamespace][t.name];
+    if ( existing.name.empty() ){
+        existing = t;
+        return;
+    }
+
+    existing.space |= t.space;
+    if ( existing.resolvedPath.empty() ){
+        existing.resolvedPath = t.resolvedPath;
     }
 }
 
@@ -2869,24 +3064,13 @@ PropertyDeclarationNode::PropertyDeclarationNode(const TSNode &node)
     , m_statementBlock(nullptr)
     , m_bindingContainer(new PropertyBindingContainer)
 {
-    m_bindingContainer->setDeclarationCheck([this](const std::string& source, const std::string& name, BaseNode* m){
-        BaseNode* parent = m->parent();
-        while ( parent ){
-            if ( parent == this ){
-                break;
-            }
-            JsBlockNode* hasIds = dynamic_cast<JsBlockNode*>(parent);
-            if (hasIds){
-                for (auto it = hasIds->identifiers().begin(); it != hasIds->identifiers().end(); ++it){
-                    std::string declaredId = slice(source, *it);
-                    if (declaredId == name){
-                        return true;
-                    }
-                }
-            }
-            parent = parent->parent();
-        }
-        return false;
+    m_bindingContainer->setDeclarationCheck([this](const std::string& source, const std::string&, BaseNode* m){
+        
+        IdentifierNode* head = m && m->canCast<MemberExpressionNode>()
+            ? m->as<MemberExpressionNode>()->identifierChainHead()
+            : nullptr;
+        return head && DeclarationLookup::find(
+            source, m->parent(), Occurrence(head, Occurrence::SpaceValue), this).identifier() != nullptr;
     });
 }
 
@@ -2963,24 +3147,12 @@ PropertyAssignmentNode::PropertyAssignmentNode(const TSNode &node)
     , m_statementBlock(nullptr)
     , m_bindingContainer(new PropertyBindingContainer)
 {
-    m_bindingContainer->setDeclarationCheck([this](const std::string& source, const std::string& name, BaseNode* m){
-        BaseNode* parent = m->parent();
-        while ( parent ){
-            if ( parent == this ){
-                break;
-            }
-            JsBlockNode* hasIds = dynamic_cast<JsBlockNode*>(parent);
-            if (hasIds){
-                for (auto it = hasIds->identifiers().begin(); it != hasIds->identifiers().end(); ++it){
-                    std::string declaredId = slice(source, *it);
-                    if (declaredId == name){
-                        return true;
-                    }
-                }
-            }
-            parent = parent->parent();
-        }
-        return false;
+    m_bindingContainer->setDeclarationCheck([this](const std::string& source, const std::string&, BaseNode* m){
+        IdentifierNode* head = m && m->canCast<MemberExpressionNode>()
+            ? m->as<MemberExpressionNode>()->identifierChainHead()
+            : nullptr;
+        return head && DeclarationLookup::find(
+            source, m->parent(), Occurrence(head, Occurrence::SpaceValue), this).identifier() != nullptr;
     });
 }
 
@@ -3043,6 +3215,41 @@ std::vector<std::string> MemberExpressionNode::identifierChain(const std::string
     return result;
 }
 
+IdentifierNode* MemberExpressionNode::identifierChainHead() const{
+    for ( auto child : children() ){
+        if ( child->isNodeType<IdentifierNode>() ){
+            return child->as<IdentifierNode>();
+        } else if ( child->canCast<MemberExpressionNode>() ){
+            IdentifierNode* nested = child->as<MemberExpressionNode>()->identifierChainHead();
+            if ( nested ){
+                return nested;
+            }
+        }
+    }
+    return nullptr;
+}
+
+ParameterNode::ParameterNode(const TSNode& node, IdentifierNode* identifier, bool isOptional)
+    : BaseNode(node, ParameterNode::nodeInfo())
+    , m_identifier(identifier)
+    , m_type(nullptr)
+    , m_isOptional(isOptional)
+    , m_isDestructuringPattern(false)
+    , m_defaultValue(nullptr)
+{
+    if ( m_identifier ){
+        addChild(m_identifier);
+
+        const char* nodeType = ts_node_type(m_identifier->current());
+        m_isDestructuringPattern = strcmp(nodeType, "object_pattern") == 0 ||
+                      strcmp(nodeType, "array_pattern") == 0 ||
+                      strcmp(nodeType, "assignment_pattern") == 0 ||
+                      strcmp(nodeType, "object_assignment_pattern") == 0 ||
+                      strcmp(nodeType, "pair_pattern") == 0 ||
+                      strcmp(nodeType, "rest_pattern") == 0;
+    }
+}
+
 std::string ParameterListNode::toString(int indent) const{
     std::string result;
    if ( indent > 0 )
@@ -3051,6 +3258,38 @@ std::string ParameterListNode::toString(int indent) const{
     std::string parameters = "(no parameters: " + std::to_string(m_parameters.size()) + ")";
 
     result += "ParameterList " + rangeString() + parameters + "\n";
+    return result;
+}
+
+TypeParameterListNode* TypeParameterListNode::create(const TSNode& typeParameters, BaseNode* parent){
+    TypeParameterListNode* result = new TypeParameterListNode(typeParameters);
+    result->setParent(parent);
+
+    uint32_t parameterCount = ts_node_child_count(typeParameters);
+    for ( uint32_t pc = 0; pc < parameterCount; ++pc ){
+        TSNode typeParameter = ts_node_child(typeParameters, pc);
+        assertError(parent, typeParameter, "Type parameter is invalid.");
+        if ( strcmp(ts_node_type(typeParameter), "type_parameter") != 0 ){
+            continue;
+        }
+
+        TSNode parameterName = BaseNode::nodeChildByFieldName(typeParameter, "name");
+        assertValid(parent, parameterName, "Type parameter name is null.");
+        result->m_names.push_back(result->addCreatedChild(IdentifierNode::createNonEmpty(parameterName, result)));
+        addToDeclarations(parent, result->m_names.back(), Occurrence::SpaceType);
+    }
+
+    return result;
+}
+
+std::string TypeParameterListNode::toString(int indent) const{
+    std::string result;
+    if ( indent > 0 )
+        result.assign(indent * 2, ' ');
+
+    std::string parameters = "(no type parameters: " + std::to_string(m_names.size()) + ")";
+
+    result += "TypeParameterList " + rangeString() + parameters + "\n";
     return result;
 }
 
@@ -3216,7 +3455,7 @@ std::string FunctionDeclarationNode::toString(int indent) const{
 
 
 TypedMethodDeclarationNode::TypedMethodDeclarationNode(const TSNode &node)
-    : BaseNode(node, TypedMethodDeclarationNode::nodeInfo())
+    : JsBlockNode(node, TypedMethodDeclarationNode::nodeInfo())
     , m_name(nullptr)
     , m_parameters(nullptr)
     , m_body(nullptr)
@@ -3227,7 +3466,7 @@ TypedMethodDeclarationNode::TypedMethodDeclarationNode(const TSNode &node)
 }
 
 TypedMethodDeclarationNode::TypedMethodDeclarationNode(const TSNode &node, const LanguageNodeInfo::ConstPtr &ni)
-    : BaseNode(node, ni)
+    : JsBlockNode(node, ni)
     , m_name(nullptr)
     , m_parameters(nullptr)
     , m_body(nullptr)
@@ -3395,13 +3634,14 @@ std::string VariableDeclarationNode::toString(int indent) const
     return result;
 }
 
-void JsBlockNode::collectImports(const std::string &source, std::vector<IdentifierNode *> &identifiers, ConversionContext *ctx){
-    BaseNode::collectImports(source, identifiers, ctx);
-    collectBlockImports(source, identifiers, ctx);
+void JsBlockNode::collectImports(const std::string &source, std::vector<Occurrence>& references, ConversionContext *ctx){
+    BaseNode::collectImports(source, references, ctx);
+    collectBlockImports(source, references, ctx);
 }
 
-void JsBlockNode::collectBlockImports(const std::string &source, std::vector<IdentifierNode *> &identifiers, ConversionContext* ctx){
-    for ( auto identifier : m_usedIdentifiers ){
+void JsBlockNode::collectBlockImports(const std::string &source, std::vector<Occurrence>& references, ConversionContext* ctx){
+    for ( const Occurrence& reference : m_references ){
+        IdentifierNode* identifier = reference.identifier();
         const std::string id = slice(source, identifier);
         if ( id == "this" || id == "parent" || id == "import" ){
             continue;
@@ -3409,8 +3649,26 @@ void JsBlockNode::collectBlockImports(const std::string &source, std::vector<Ide
         if ( ConversionContext::isImplicitType(ctx, id) ){
             continue;
         }
-        if ( DeclarationLookup::find(source, this, id).declaration() ){
+        if ( TypeNode::findTypeNode(identifier) && TypeNode::isReservedTypeName(id) ){
             continue;
+        }
+
+        DeclarationLookup lookup = DeclarationLookup::find(source, this, reference);
+        if ( lookup.identifier() ){
+            if ( lookup.jsImportSite() ){
+                lookup.jsImportSite()->markUsage(source, id, reference.space());
+            }
+            continue;
+        }
+
+        if ( lookup.spaceMismatch().identifier() ){
+            throwError(
+                identifier,
+                identifier->current(),
+                ( reference.space() & Occurrence::SpaceType )
+                    ? Utf8("'%' refers to a value, but is being used as a type.").format(id).data()
+                    : Utf8("'%' refers to a type, but is being used as a value.").format(id).data()
+            );
         }
 
         BaseNode* prog = this;
@@ -3421,7 +3679,7 @@ void JsBlockNode::collectBlockImports(const std::string &source, std::vector<Ide
             continue;
         }
 
-        identifiers.push_back(identifier);
+        references.push_back(reference);
     }
 }
 
@@ -3463,6 +3721,120 @@ IdentifierNode* IdentifierNode::createNonEmpty(const TSNode& node, BaseNode *par
     return new IdentifierNode(node);
 }
 
+TypeNode* TypeNode::create(const TSNode& node, BaseNode* parent, bool isMeta){
+    TypeNode* result = new TypeNode(node, isMeta);
+    result->setParent(parent);
+    visit(result, node);
+    return result;
+}
+
+TypeNode* TypeNode::findTypeNode(BaseNode* node){
+    for ( BaseNode* current = node; current; current = current->parent() ){
+        if ( current->isNodeType<TypeNode>() ){
+            return current->as<TypeNode>();
+        }
+    }
+    return nullptr;
+}
+
+IdentifierNode* TypeNode::visitTypeIdentifier(BaseNode* parent, const TSNode& node){
+    IdentifierNode* identifier = parent->addCreatedChild(IdentifierNode::createNonEmpty(node, parent));
+
+    TypeNode* type = findTypeNode(parent);
+    Occurrence occurrence(identifier, type ? type->nameSpace() : Occurrence::SpaceType);
+    if ( type ){
+        type->m_declaredIdentifiers.push_back(occurrence);
+    }
+    addUsedIdentifier(parent, occurrence);
+    return identifier;
+}
+
+IdentifierNode* TypeNode::visitNestedTypeIdentifier(BaseNode* parent, const TSNode& node){
+    return visitQualifiedHead(parent, node);
+}
+
+IdentifierNode* TypeNode::visitTypeQuery(BaseNode* parent, const TSNode& node){
+    for ( uint32_t i = 0; i < ts_node_child_count(node); ++i ){
+        TSNode child = ts_node_child(node, i);
+        if ( ts_node_is_named(child) ){
+            return visitQualifiedHead(parent, child);
+        }
+    }
+    return nullptr;
+}
+
+IdentifierNode* TypeNode::visitQualifiedHead(BaseNode* parent, const TSNode& node){
+    if ( strcmp(ts_node_type(node), "identifier") == 0 ){
+        IdentifierNode* identifier = parent->addCreatedChild(IdentifierNode::createNonEmpty(node, parent));
+
+        TypeNode* type = findTypeNode(parent);
+        Occurrence occurrence(identifier, type ? type->nameSpace() : Occurrence::SpaceType);
+        if ( type ){
+            type->m_declaredIdentifiers.push_back(occurrence);
+        }
+        addUsedIdentifier(parent, occurrence);
+        return identifier;
+    }
+
+    TSNode operand = BaseNode::nodeChildByFieldName(node, "object");
+    if ( ts_node_is_null(operand) ){
+        operand = BaseNode::nodeChildByFieldName(node, "module");
+    }
+    if ( ts_node_is_null(operand) ){
+        operand = BaseNode::nodeChildByFieldName(node, "function");
+    }
+    if ( !ts_node_is_null(operand) ){
+        IdentifierNode* head = visitQualifiedHead(parent, operand);
+        if ( head ){
+            declareQualifiedTail(parent, head, node);
+        }
+        return head;
+    }
+
+    for ( uint32_t i = 0; i < ts_node_child_count(node); ++i ){
+        TSNode child = ts_node_child(node, i);
+        if ( strcmp(ts_node_type(child), "identifier") == 0 ){
+            IdentifierNode* identifier = parent->addCreatedChild(IdentifierNode::createNonEmpty(child, parent));
+
+            TypeNode* type = findTypeNode(parent);
+            Occurrence occurrence(identifier, type ? type->nameSpace() : Occurrence::SpaceType);
+            if ( type ){
+                type->m_declaredIdentifiers.push_back(occurrence);
+            }
+            addUsedIdentifier(parent, occurrence);
+            return identifier;
+        }
+    }
+    return nullptr;
+}
+
+IdentifierNode* TypeNode::qualifiedTail(IdentifierNode* head) const{
+    for ( const std::pair<IdentifierNode*, IdentifierNode*>& qualifiedName : m_qualifiedNames ){
+        if ( qualifiedName.first == head ){
+            return qualifiedName.second;
+        }
+    }
+    return nullptr;
+}
+
+void TypeNode::declareQualifiedTail(BaseNode* parent, IdentifierNode* head, const TSNode& node){
+    TypeNode* type = findTypeNode(parent);
+    if ( !type || type->qualifiedTail(head) ){
+        return;
+    }
+
+    TSNode tail = BaseNode::nodeChildByFieldName(node, "name");
+    if ( ts_node_is_null(tail) ){
+        tail = BaseNode::nodeChildByFieldName(node, "property");
+    }
+    if ( ts_node_is_null(tail) || ts_node_end_byte(tail) == ts_node_start_byte(tail) ){
+        return;
+    }
+
+    IdentifierNode* tailIdentifier = parent->addCreatedChild(IdentifierNode::createNonEmpty(tail, parent));
+    type->m_qualifiedNames.push_back(std::make_pair(head, tailIdentifier));
+}
+
 std::string TypeNode::sliceWithoutAnnotation(const std::string& source, TypeNode *tn){
     if ( !tn ){
         return "";
@@ -3478,6 +3850,12 @@ std::string TypeNode::sliceWithoutAnnotation(const std::string& source, TypeNode
         return slice(source, tn);
     }
     return slice(source, tn);
+}
+
+bool TypeNode::isReservedTypeName(const std::string& name){
+    return name == "var"      || name == "let"    || name == "const" ||
+           name == "default"  || name == "static" || name == "component" ||
+           name == "instance" || name == "Object" || name == "Function";
 }
 
 }} // namespace lv, el

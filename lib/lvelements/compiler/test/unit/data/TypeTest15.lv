@@ -1,0 +1,5 @@
+import {Bar} from './bar.mjs'
+
+fn f(x: Bar): Bar {
+    return x
+}

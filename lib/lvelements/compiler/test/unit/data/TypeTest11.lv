@@ -1,0 +1,9 @@
+import {PointInterface} from './point.ts'
+
+interface LocalPoint {
+    x: number;
+}
+
+fn project(point: PointInterface, local: LocalPoint): number {
+    return 1
+}

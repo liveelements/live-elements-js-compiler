@@ -1,5 +1,5 @@
 fn build(): any {
-    const flow = (fn: any, n: int) %> {
+    const flow = (fn: any, n: number) %> {
         fn(n) @value
         return value
     }
