@@ -21,6 +21,8 @@ namespace lv{
     void compileModuleWrap(const Napi::CallbackInfo& info);
     Napi::Value createCompilerWrap(const Napi::CallbackInfo& info);
     void runCompilerWrap(const Napi::CallbackInfo& info);
+    void runCompilerOnModuleWrap(const Napi::CallbackInfo& info);
+    void runCompilerOnPackageModulesWrap(const Napi::CallbackInfo& info);
 
     Napi::Object Init(Napi::Env env, Napi::Object exports);
 

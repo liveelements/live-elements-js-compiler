@@ -173,6 +173,28 @@ std::shared_ptr<lv::el::TypeResolver> createResolverFromOptions(const Napi::Obje
     return std::make_shared<NapiTypeResolver>(optionsArg.Env(), resolveTypes.As<Napi::Function>());
 }
 
+void applyPackageImportPaths(const lv::el::Compiler::Ptr& compiler, const std::string& modulePath){
+    auto module = Module::createFromPath(modulePath);
+    Package::Ptr package = Package::createFromPath(module->package());
+    if ( !package ){
+        return;
+    }
+
+    std::string current = package->path();
+    std::vector<std::string> importPaths;
+    while ( Path::exists(current) ){
+        auto importPath = Path::join(current, compiler->importLocalPath());
+        if ( Package::existsIn(current) && Path::exists(importPath) ){
+            importPaths.push_back(importPath);
+        }
+        if ( Path::rootPath(current) == current ){
+            break;
+        }
+        current = Path::parent(current);
+    }
+    compiler->setPackageImportPaths(importPaths);
+}
+
 
 void convertToMLNode(const Napi::Value& v, MLNode& n){
     if ( v.IsArray() ){
@@ -247,6 +269,36 @@ void populateSyntaxError(Napi::Env env, Napi::Object ob, lv::el::SyntaxException
     ob.Set("source", source);
 
     populateError(env, ob, e);
+}
+
+Napi::Value errorValueFromException(Napi::Env env, std::exception_ptr error){
+    if ( !error ){
+        return env.Undefined();
+    }
+
+    try {
+        std::rethrow_exception(error);
+    } catch ( lv::el::SyntaxException& e ){
+        Napi::Object ob = Napi::Object::New(env);
+        populateSyntaxError(env, ob, &e);
+        return ob;
+    } catch ( lv::el::TracePointException& e ){
+        Napi::Object ob = Napi::Object::New(env);
+        populateError(env, ob, &e);
+        return ob;
+    } catch ( lv::Exception& e ){
+        Napi::Object ob = Napi::Object::New(env);
+        populateError(env, ob, &e);
+        return ob;
+    } catch ( std::exception& e ){
+        Napi::Object ob = Napi::Object::New(env);
+        populateErrorMessage(env, ob, &e);
+        return ob;
+    } catch ( ... ){
+        Napi::Object ob = Napi::Object::New(env);
+        populateErrorMessage(env, ob, nullptr);
+        return ob;
+    }
 }
 
 void compileWrap(const Napi::CallbackInfo& info){
@@ -401,23 +453,7 @@ void compileModuleWrap(const Napi::CallbackInfo &info){
             compiler->setTypeResolver(typeResolver.get());
         }
 
-        auto module = Module::createFromPath(modulePath);
-        Package::Ptr package = Package::createFromPath(module->package());
-        if ( package ){
-            std::string current = package->path();
-            std::vector<std::string> importPaths;
-            while ( Path::exists(current) ){
-                auto importPath = Path::join(current, compiler->importLocalPath() );
-                if ( Package::existsIn(current) && Path::exists( importPath ) ){
-                    importPaths.push_back(importPath);
-                }
-                if ( Path::rootPath(current) == current ){
-                    break;
-                }
-                current = Path::parent(current);
-            }
-            compiler->setPackageImportPaths(importPaths);
-        }
+        applyPackageImportPaths(compiler, modulePath);
 
         lv::el::ElementsModule::Ptr elemMod = lv::el::Compiler::compileModule(compiler, modulePath);
         if ( elemMod ){
@@ -625,6 +661,139 @@ void runCompilerWrap(const Napi::CallbackInfo &info){
 
 }
 
+void runCompilerOnModuleWrap(const Napi::CallbackInfo &info){
+    Napi::Env env = info.Env();
+    if( info.Length() < 2 || !info[0].IsObject() || !info[1].IsString()){
+        Napi::TypeError::New(env, "Expected arguments of type: runCompilerOnModule(compiler:CompilerHandle, path:String)").ThrowAsJavaScriptException();
+        return;
+    }
+
+    Napi::Object obj = info[0].As<Napi::Object>();
+    CompilerHandle* handle = Napi::ObjectWrap<CompilerHandle>::Unwrap(obj);
+    lv::el::Compiler::Ptr compiler = handle->getInternalInstance();
+
+    Napi::Value err = env.Undefined();
+    Napi::Value res = env.Undefined();
+
+    try{
+        std::string modulePath = info[1].As<Napi::String>().Utf8Value();
+
+        if ( !Path::exists(modulePath) || !Module::existsIn(modulePath) ){
+            THROW_EXCEPTION(
+                lv::Exception,
+                Utf8("Compiler: Module path not found: \'%\'.").format(modulePath),
+                lv::Exception::toCode("~Path")
+            );
+        }
+
+        applyPackageImportPaths(compiler, modulePath);
+
+        lv::el::ElementsModule::Ptr elemMod = lv::el::Compiler::compileModule(compiler, modulePath);
+        if ( elemMod ){
+            res = Napi::String::New(env, compiler->moduleBuildPath(elemMod->module()));
+        }
+    } catch ( lv::el::SyntaxException& e ){
+        Napi::Object ob = Napi::Object::New(env);
+        populateSyntaxError(env, ob, &e);
+        err = ob;
+    } catch ( lv::el::TracePointException& e ){
+        Napi::Object ob = Napi::Object::New(env);
+        populateError(env, ob, &e);
+        err = ob;
+    } catch ( lv::Exception& e ){
+        Napi::Object ob = Napi::Object::New(env);
+        populateError(env, ob, &e);
+        err = ob;
+    } catch ( std::exception& e ){
+        Napi::Object ob = Napi::Object::New(env);
+        populateErrorMessage(env, ob, &e);
+        err = ob;
+    } catch ( ... ){
+        Napi::Object ob = Napi::Object::New(env);
+        populateErrorMessage(env, ob, nullptr);
+        err = ob;
+    }
+
+    if ( info.Length() > 2 && info[2].IsFunction() ){
+        Napi::Function cb = info[2].As<Napi::Function>();
+        cb.Call(env.Global(), {res, err});
+    }
+}
+
+void runCompilerOnPackageModulesWrap(const Napi::CallbackInfo &info){
+    Napi::Env env = info.Env();
+    if( info.Length() < 2 || !info[0].IsObject() || !info[1].IsArray()){
+        Napi::TypeError::New(env, "Expected arguments of type: runCompilerOnPackageModules(compiler:CompilerHandle, paths:String[])").ThrowAsJavaScriptException();
+        return;
+    }
+
+    Napi::Object obj = info[0].As<Napi::Object>();
+    CompilerHandle* handle = Napi::ObjectWrap<CompilerHandle>::Unwrap(obj);
+    lv::el::Compiler::Ptr compiler = handle->getInternalInstance();
+
+    Napi::Value err = env.Undefined();
+    Napi::Value res = env.Undefined();
+
+    try{
+        Napi::Array pathArray = info[1].As<Napi::Array>();
+        std::vector<std::string> modulePaths;
+        modulePaths.reserve(pathArray.Length());
+        for ( uint32_t i = 0; i < pathArray.Length(); ++i ){
+            Napi::Value pathValue = pathArray.Get(i);
+            if ( !pathValue.IsString() ){
+                Napi::TypeError::New(env, "runCompilerOnPackageModules paths must be strings.").ThrowAsJavaScriptException();
+                return;
+            }
+            std::string modulePath = pathValue.As<Napi::String>().Utf8Value();
+            if ( Path::exists(modulePath) && Module::existsIn(modulePath) ){
+                applyPackageImportPaths(compiler, modulePath);
+            }
+            modulePaths.push_back(modulePath);
+        }
+
+        auto results = lv::el::Compiler::compileModules(compiler, modulePaths);
+        Napi::Array resultArray = Napi::Array::New(env, results.size());
+        for ( size_t i = 0; i < results.size(); ++i ){
+            Napi::Object resultObject = Napi::Object::New(env);
+            resultObject.Set("path", Napi::String::New(env, Path::toUnixSeparator(results[i].modulePath)));
+            if ( !results[i].buildPath.empty() ){
+                resultObject.Set("buildPath", Napi::String::New(env, Path::toUnixSeparator(results[i].buildPath)));
+            }
+            Napi::Value itemError = errorValueFromException(env, results[i].error);
+            if ( !itemError.IsUndefined() ){
+                resultObject.Set("error", itemError);
+            }
+            resultArray.Set(i, resultObject);
+        }
+        res = resultArray;
+    } catch ( lv::el::SyntaxException& e ){
+        Napi::Object ob = Napi::Object::New(env);
+        populateSyntaxError(env, ob, &e);
+        err = ob;
+    } catch ( lv::el::TracePointException& e ){
+        Napi::Object ob = Napi::Object::New(env);
+        populateError(env, ob, &e);
+        err = ob;
+    } catch ( lv::Exception& e ){
+        Napi::Object ob = Napi::Object::New(env);
+        populateError(env, ob, &e);
+        err = ob;
+    } catch ( std::exception& e ){
+        Napi::Object ob = Napi::Object::New(env);
+        populateErrorMessage(env, ob, &e);
+        err = ob;
+    } catch ( ... ){
+        Napi::Object ob = Napi::Object::New(env);
+        populateErrorMessage(env, ob, nullptr);
+        err = ob;
+    }
+
+    if ( info.Length() > 2 && info[2].IsFunction() ){
+        Napi::Function cb = info[2].As<Napi::Function>();
+        cb.Call(env.Global(), {res, err});
+    }
+}
+
 Napi::Object Init(Napi::Env env, Napi::Object exports) {
     auto addonData = new CompilerAddonData();
 
@@ -638,6 +807,8 @@ Napi::Object Init(Napi::Env env, Napi::Object exports) {
     exports.Set("compileModule", Napi::Function::New(env, lv::compileModuleWrap));
     exports.Set("createCompiler", Napi::Function::New(env, lv::createCompilerWrap));
     exports.Set("runCompiler", Napi::Function::New(env, lv::runCompilerWrap));
+    exports.Set("runCompilerOnModule", Napi::Function::New(env, lv::runCompilerOnModuleWrap));
+    exports.Set("runCompilerOnPackageModules", Napi::Function::New(env, lv::runCompilerOnPackageModulesWrap));
 
     // Set AddonData to instance data
     env.SetInstanceData<CompilerAddonData>(addonData);
