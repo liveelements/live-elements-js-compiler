@@ -49,6 +49,8 @@ public:
     DateTime addMSeconds(int count) const;
     DateTime addDays(int count) const;
 
+    size_t msecsSinceEpoch() const;
+
     static DateTime create(int year, int m = 1, int d = 1, int hh = 0, int mm = 0, int ss = 0, int ms = 0);
     static DateTime createFromMs(size_t timeSinceEpoch);
 

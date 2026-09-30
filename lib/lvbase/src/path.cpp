@@ -27,6 +27,12 @@ template <typename TP> std::chrono::system_clock::time_point toTimePoint(TP tp){
     );
 }
 
+fs::file_time_type toFileTime(std::chrono::system_clock::time_point tp){
+    return std::chrono::time_point_cast<fs::file_time_type::duration>(
+        tp - std::chrono::system_clock::now() + fs::file_time_type::clock::now()
+    );
+}
+
 } // namespace
 
 
@@ -313,6 +319,14 @@ DateTime Path::lastModified(const std::string &path){
     std::chrono::system_clock::time_point t = toTimePoint(fs::last_write_time(path));
     auto ms = std::chrono::time_point_cast<std::chrono::milliseconds>(t).time_since_epoch().count();
     return DateTime::createFromMs(ms);
+}
+
+void Path::setLastModified(const std::string &path, const DateTime &dateTime){
+    if ( dateTime.isLocal() ){
+        THROW_EXCEPTION(lv::Exception, Utf8("Cannot set modified time from a local DateTime: %").format(path), lv::Exception::toCode("~Date"));
+    }
+    std::chrono::system_clock::time_point t{std::chrono::milliseconds(dateTime.msecsSinceEpoch())};
+    fs::last_write_time(path, toFileTime(t));
 }
 
 Path::Path(){

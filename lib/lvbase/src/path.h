@@ -70,6 +70,7 @@ public:
     static std::string relativePath(const std::string& referencePath, const std::string& path);
 
     static DateTime lastModified(const std::string& path);
+    static void setLastModified(const std::string& path, const DateTime& dateTime);
 
 private:
     Path();

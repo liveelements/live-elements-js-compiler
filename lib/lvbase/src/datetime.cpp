@@ -310,6 +310,12 @@ DateTime DateTime::create(int year, int m, int d, int hh, int mm, int ss, int ms
     return DateTime(year, m, d, hh, mm, ss, ms);
 }
 
+size_t DateTime::msecsSinceEpoch() const{
+    return static_cast<size_t>(
+        std::chrono::duration_cast<std::chrono::milliseconds>(m_d->tp.time_since_epoch()).count()
+    );
+}
+
 DateTime DateTime::createFromMs(size_t timeSinceEpoch){
     return DateTime(timeSinceEpoch);
 }
