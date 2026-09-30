@@ -74,6 +74,17 @@ public:
     TypeResolver* typeResolver = nullptr;
     std::unique_ptr<CompileRun> currentRun;
 
+    void compileModuleFileTarget(
+            BaseNode::ConversionContext::OutputTarget target,
+            const Module::Ptr& module,
+            const std::string& path,
+            const std::string& contents,
+            BaseNode* node,
+            const Utf8& outputPath,
+            const Utf8& relativePathFromOutput,
+            const std::string& extension,
+            std::string& outStr);
+
     BaseNode::ConversionContext* createConversionContext(
             BaseNode::ConversionContext::OutputTarget target = BaseNode::ConversionContext::JS,
             const Module::Ptr& module = nullptr,
@@ -112,6 +123,96 @@ public:
         return ctx;
     }
 };
+
+void CompilerPrivate::compileModuleFileTarget(
+        BaseNode::ConversionContext::OutputTarget target,
+        const Module::Ptr& module,
+        const std::string& path,
+        const std::string& contents,
+        BaseNode* node,
+        const Utf8& outputPath,
+        const Utf8& relativePathFromOutput,
+        const std::string& extension,
+        std::string& outStr)
+{
+    std::string outputFile = outputPath.data() + extension;
+    std::string displayFilePath = path;
+    Utf8::replaceAll(displayFilePath, module->packagePath(), "");
+
+    const bool isJs  = target == BaseNode::ConversionContext::JS;
+    const bool isDts = target == BaseNode::ConversionContext::DTS;
+    bool willWrite = false;
+    if ( isJs || isDts ){
+        willWrite = true;
+        if ( config.m_fileOutputOnlyOnModified && Path::exists(outputFile) ){
+            DateTime sourceModifiedStamp = Path::lastModified(path);
+            DateTime outputModifiedStamp = Path::lastModified(outputFile);
+            willWrite = outputModifiedStamp < sourceModifiedStamp;
+        }
+        if ( willWrite && module->context() ){
+            auto package = module->context()->packageUnwrapped();
+            if ( !package->release().empty() ){
+                willWrite = false;
+                if ( extension != config.declarationExtension() && !Path::exists(outputFile) ){
+                    Utf8 msg = Utf8("Released package '%' missing build file: %").format(package->name(), displayFilePath);
+                    THROW_EXCEPTION(lv::Exception, msg, Exception::toCode("~File"));
+                }
+            }
+        }
+    }
+
+    const bool contentNeeded = willWrite || !config.m_fileOutput || !(isJs || isDts);
+    if ( !contentNeeded ){
+        if ( config.m_fileOutput ){
+            vlog("lvcompiler").v() << "Compiler: Skipped file: " << displayFilePath << extension;
+        }
+        return;
+    }
+
+    el::JSSection* section = new el::JSSection;
+    section->from = 0;
+    section->to   = static_cast<int>(contents.size());
+
+    std::string typeResolutionSourcePath = outputPath.data() + config.declarationExtension();
+    auto ctx = createConversionContext(
+        target,
+        module,
+        path,
+        relativePathFromOutput.data(),
+        outputFile,
+        typeResolutionSourcePath
+    );
+    LanguageNodesToJs lnt;
+    lnt.convert(node, contents, section->m_children, 0, ctx);
+
+    std::vector<std::string> flatten;
+    section->flatten(contents, flatten);
+
+    for ( const std::string& s : flatten ){
+        outStr += s;
+    }
+
+    if ( isJs ){
+        currentRun->sink().storeGeneratedTypeOutput(outputFile, outputFile, outStr, willWrite);
+    }
+
+    const bool deferToFinalize =
+        isJs && willWrite && currentRun->sink().hasPendingFor(outputFile);
+
+    if ( config.m_fileOutput ){
+        if ( willWrite && !deferToFinalize ){
+            config.m_fileIO->writeToFile(outputFile, outStr);
+            vlog("lvcompiler").v() << "Compiler: Compiled file: " << displayFilePath << extension;
+        } else if ( deferToFinalize ){
+            vlog("lvcompiler").v() << "Compiler: Deferred (type resolution): " << displayFilePath << extension;
+        } else {
+            vlog("lvcompiler").v() << "Compiler: Skipped file: " << displayFilePath << extension;
+        }
+    }
+
+    delete ctx;
+    delete section;
+}
 
 bool Compiler::Config::hasCustomBaseComponent(){
     return !m_baseComponent.empty();
@@ -241,9 +342,6 @@ Compiler::TargetResult Compiler::compileToTarget(const std::string &path, const 
 
 Compiler::TargetResult Compiler::compileModuleFileToTarget(const Module::Ptr &module, const std::string &path, const std::string &contents, BaseNode *node){
     Compiler::TargetResult result;
-    el::JSSection* section = new el::JSSection;
-    section->from = 0;
-    section->to   = static_cast<int>(contents.size());
 
     Utf8 outputPath = moduleFileBuildPath(module, path);
     Utf8 relativePathFromOutput;
@@ -276,89 +374,23 @@ Compiler::TargetResult Compiler::compileModuleFileToTarget(const Module::Ptr &mo
 
     relativePathFromOutput = Utf8::join(relativePathFromOutputSegments, "/");
 
-    auto compileContextTarget = [&](BaseNode::ConversionContext::OutputTarget target, std::string& outStr, const std::string& extension) {
-        el::JSSection* section = new el::JSSection;
-        section->from = 0;
-        section->to   = static_cast<int>(contents.size());
-
-        std::string outputFile = outputPath.data() + extension;
-        std::string typeResolutionSourcePath = outputPath.data() + m_d->config.declarationExtension();
-        auto ctx = m_d->createConversionContext(
-            target,
-            module,
-            path,
-            relativePathFromOutput.data(),
-            outputFile,
-            typeResolutionSourcePath
+    auto compileTarget = [&](BaseNode::ConversionContext::OutputTarget target, std::string& outStr, const std::string& extension) {
+        m_d->compileModuleFileTarget(
+            target, module, path, contents, node, outputPath, relativePathFromOutput, extension, outStr
         );
-        LanguageNodesToJs lnt;
-        lnt.convert(node, contents, section->m_children, 0, ctx);
-
-        std::vector<std::string> flatten;
-        section->flatten(contents, flatten);
-
-        for ( const std::string& s : flatten ){
-            outStr += s;
-        }
-
-        delete section;
-
-        std::string displayFilePath = path;
-        Utf8::replaceAll(displayFilePath, module->packagePath(), "");
-        const bool isJs  = target == BaseNode::ConversionContext::JS;
-        const bool isDts = target == BaseNode::ConversionContext::DTS;
-        bool shouldWrite = false;
-        if ( isJs || isDts ){
-            shouldWrite = true;
-            if ( m_d->config.m_fileOutputOnlyOnModified && Path::exists(outputFile) ){
-                DateTime sourceModifiedStamp = Path::lastModified(path);
-                DateTime outputModifiedStamp = Path::lastModified(outputFile);
-                shouldWrite = outputModifiedStamp < sourceModifiedStamp;
-            }
-            if ( shouldWrite && module->context() ){
-                auto package = module->context()->packageUnwrapped();
-                if ( !package->release().empty() ){
-                    shouldWrite = false;
-                    if ( extension != m_d->config.declarationExtension() && !Path::exists(outputFile) ){
-                        Utf8 msg = Utf8("Released package '%' missing build file: %").format(package->name(), displayFilePath);
-                        delete ctx;
-                        THROW_EXCEPTION(lv::Exception, msg, Exception::toCode("~File"));
-                    }
-                }
-            }
-            if ( isJs ){
-                m_d->currentRun->sink().storeGeneratedTypeOutput(outputFile, outputFile, outStr, shouldWrite);
-            }
-        }
-
-        const bool deferToFinalize =
-            isJs && shouldWrite && m_d->currentRun->sink().hasPendingFor(outputFile);
-
-        if ( m_d->config.m_fileOutput ){
-            if ( shouldWrite && !deferToFinalize ){
-                m_d->config.m_fileIO->writeToFile(outputFile, outStr);
-                vlog("lvcompiler").v() << "Compiler: Compiled file: " << displayFilePath << extension;
-            } else if ( deferToFinalize ){
-                vlog("lvcompiler").v() << "Compiler: Deferred (type resolution): " << displayFilePath << extension;
-            } else {
-                vlog("lvcompiler").v() << "Compiler: Skipped file: " << displayFilePath << extension;
-            }
-        }
-
-        delete ctx;
     };
 
     if (m_d->config.m_outputTarget == Compiler::Config::JS) {
-        compileContextTarget(BaseNode::ConversionContext::JS, result.js, m_d->config.m_outputExtension);
+        compileTarget(BaseNode::ConversionContext::JS, result.js, m_d->config.m_outputExtension);
     }
-    
+
     if (m_d->config.m_outputTarget == Compiler::Config::TS) {
-        compileContextTarget(BaseNode::ConversionContext::TS, result.ts, ".ts");
+        compileTarget(BaseNode::ConversionContext::TS, result.ts, ".ts");
     }
 
     if (m_d->config.m_outputTarget == Compiler::Config::JS_DTS) {
-        compileContextTarget(BaseNode::ConversionContext::JS, result.js, m_d->config.m_outputExtension);
-        compileContextTarget(BaseNode::ConversionContext::DTS, result.dts, m_d->config.declarationExtension());
+        compileTarget(BaseNode::ConversionContext::JS, result.js, m_d->config.m_outputExtension);
+        compileTarget(BaseNode::ConversionContext::DTS, result.dts, m_d->config.declarationExtension());
     }
 
     return result;
@@ -524,9 +556,47 @@ std::shared_ptr<ElementsModule> Compiler::compileModule(Compiler::Ptr compiler, 
     Module::Ptr module = Module::createFromPath(path);
     Package::Ptr package = Package::createFromPath(module->package());
     compiler->m_d->packageGraph->loadRunningPackageAndModule(package, module);
-    auto epl = Compiler::compileModuleImpl(compiler, module, engine);
+    try {
+        auto epl = Compiler::compileModuleImpl(compiler, module, engine);
+        compiler->m_d->currentRun->finalize(compiler->m_d->config.m_fileIO, compiler->m_d->config.m_typesModulePath);
+        return epl;
+    } catch ( ... ){
+        compiler->m_d->currentRun->finalize(compiler->m_d->config.m_fileIO, compiler->m_d->config.m_typesModulePath);
+        throw;
+    }
+}
+
+std::vector<Compiler::ModuleCompileResult> Compiler::compileModules(
+    Compiler::Ptr compiler,
+    const std::vector<std::string>& paths,
+    Engine* engine)
+{
+    compiler->m_d->currentRun = CompileRun::createUnique(compiler->m_d->typeResolver);
+
+    std::vector<ModuleCompileResult> results;
+    results.reserve(paths.size());
+
+    for ( const std::string& path : paths ){
+        try {
+            if ( !Path::exists(path) ){
+                THROW_EXCEPTION(lv::Exception, Utf8("Path does not exist: %.").format(path), lv::Exception::toCode("~Path"));
+            }
+            if ( !Module::existsIn(path) ){
+                THROW_EXCEPTION(lv::Exception, Utf8("Module not found in: %.").format(path), lv::Exception::toCode("~Path"));
+            }
+
+            Module::Ptr module = Module::createFromPath(path);
+            Package::Ptr package = Package::createFromPath(module->package());
+            compiler->m_d->packageGraph->loadRunningPackageAndModule(package, module);
+            auto epl = Compiler::compileModuleImpl(compiler, module, engine);
+            results.emplace_back(path, compiler->moduleBuildPath(epl->module()), nullptr);
+        } catch ( ... ){
+            results.emplace_back(path, "", std::current_exception());
+        }
+    }
+
     compiler->m_d->currentRun->finalize(compiler->m_d->config.m_fileIO, compiler->m_d->config.m_typesModulePath);
-    return epl;
+    return results;
 }
 
 std::vector<std::shared_ptr<ElementsModule> > Compiler::compilePackage(Compiler::Ptr compiler, const std::string &path, Engine *engine){
@@ -543,15 +613,19 @@ std::vector<std::shared_ptr<ElementsModule> > Compiler::compilePackage(Compiler:
 
     std::vector<std::shared_ptr<ElementsModule> > result;
 
-    for ( auto it = modules.begin(); it != modules.end(); ++it ){
-        Module::Ptr module = Module::createFromPath(*it);
-        Package::Ptr packageForModule = Package::createFromPath(module->package());
-        compiler->m_d->packageGraph->loadRunningPackageAndModule(packageForModule, module);
-        result.push_back(Compiler::compileModuleImpl(compiler, module, engine));
+    try {
+        for ( auto it = modules.begin(); it != modules.end(); ++it ){
+            Module::Ptr module = Module::createFromPath(*it);
+            Package::Ptr packageForModule = Package::createFromPath(module->package());
+            compiler->m_d->packageGraph->loadRunningPackageAndModule(packageForModule, module);
+            result.push_back(Compiler::compileModuleImpl(compiler, module, engine));
+        }
+        compiler->m_d->currentRun->finalize(compiler->m_d->config.m_fileIO, compiler->m_d->config.m_typesModulePath);
+        return result;
+    } catch ( ... ){
+        compiler->m_d->currentRun->finalize(compiler->m_d->config.m_fileIO, compiler->m_d->config.m_typesModulePath);
+        throw;
     }
-
-    compiler->m_d->currentRun->finalize(compiler->m_d->config.m_fileIO, compiler->m_d->config.m_typesModulePath);
-    return result;
 }
 
 std::shared_ptr<ElementsModule> Compiler::createAndResolveImportedModule(Compiler::Ptr compiler, const std::string &importKey, const Module::Ptr& requestingModule, Engine *engine){

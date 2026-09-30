@@ -27,6 +27,7 @@
 #include "live/elements/compiler/typerequestsink.h"
 #include "live/elements/compiler/typeresolver.h"
 #include <map>
+#include <set>
 
 using namespace lv;
 using namespace lv::el;
@@ -59,6 +60,26 @@ public:
     std::vector<Result> resolve(const std::vector<Request>& requests) override{
         observedRequests = requests;
         throw lv::Exception(message, lv::Exception::toCode("~Type"));
+    }
+};
+
+class CountingTypeResolver : public TypeResolver {
+public:
+    std::map<std::string, Result> responses;
+    std::vector<std::vector<Request>> observedBatches;
+
+    std::vector<Result> resolve(const std::vector<Request>& requests) override{
+        observedBatches.push_back(requests);
+        std::vector<Result> result;
+        for ( const Request& request : requests ){
+            auto it = responses.find(request.requestId());
+            if ( it != responses.end() ){
+                result.push_back(it->second);
+            } else {
+                result.push_back(Result(request.requestId()));
+            }
+        }
+        return result;
     }
 };
 
@@ -425,6 +446,311 @@ TEST_CASE("Type Resolution", "[TypeResolution]"){
         const std::string jsContents = fileIO.readFromFile(outputJsPath);
         REQUIRE(jsContents.find("FunctionType.for(Type.number, Type.number, Type.number)") != std::string::npos);
         REQUIRE(jsContents.find("/*@@LVTYPE:") == std::string::npos);
+    }
+
+    SECTION("Module compile emits the same outputs with shared and separate compilers"){
+        const std::string sharedTmpRoot = Path::join(Path::temporaryDirectory(), "lv-compiler-module-cache-reuse-shared");
+        const std::string separateTmpRoot = Path::join(Path::temporaryDirectory(), "lv-compiler-module-cache-reuse-separate");
+        Txtar archive = Txtar::parseFile(Path::join(typeTestDataPath(), "TypeTestModuleCompilePack01.txtar"));
+        Txtar::ExtractionGuard sharedExtraction = archive.extractTemp(sharedTmpRoot);
+        Txtar::ExtractionGuard separateExtraction = archive.extractTemp(separateTmpRoot);
+
+        const std::string sharedPackageDir = Path::join(sharedTmpRoot, "pkg");
+        const std::string sharedAlphaModuleDir = Path::join(sharedPackageDir, "alpha");
+        const std::string sharedBetaModuleDir = Path::join(sharedPackageDir, "beta");
+        FileIO sharedFileIO;
+        Compiler::Config sharedConfig(true, ".mjs", &sharedFileIO);
+        MLNode sharedOptions(MLNode::Type::Object);
+        sharedOptions["importLocalPath"] = "node_modules";
+        sharedOptions["packageBuildPath"] = "build";
+        sharedOptions["outputTarget"] = "JS";
+        sharedConfig.initialize(sharedOptions);
+
+        Compiler::Ptr sharedCompiler = Compiler::create(sharedConfig);
+        sharedCompiler->setPackageImportPaths({Path::join(sharedPackageDir, "node_modules")});
+
+        REQUIRE_NOTHROW(Compiler::compileModule(sharedCompiler, sharedAlphaModuleDir));
+        REQUIRE_NOTHROW(Compiler::compileModule(sharedCompiler, sharedBetaModuleDir));
+
+        FileIO archiveFileIO;
+        const std::string separatePackageDir = Path::join(separateTmpRoot, "pkg");
+        const std::string separateAlphaModuleDir = Path::join(separatePackageDir, "alpha");
+        const std::string separateBetaModuleDir = Path::join(separatePackageDir, "beta");
+
+        Compiler::Config separateAlphaConfig(true, ".mjs", &archiveFileIO);
+        MLNode separateAlphaOptions(MLNode::Type::Object);
+        separateAlphaOptions["importLocalPath"] = "node_modules";
+        separateAlphaOptions["packageBuildPath"] = "build";
+        separateAlphaOptions["outputTarget"] = "JS";
+        separateAlphaConfig.initialize(separateAlphaOptions);
+        Compiler::Ptr alphaCompiler = Compiler::create(separateAlphaConfig);
+        alphaCompiler->setPackageImportPaths({Path::join(separatePackageDir, "node_modules")});
+
+        Compiler::Config separateBetaConfig(true, ".mjs", &archiveFileIO);
+        MLNode separateBetaOptions(MLNode::Type::Object);
+        separateBetaOptions["importLocalPath"] = "node_modules";
+        separateBetaOptions["packageBuildPath"] = "build";
+        separateBetaOptions["outputTarget"] = "JS";
+        separateBetaConfig.initialize(separateBetaOptions);
+        Compiler::Ptr betaCompiler = Compiler::create(separateBetaConfig);
+        betaCompiler->setPackageImportPaths({Path::join(separatePackageDir, "node_modules")});
+
+        REQUIRE_NOTHROW(Compiler::compileModule(alphaCompiler, separateAlphaModuleDir));
+        REQUIRE_NOTHROW(Compiler::compileModule(betaCompiler, separateBetaModuleDir));
+
+        const Txtar sharedAlphaBuild = Txtar::fromDirectory(Path::join(sharedPackageDir, "build/alpha"));
+        const Txtar sharedBetaBuild = Txtar::fromDirectory(Path::join(sharedPackageDir, "build/beta"));
+        const Txtar separateAlphaBuild = Txtar::fromDirectory(Path::join(separatePackageDir, "build/alpha"));
+        const Txtar separateBetaBuild = Txtar::fromDirectory(Path::join(separatePackageDir, "build/beta"));
+
+        REQUIRE(sharedAlphaBuild.toString() == separateAlphaBuild.toString());
+        REQUIRE(sharedBetaBuild.toString() == separateBetaBuild.toString());
+    }
+
+    SECTION("Module compile can recover after a missing-path failure on the same compiler"){
+        const std::string tmpRoot = Path::join(Path::temporaryDirectory(), "lv-compiler-module-error-recovery");
+        Txtar archive = Txtar::parseFile(Path::join(typeTestDataPath(), "TypeTestModuleCompilePack01.txtar"));
+        Txtar::ExtractionGuard extraction = archive.extractTemp(tmpRoot);
+
+        FileIO fileIO;
+        Compiler::Config config(true, ".mjs", &fileIO);
+        MLNode options(MLNode::Type::Object);
+        options["importLocalPath"] = "node_modules";
+        options["packageBuildPath"] = "build";
+        options["outputTarget"] = "JS";
+        config.initialize(options);
+
+        Compiler::Ptr compiler = Compiler::create(config);
+        compiler->setPackageImportPaths({Path::join(tmpRoot, "pkgC/node_modules")});
+
+        REQUIRE_THROWS_AS(Compiler::compileModule(compiler, Path::join(tmpRoot, "pkgC/missing")), lv::Exception);
+        REQUIRE_NOTHROW(Compiler::compileModule(compiler, Path::join(tmpRoot, "pkgC/good")));
+        REQUIRE(Path::exists(Path::join(tmpRoot, "pkgC/build/good/main.lv.mjs")));
+    }
+
+    SECTION("Warm module compile skips code generation and type resolution"){
+        const std::string tmpRoot = Path::join(Path::temporaryDirectory(), "lv-compiler-module-warm-skip");
+        Txtar archive = Txtar::parseFile(Path::join(typeTestDataPath(), "TypeTestModuleCompilePack01.txtar"));
+        Txtar::ExtractionGuard extraction = archive.extractTemp(tmpRoot);
+
+        const std::string packageDir = Path::join(tmpRoot, "pkg");
+        const std::string moduleDir = Path::join(packageDir, "node_modules/shared/common");
+        const std::string sourcePath = Path::join(moduleDir, "math.lv");
+        const std::string resolvedSourcePath = Path::resolve(sourcePath);
+        const std::string outputJsPath = Path::join(packageDir, "node_modules/shared/build/common/math.lv.mjs");
+        const std::string outputDtsPath = Path::join(packageDir, "node_modules/shared/build/common/math.lv.d.mts");
+
+        FileIO fileIO;
+        Compiler::Config config(true, ".mjs", &fileIO);
+        MLNode options(MLNode::Type::Object);
+        options["importLocalPath"] = "node_modules";
+        options["packageBuildPath"] = "build";
+        options["outputTarget"] = "JS_DTS";
+        config.initialize(options);
+        config.allowUnresolvedTypes(true);
+        config.setTypesModule("types.mjs");
+
+        CountingTypeResolver resolver;
+        resolver.responses[resolvedSourcePath + "::add"] = TypeResolver::Result(resolvedSourcePath + "::add", "FunctionType.for(Type.number, Type.number, Type.number)", {"FunctionType", "Type"});
+        resolver.responses[resolvedSourcePath + "::sharedLabel"] = TypeResolver::Result(resolvedSourcePath + "::sharedLabel", "FunctionType.for(Type.string)", {"FunctionType", "Type"});
+
+        Compiler::Ptr compiler = Compiler::create(config);
+        compiler->setTypeResolver(&resolver);
+        compiler->setPackageImportPaths({Path::join(packageDir, "node_modules")});
+
+        REQUIRE_NOTHROW(Compiler::compileModule(compiler, moduleDir));
+        REQUIRE(resolver.observedBatches.size() == 1);
+        REQUIRE(Path::exists(outputJsPath));
+        REQUIRE(Path::exists(outputDtsPath));
+
+        resolver.observedBatches.clear();
+        const DateTime now;
+        Path::setLastModified(sourcePath, now.addMSeconds(-10000));
+        Path::setLastModified(outputJsPath, now);
+        Path::setLastModified(outputDtsPath, now);
+        const DateTime jsModifiedBefore = Path::lastModified(outputJsPath);
+        const DateTime dtsModifiedBefore = Path::lastModified(outputDtsPath);
+
+        REQUIRE_NOTHROW(Compiler::compileModule(compiler, moduleDir));
+        REQUIRE(resolver.observedBatches.empty());
+        REQUIRE(Path::lastModified(outputJsPath) == jsModifiedBefore);
+        REQUIRE(Path::lastModified(outputDtsPath) == dtsModifiedBefore);
+    }
+
+    SECTION("Modified module source still re-requests and rewrites resolved output"){
+        const std::string tmpRoot = Path::join(Path::temporaryDirectory(), "lv-compiler-module-stale-rebuild");
+        Txtar archive = Txtar::parseFile(Path::join(typeTestDataPath(), "TypeTestModuleCompilePack01.txtar"));
+        Txtar::ExtractionGuard extraction = archive.extractTemp(tmpRoot);
+
+        const std::string packageDir = Path::join(tmpRoot, "pkg");
+        const std::string moduleDir = Path::join(packageDir, "node_modules/shared/common");
+        const std::string sourcePath = Path::join(moduleDir, "math.lv");
+        const std::string resolvedSourcePath = Path::resolve(sourcePath);
+        const std::string outputJsPath = Path::join(packageDir, "node_modules/shared/build/common/math.lv.mjs");
+        const std::string outputDtsPath = Path::join(packageDir, "node_modules/shared/build/common/math.lv.d.mts");
+
+        FileIO fileIO;
+        Compiler::Config config(true, ".mjs", &fileIO);
+        MLNode options(MLNode::Type::Object);
+        options["importLocalPath"] = "node_modules";
+        options["packageBuildPath"] = "build";
+        options["outputTarget"] = "JS_DTS";
+        config.initialize(options);
+        config.allowUnresolvedTypes(true);
+        config.setTypesModule("types.mjs");
+
+        CountingTypeResolver resolver;
+        resolver.responses[resolvedSourcePath + "::add"] = TypeResolver::Result(resolvedSourcePath + "::add", "FunctionType.for(Type.number, Type.number, Type.number)", {"FunctionType", "Type"});
+        resolver.responses[resolvedSourcePath + "::sharedLabel"] = TypeResolver::Result(resolvedSourcePath + "::sharedLabel", "FunctionType.for(Type.string)", {"FunctionType", "Type"});
+
+        Compiler::Ptr compiler = Compiler::create(config);
+        compiler->setTypeResolver(&resolver);
+        compiler->setPackageImportPaths({Path::join(packageDir, "node_modules")});
+
+        REQUIRE_NOTHROW(Compiler::compileModule(compiler, moduleDir));
+
+        resolver.observedBatches.clear();
+        const DateTime now;
+        Path::setLastModified(outputJsPath, now.addMSeconds(-20000));
+        Path::setLastModified(outputDtsPath, now.addMSeconds(-20000));
+        Path::setLastModified(sourcePath, now);
+
+        REQUIRE_NOTHROW(Compiler::compileModule(compiler, moduleDir));
+        REQUIRE(resolver.observedBatches.size() == 1);
+
+        std::set<std::string> ids;
+        for ( const auto& request : resolver.observedBatches.front() ){
+            ids.insert(request.requestId());
+        }
+        REQUIRE(ids.count(resolvedSourcePath + "::add") == 1);
+
+        const std::string jsContents = fileIO.readFromFile(outputJsPath);
+        REQUIRE(jsContents.find("FunctionType.for(Type.number, Type.number, Type.number)") != std::string::npos);
+        REQUIRE(jsContents.find("/*@@LVTYPE:") == std::string::npos);
+    }
+
+    SECTION("Dependent module does not re-request fresh dependency functions"){
+        const std::string tmpRoot = Path::join(Path::temporaryDirectory(), "lv-compiler-dependent-skip");
+        Txtar archive = Txtar::parseFile(Path::join(typeTestDataPath(), "TypeTestModuleCompilePack01.txtar"));
+        Txtar::ExtractionGuard extraction = archive.extractTemp(tmpRoot);
+
+        const std::string packageDir = Path::join(tmpRoot, "pkgA");
+        const std::string dependencyDir = Path::join(packageDir, "node_modules/depone/util");
+        const std::string dependencySourcePath = Path::join(dependencyDir, "token.lv");
+        const std::string resolvedDependencySourcePath = Path::resolve(dependencySourcePath);
+        const std::string appDir = Path::join(packageDir, "app");
+
+        FileIO fileIO;
+        Compiler::Config config(true, ".mjs", &fileIO);
+        MLNode options(MLNode::Type::Object);
+        options["importLocalPath"] = "node_modules";
+        options["packageBuildPath"] = "build";
+        options["outputTarget"] = "JS_DTS";
+        config.initialize(options);
+        config.allowUnresolvedTypes(true);
+        config.setTypesModule("types.mjs");
+
+        CountingTypeResolver resolver;
+        resolver.responses[resolvedDependencySourcePath + "::tokenValue"] = TypeResolver::Result(resolvedDependencySourcePath + "::tokenValue", "FunctionType.for(Type.string)", {"FunctionType", "Type"});
+
+        Compiler::Ptr compiler = Compiler::create(config);
+        compiler->setTypeResolver(&resolver);
+        compiler->setPackageImportPaths({Path::join(packageDir, "node_modules")});
+
+        REQUIRE_NOTHROW(Compiler::compileModule(compiler, dependencyDir));
+        resolver.observedBatches.clear();
+
+        REQUIRE_NOTHROW(Compiler::compileModule(compiler, appDir));
+        REQUIRE(resolver.observedBatches.empty());
+    }
+
+    SECTION("Batched module compile resolves once for the whole package"){
+        const std::string tmpRoot = Path::join(Path::temporaryDirectory(), "lv-compiler-batch-resolve-once");
+        Txtar archive = Txtar::parseFile(Path::join(typeTestDataPath(), "TypeTestModuleCompilePack01.txtar"));
+        Txtar::ExtractionGuard extraction = archive.extractTemp(tmpRoot);
+
+        const std::string packageDir = Path::join(tmpRoot, "pkg");
+        const std::string alphaDir = Path::join(packageDir, "alpha");
+        const std::string betaDir = Path::join(packageDir, "beta");
+        const std::string sharedSourcePath = Path::resolve(Path::join(packageDir, "node_modules/shared/common/math.lv"));
+        const std::string alphaSourcePath = Path::resolve(Path::join(packageDir, "alpha/main.lv"));
+        const std::string betaSourcePath = Path::resolve(Path::join(packageDir, "beta/main.lv"));
+
+        FileIO fileIO;
+        Compiler::Config config(true, ".mjs", &fileIO);
+        MLNode options(MLNode::Type::Object);
+        options["importLocalPath"] = "node_modules";
+        options["packageBuildPath"] = "build";
+        options["outputTarget"] = "JS_DTS";
+        config.initialize(options);
+        config.allowUnresolvedTypes(true);
+        config.setTypesModule("types.mjs");
+
+        CountingTypeResolver resolver;
+        resolver.responses[sharedSourcePath + "::add"] = TypeResolver::Result(sharedSourcePath + "::add", "FunctionType.for(Type.number, Type.number, Type.number)", {"FunctionType", "Type"});
+        resolver.responses[sharedSourcePath + "::sharedLabel"] = TypeResolver::Result(sharedSourcePath + "::sharedLabel", "FunctionType.for(Type.string)", {"FunctionType", "Type"});
+        resolver.responses[alphaSourcePath + "::alphaTotal"] = TypeResolver::Result(alphaSourcePath + "::alphaTotal", "FunctionType.for(Type.number)", {"FunctionType", "Type"});
+        resolver.responses[betaSourcePath + "::betaTotal"] = TypeResolver::Result(betaSourcePath + "::betaTotal", "FunctionType.for(Type.number)", {"FunctionType", "Type"});
+
+        Compiler::Ptr compiler = Compiler::create(config);
+        compiler->setTypeResolver(&resolver);
+        compiler->setPackageImportPaths({Path::join(packageDir, "node_modules")});
+
+        const auto results = Compiler::compileModules(compiler, {alphaDir, betaDir});
+        REQUIRE(results.size() == 2);
+        REQUIRE(resolver.observedBatches.size() == 1);
+
+        std::set<std::string> ids;
+        for ( const auto& request : resolver.observedBatches.front() ){
+            ids.insert(request.requestId());
+        }
+        REQUIRE(ids.count(sharedSourcePath + "::add") == 1);
+        REQUIRE(ids.count(sharedSourcePath + "::sharedLabel") == 1);
+        REQUIRE(ids.count(alphaSourcePath + "::alphaTotal") == 1);
+        REQUIRE(ids.count(betaSourcePath + "::betaTotal") == 1);
+        REQUIRE(Path::exists(Path::join(packageDir, "build/alpha/main.lv.mjs")));
+        REQUIRE(Path::exists(Path::join(packageDir, "build/beta/main.lv.mjs")));
+    }
+
+    SECTION("Batched module compile reports per-module failures and still finalizes others"){
+        const std::string tmpRoot = Path::join(Path::temporaryDirectory(), "lv-compiler-batch-error-recovery");
+        Txtar archive = Txtar::parseFile(Path::join(typeTestDataPath(), "TypeTestModuleCompilePack01.txtar"));
+        Txtar::ExtractionGuard extraction = archive.extractTemp(tmpRoot);
+
+        const std::string packageDir = Path::join(tmpRoot, "pkgC");
+        const std::string badDir = Path::join(packageDir, "missing");
+        const std::string goodDir = Path::join(packageDir, "good");
+        const std::string dependencySourcePath = Path::resolve(Path::join(packageDir, "node_modules/depthree/util/token.lv"));
+        const std::string dependencyOutputPath = Path::join(packageDir, "node_modules/depthree/build/util/token.lv.mjs");
+
+        FileIO fileIO;
+        Compiler::Config config(true, ".mjs", &fileIO);
+        MLNode options(MLNode::Type::Object);
+        options["importLocalPath"] = "node_modules";
+        options["packageBuildPath"] = "build";
+        options["outputTarget"] = "JS_DTS";
+        config.initialize(options);
+        config.allowUnresolvedTypes(true);
+        config.setTypesModule("types.mjs");
+
+        CountingTypeResolver resolver;
+        resolver.responses[dependencySourcePath + "::tokenValue"] = TypeResolver::Result(dependencySourcePath + "::tokenValue", "FunctionType.for(Type.string)", {"FunctionType", "Type"});
+
+        Compiler::Ptr compiler = Compiler::create(config);
+        compiler->setTypeResolver(&resolver);
+        compiler->setPackageImportPaths({Path::join(packageDir, "node_modules")});
+
+        const auto results = Compiler::compileModules(compiler, {badDir, goodDir});
+        REQUIRE(results.size() == 2);
+        REQUIRE(results[0].modulePath == badDir);
+        REQUIRE(results[0].error != nullptr);
+        REQUIRE(results[1].modulePath == goodDir);
+        REQUIRE(results[1].error == nullptr);
+        REQUIRE(Path::exists(dependencyOutputPath));
+
+        const std::string dependencyJs = fileIO.readFromFile(dependencyOutputPath);
+        REQUIRE(dependencyJs.find("FunctionType.for(Type.string)") != std::string::npos);
+        REQUIRE(dependencyJs.find("/*@@LVTYPE:") == std::string::npos);
     }
 
     SECTION("Declared meta root functions reuse type resolution and mark descriptors"){

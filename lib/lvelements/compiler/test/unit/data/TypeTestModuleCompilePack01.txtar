@@ -1,0 +1,97 @@
+Package/module fixture for shared-compiler module compile tests.
+-- pkg/live.package.json --
+{"name":"pkg.shared","version":"1.0.0"}
+-- pkg/node_modules/shared/live.package.json --
+{"name":"shared","version":"1.0.0"}
+-- pkg/node_modules/shared/common/live.module.json --
+{"name":"common","package":"..","modules":["math"]}
+-- pkg/node_modules/shared/common/math.lv --
+@fn add(a:number, b:number): number {
+    return a + b
+}
+
+@fn sharedLabel(): string {
+    return "shared-cache"
+}
+-- pkg/alpha/live.module.json --
+{"name":"alpha","package":"..","modules":["main"]}
+-- pkg/alpha/main.lv --
+import shared.common as shared
+
+@fn alphaTotal(): number {
+    return shared.add(1, 2)
+}
+
+fn alphaLabel(): string {
+    return shared.sharedLabel()
+}
+-- pkg/beta/live.module.json --
+{"name":"beta","package":"..","modules":["main"]}
+-- pkg/beta/main.lv --
+import shared.common as shared
+
+@fn betaTotal(): number {
+    return shared.add(3, 4)
+}
+
+fn betaLabel(): string {
+    return shared.sharedLabel()
+}
+-- pkgA/live.package.json --
+{"name":"pkg.a","version":"1.0.0"}
+-- pkgA/node_modules/depone/live.package.json --
+{"name":"depone","version":"1.0.0"}
+-- pkgA/node_modules/depone/util/live.module.json --
+{"name":"util","package":"..","modules":["token"]}
+-- pkgA/node_modules/depone/util/token.lv --
+@fn tokenValue(): string {
+    return "alpha-token"
+}
+-- pkgA/app/live.module.json --
+{"name":"app","package":"..","modules":["main"]}
+-- pkgA/app/main.lv --
+import depone.util as dep
+
+fn resolved(): string {
+    return dep.tokenValue()
+}
+-- pkgB/live.package.json --
+{"name":"pkg.b","version":"1.0.0"}
+-- pkgB/node_modules/deptwo/live.package.json --
+{"name":"deptwo","version":"1.0.0"}
+-- pkgB/node_modules/deptwo/util/live.module.json --
+{"name":"util","package":"..","modules":["token"]}
+-- pkgB/node_modules/deptwo/util/token.lv --
+@fn tokenValue(): string {
+    return "beta-token"
+}
+-- pkgB/app/live.module.json --
+{"name":"app","package":"..","modules":["main"]}
+-- pkgB/app/main.lv --
+import deptwo.util as dep
+
+fn resolved(): string {
+    return dep.tokenValue()
+}
+-- pkgC/live.package.json --
+{"name":"pkg.c","version":"1.0.0"}
+-- pkgC/node_modules/depthree/live.package.json --
+{"name":"depthree","version":"1.0.0"}
+-- pkgC/node_modules/depthree/util/live.module.json --
+{"name":"util","package":"..","modules":["token"]}
+-- pkgC/node_modules/depthree/util/token.lv --
+@fn tokenValue(): string {
+    return "gamma-token"
+}
+-- pkgC/bad/live.module.json --
+{"name":"bad","package":"..","modules":["main"]}
+-- pkgC/bad/main.lv --
+component x < X{
+-- pkgC/good/live.module.json --
+{"name":"good","package":"..","modules":["main"]}
+-- pkgC/good/main.lv --
+import depthree.util as dep
+
+fn recovered(): string {
+    return dep.tokenValue()
+}

@@ -203,7 +203,7 @@ ModuleFile *ElementsModule::parseModuleFile(ElementsModule::Ptr &epl, const std:
     if ( !Path::exists(filePath) ){
         THROW_EXCEPTION(
             lv::Exception,
-            Utf8("Module file '%' does not exit. (Defined in '%')").format(filePath, epl->module()->filePath()),
+            Utf8("Module file '%' does not exit. (Defined in '%')").format(filePath, epl->module()->path()),
             lv::Exception::toCode("~Module")
         );
     }

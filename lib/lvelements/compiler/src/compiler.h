@@ -110,6 +110,22 @@ public:
         std::string dts;
     };
 
+    class ModuleCompileResult {
+    public:
+        ModuleCompileResult(
+            std::string modulePath = "",
+            std::string buildPath = "",
+            std::exception_ptr error = nullptr)
+            : modulePath(std::move(modulePath))
+            , buildPath(std::move(buildPath))
+            , error(std::move(error))
+        {}
+
+        std::string modulePath;
+        std::string buildPath;
+        std::exception_ptr error;
+    };
+
 public:
     ~Compiler();
 
@@ -141,6 +157,7 @@ public:
 
     static std::shared_ptr<ElementsModule> compile(Compiler::Ptr compiler, const std::string& path, Engine* engine = nullptr);
     static std::shared_ptr<ElementsModule> compileModule(Compiler::Ptr compiler, const std::string& path, Engine* engine = nullptr);
+    static std::vector<ModuleCompileResult> compileModules(Compiler::Ptr compiler, const std::vector<std::string>& paths, Engine* engine = nullptr);
     static std::vector<std::shared_ptr<ElementsModule> > compilePackage(Compiler::Ptr compiler, const std::string& path, Engine* engine = nullptr);
     static std::shared_ptr<ElementsModule> createAndResolveImportedModule(Compiler::Ptr compiler, const std::string& path, const Module::Ptr& requstingModule, Engine* engine = nullptr);
 
