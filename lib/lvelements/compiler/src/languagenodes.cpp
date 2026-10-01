@@ -659,7 +659,7 @@ ParameterListNode *BaseNode::scanFlowParameters(BaseNode *parent, const TSNode &
         auto paramNode = result->addCreatedChild(
             new ParameterNode(parameter, IdentifierNode::createNonEmpty(parameterName, result), false)
         );
-        paramNode->m_type = paramNode->addCreatedChild(TypeNode::create(parameterType, paramNode));
+        paramNode->m_type = paramNode->addCreatedChild(TypeNode::create(parameterType, paramNode, true));
         result->m_parameters.push_back(paramNode);
     }
 
@@ -1090,7 +1090,7 @@ FlowExpressionNode* BaseNode::visitFlowExpression(BaseNode* parent, const TSNode
 
     TSNode returnType = BaseNode::nodeChildByFieldName(parameters, "return");
     if ( !ts_node_is_null(returnType) ){
-        expressionNode->m_returnType = expressionNode->addCreatedChild(TypeNode::create(returnType, expressionNode));
+        expressionNode->m_returnType = expressionNode->addCreatedChild(TypeNode::create(returnType, expressionNode, true));
     }
 
     TSNode body = BaseNode::nodeChildByFieldName(node, "body");
