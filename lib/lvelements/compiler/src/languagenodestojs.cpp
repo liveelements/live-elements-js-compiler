@@ -295,7 +295,7 @@ bool LanguageNodesToJs::contextMatchesSpace(BaseNode::ConversionContext* ctx, Oc
         return true;
     }
     if ( ctx->outputTarget == BaseNode::ConversionContext::JS ){
-        return space == 0 || ( space & Occurrence::SpaceValue ) != 0;
+        return space == 0 || ( space & ( Occurrence::SpaceValue | Occurrence::SpaceMeta ) ) != 0;
     }
     if ( ctx->outputTarget == BaseNode::ConversionContext::DTS ){
         return ( space & Occurrence::SpaceType ) != 0;
@@ -1807,6 +1807,8 @@ void LanguageNodesToJs::convertTypeAliasDeclaration(TypeAliasDeclarationNode *no
     compose->from = node->startByte();
     compose->to   = node->endByte();
     if ( ctx && ctx->outputTarget == BaseNode::ConversionContext::DTS ){
+        if ( node->parent() && node->parent()->isNodeType<ProgramNode>() )
+            *compose << "export ";
         *compose << slice(source, node);
         if ( newLineFollows(source, node->endByte()) )
             *compose << "\n";
@@ -1822,6 +1824,8 @@ void LanguageNodesToJs::convertInterfaceDeclaration(InterfaceDeclarationNode *no
     compose->from = node->startByte();
     compose->to   = node->endByte();
     if ( ctx && ctx->outputTarget == BaseNode::ConversionContext::DTS ){
+        if ( node->parent() && node->parent()->isNodeType<ProgramNode>() )
+            *compose << "export ";
         *compose << slice(source, node);
         if ( newLineFollows(source, node->endByte()) )
             *compose << "\n";

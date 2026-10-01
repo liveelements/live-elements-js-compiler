@@ -1,3 +1,3 @@
-type Alias = string
+export type Alias = string
 
 export declare function f(x: Alias): Alias;

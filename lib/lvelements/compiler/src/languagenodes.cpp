@@ -66,7 +66,10 @@ private:
 
 DeclarationLookup DeclarationLookup::find(const std::string& source, BaseNode* node, const Occurrence& reference, BaseNode* boundary){
     const std::string id = BaseNode::slice(source, reference.identifier());
-    const Occurrence::Space requiredSpace = reference.space();
+    // a meta reference is satisfied by a declaration in either space
+    const Occurrence::Space requiredSpace = ( reference.space() & Occurrence::SpaceMeta )
+        ? ( reference.space() & ~Occurrence::SpaceMeta ) | Occurrence::SpaceValue
+        : reference.space();
 
     Occurrence spaceMismatch;
     while ( node && node != boundary ){
@@ -2796,12 +2799,15 @@ void ProgramNode::collectImportTypes(const std::string &source, ConversionContex
     m_importTypesCollected = true;
 }
 
-void ProgramNode::resolveImport(const std::string &as, const std::string &name, const std::string &path){
+void ProgramNode::resolveImport(const std::string &as, const std::string &name, const std::string &path, Occurrence::Space exportSpace){
     auto asIt = m_importTypes.find(as);
     if ( asIt != m_importTypes.end() ){
         auto nameIt = asIt->second.find(name);
         if ( nameIt != asIt->second.end() ){
             nameIt->second.resolvedPath = path;
+            if ( !( exportSpace & Occurrence::SpaceValue ) ){
+                nameIt->second.space &= ~Occurrence::SpaceMeta;
+            }
         }
     }
 }

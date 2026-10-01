@@ -102,7 +102,8 @@ class Occurrence{
 public:
     enum SpaceEnum {
         SpaceValue = 1 << 0,
-        SpaceType  = 1 << 1
+        SpaceType  = 1 << 1,
+        SpaceMeta  = 1 << 2
     };
 
     typedef int Space;
@@ -397,7 +398,7 @@ public:
 
     void collectImportTypes(const std::string& source, ConversionContext* ctx = nullptr);
 
-    void resolveImport(const std::string& as, const std::string& name, const std::string& path);
+    void resolveImport(const std::string& as, const std::string& name, const std::string& path, Occurrence::Space exportSpace = Occurrence::SpaceValue | Occurrence::SpaceType);
 
     std::string importTypesString() const;
 
@@ -649,7 +650,7 @@ public:
     bool isMeta() const{ return m_isMeta; }
 
     Occurrence::Space nameSpace() const{
-        return m_isMeta ? (Occurrence::SpaceType | Occurrence::SpaceValue) : Occurrence::SpaceType;
+        return m_isMeta ? (Occurrence::SpaceType | Occurrence::SpaceMeta) : Occurrence::SpaceType;
     }
 
 private:

@@ -27,7 +27,9 @@ public:
     enum Kind{
         Component,
         Element,
-        Function
+        Function,
+        Interface,
+        TypeAlias
     };
 
 public:
@@ -37,6 +39,7 @@ public:
     Kind kind() const{ return m_kind; }
     bool meta() const{ return m_meta; }
     bool declared() const{ return m_declared; }
+    bool isTypeOnly() const{ return m_kind == Interface || m_kind == TypeAlias; }
 
     Utf8 kindString() const;
     static Kind kindFromString(const Utf8& str);
@@ -120,7 +123,7 @@ public:
     class ExportLink{
 
     public:
-        ExportLink(){}
+        ExportLink() : m_kind(ExportDescriptor::Component){}
 
         ExportLink(const Utf8& name, ExportDescriptor::Kind kind, ModuleFileDescriptor::Ptr mfd)
             : m_name(name), m_kind(kind), m_file(mfd)

@@ -72,9 +72,25 @@ void ModuleFile::resolveTypes(){
                     if ( !foundFile ){
                         THROW_EXCEPTION(Exception, Utf8("Assertion: File not found: %").format(foundExp.file()->fileName()), Exception::toCode("NullPtr"));
                     }
+                    Occurrence::Space expSpace = Occurrence::SpaceValue | Occurrence::SpaceType;
+                    if ( foundExp.kind() == ExportDescriptor::Interface || foundExp.kind() == ExportDescriptor::TypeAlias ){
+                        expSpace = Occurrence::SpaceType;
+                    } else if ( foundExp.kind() == ExportDescriptor::Function ){
+                        expSpace = Occurrence::SpaceValue;
+                    }
+                    if ( ( impType.space & Occurrence::SpaceValue ) && !( expSpace & Occurrence::SpaceValue ) ){
+                        // ImportType locations have 0-based columns, syntax exceptions report 1-based ones
+                        const SourcePoint& location = impType.location;
+                        throw SyntaxException(
+                            Utf8("'%' refers to a type, but is being used as a value.").format(impType.name),
+                            Exception::toCode("~Language"),
+                            SourceRangeLocation(SourceRange(SourcePoint(location.line(), location.column() + 1, location.offset())), filePath()),
+                            SOURCE_TRACE()
+                        );
+                    }
                     addDependency(foundFile);
 
-                    m_d->rootNode->resolveImport(impType.importNamespace, impType.name, "./" + foundFile->jsFileName());
+                    m_d->rootNode->resolveImport(impType.importNamespace, impType.name, "./" + foundFile->jsFileName(), expSpace);
                     foundLocalExport = true;
                 }
             }
@@ -99,6 +115,22 @@ void ModuleFile::resolveTypes(){
                             auto foundFile = impIt->module->findModuleFileByName(foundExp.file()->fileName().data());
                             if ( !foundFile ){
                                 THROW_EXCEPTION(Exception, Utf8("Assertion: File not found: %").format(foundExp.file()->fileName()), Exception::toCode("NullPtr"));
+                            }
+                            Occurrence::Space expSpace = Occurrence::SpaceValue | Occurrence::SpaceType;
+                            if ( foundExp.kind() == ExportDescriptor::Interface || foundExp.kind() == ExportDescriptor::TypeAlias ){
+                                expSpace = Occurrence::SpaceType;
+                            } else if ( foundExp.kind() == ExportDescriptor::Function ){
+                                expSpace = Occurrence::SpaceValue;
+                            }
+                            if ( ( impType.space & Occurrence::SpaceValue ) && !( expSpace & Occurrence::SpaceValue ) ){
+                                // ImportType locations have 0-based columns, syntax exceptions report 1-based ones
+                                const SourcePoint& location = impType.location;
+                                throw SyntaxException(
+                                    Utf8("'%' refers to a type, but is being used as a value.").format(impType.name),
+                                    Exception::toCode("~Language"),
+                                    SourceRangeLocation(SourceRange(SourcePoint(location.line(), location.column() + 1, location.offset())), filePath()),
+                                    SOURCE_TRACE()
+                                );
                             }
                             if ( impIt->isRelative ){
                                 // this plugin to package
@@ -141,7 +173,7 @@ void ModuleFile::resolveTypes(){
                                 if ( !packageToNewPlugin.empty() )
                                     packageToNewPlugin += "/";
 
-                                m_d->rootNode->resolveImport(impType.importNamespace, impType.name, pluginToPackage + "/" + packageToNewPlugin + foundFile->jsFileName());
+                                m_d->rootNode->resolveImport(impType.importNamespace, impType.name, pluginToPackage + "/" + packageToNewPlugin + foundFile->jsFileName(), expSpace);
 
                             } else {
                                 Package::Ptr importedPkg = impIt->module->module()->context()->packageUnwrapped();
@@ -165,7 +197,7 @@ void ModuleFile::resolveTypes(){
                                 std::string packageToPluginStr = Utf8::join(packageToPlugin, "/").data();
                                 std::string importPath = packageBuildPath + (packageToPluginStr.empty() ? "" : "/" + packageToPluginStr) + "/" + foundFile->jsFileName();
 
-                                m_d->rootNode->resolveImport(impType.importNamespace, impType.name, importPath);
+                                m_d->rootNode->resolveImport(impType.importNamespace, impType.name, importPath, expSpace);
                             }
                             break;
                         }
@@ -325,6 +357,18 @@ ModuleFile *ModuleFile::createFromProgramNode(ElementsModule *module, const std:
             );
             ExportDescriptor expt(name, ExportDescriptor::Function, expression->isMeta(), expression->isDeclared());
             descriptor->addExport(expt);
+        } else if ( val->isNodeType<InterfaceDeclarationNode>() ){
+            auto expression = val->as<InterfaceDeclarationNode>();
+            if ( expression->name() ){
+                ExportDescriptor expt(BaseNode::slice(content, expression->name()), ExportDescriptor::Interface);
+                descriptor->addExport(expt);
+            }
+        } else if ( val->isNodeType<TypeAliasDeclarationNode>() ){
+            auto expression = val->as<TypeAliasDeclarationNode>();
+            if ( expression->name() ){
+                ExportDescriptor expt(BaseNode::slice(content, expression->name()), ExportDescriptor::TypeAlias);
+                descriptor->addExport(expt);
+            }
         }
     }
 

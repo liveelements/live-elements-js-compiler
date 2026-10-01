@@ -1,6 +1,6 @@
-type MyType = string;
+export type MyType = string;
 
-interface MyInterface {
+export interface MyInterface {
   prop: number;
 }
 
