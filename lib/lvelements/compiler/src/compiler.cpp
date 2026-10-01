@@ -43,6 +43,7 @@ bool flowCallFromString(const std::string& role, Compiler::Config::FlowCall& out
     else if ( role == "return" ) out = Compiler::Config::FlowCall::Return;
     else if ( role == "ref" )    out = Compiler::Config::FlowCall::Ref;
     else if ( role == "member" ) out = Compiler::Config::FlowCall::Member;
+    else if ( role == "function" ) out = Compiler::Config::FlowCall::Function;
     else return false;
     return true;
 }
@@ -54,6 +55,7 @@ BaseNode::ConversionContext::FlowCall toConversionFlowCall(Compiler::Config::Flo
     case Compiler::Config::FlowCall::Return: return BaseNode::ConversionContext::FlowCall::Return;
     case Compiler::Config::FlowCall::Ref:    return BaseNode::ConversionContext::FlowCall::Ref;
     case Compiler::Config::FlowCall::Member: return BaseNode::ConversionContext::FlowCall::Member;
+    case Compiler::Config::FlowCall::Function: return BaseNode::ConversionContext::FlowCall::Function;
     }
     return BaseNode::ConversionContext::FlowCall::Create;
 }

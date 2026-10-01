@@ -75,7 +75,7 @@ void ModuleFile::resolveTypes(){
                     Occurrence::Space expSpace = Occurrence::SpaceValue | Occurrence::SpaceType;
                     if ( foundExp.kind() == ExportDescriptor::Interface || foundExp.kind() == ExportDescriptor::TypeAlias ){
                         expSpace = Occurrence::SpaceType;
-                    } else if ( foundExp.kind() == ExportDescriptor::Function ){
+                    } else if ( foundExp.kind() == ExportDescriptor::Function || foundExp.kind() == ExportDescriptor::Flow ){
                         expSpace = Occurrence::SpaceValue;
                     }
                     if ( ( impType.space & Occurrence::SpaceValue ) && !( expSpace & Occurrence::SpaceValue ) ){
@@ -119,7 +119,7 @@ void ModuleFile::resolveTypes(){
                             Occurrence::Space expSpace = Occurrence::SpaceValue | Occurrence::SpaceType;
                             if ( foundExp.kind() == ExportDescriptor::Interface || foundExp.kind() == ExportDescriptor::TypeAlias ){
                                 expSpace = Occurrence::SpaceType;
-                            } else if ( foundExp.kind() == ExportDescriptor::Function ){
+                            } else if ( foundExp.kind() == ExportDescriptor::Function || foundExp.kind() == ExportDescriptor::Flow ){
                                 expSpace = Occurrence::SpaceValue;
                             }
                             if ( ( impType.space & Occurrence::SpaceValue ) && !( expSpace & Occurrence::SpaceValue ) ){
@@ -356,6 +356,10 @@ ModuleFile *ModuleFile::createFromProgramNode(ElementsModule *module, const std:
                 expression->name()->endByte() - expression->name()->startByte()
             );
             ExportDescriptor expt(name, ExportDescriptor::Function, expression->isMeta(), expression->isDeclared());
+            descriptor->addExport(expt);
+        } else if ( val->isNodeType<FlowFunctionDeclarationNode>() ){
+            auto expression = val->as<FlowFunctionDeclarationNode>();
+            ExportDescriptor expt(BaseNode::slice(content, expression->name()), ExportDescriptor::Flow, true);
             descriptor->addExport(expt);
         } else if ( val->isNodeType<InterfaceDeclarationNode>() ){
             auto expression = val->as<InterfaceDeclarationNode>();

@@ -4,9 +4,11 @@
 #include "live/fileio.h"
 #include "live/path.h"
 #include "live/txtar.h"
+#include "live/mlnodetojson.h"
 #include "live/applicationcontext.h"
 
 #include "live/elements/compiler/compiler.h"
+#include "live/elements/compiler/languagedescriptors.h"
 #include "live/elements/compiler/typeresolver.h"
 #include <array>
 #include <cctype>
@@ -187,6 +189,7 @@ Compiler::Config flowConfig(Compiler::Config::OutputTarget outputTarget){
     config.setFlowCall(Compiler::Config::FlowCall::Return, "Flow.ret");
     config.setFlowCall(Compiler::Config::FlowCall::Ref, "Flow.ref");
     config.setFlowCall(Compiler::Config::FlowCall::Member, "Flow.member");
+    config.setFlowCall(Compiler::Config::FlowCall::Function, "Flow.fn");
     config.setTypesModule("types.mjs");
     return config;
 }
@@ -577,6 +580,136 @@ TEST_CASE("Flow Type Resolution", "[Flow]"){
         } catch ( const SyntaxException& e ){
             REQUIRE(e.message().find("'Local' is declared in this file; a flow can only use imported types") != std::string::npos);
         }
+    }
+
+    SECTION("Flow functions lower to Flow.fn with a Meta object that reuses the flow's type"){
+        testFlowFileParse("FlowTest16");
+    }
+
+    SECTION("Flow functions without a resolver pass an undefined type and no Meta type"){
+        Compiler::TargetResult targetResult = compileFlowFileWithoutResolver("FlowTest16");
+
+        REQUIRE(targetResult.js.find("export const two = Flow.fn('two', Flow.create(['a', 'b'], undefined, [") != std::string::npos);
+        REQUIRE(targetResult.js.find("get parameterNames(){ return ['a', 'b'] }") != std::string::npos);
+        REQUIRE(targetResult.js.find("get type()") == std::string::npos);
+    }
+
+    SECTION("Flow function shadow signatures keep the declared result type"){
+        const std::string sourcePath = Path::join(dataPath, "FlowTest16.lv");
+        const std::string contents = fileIO.readFromFile(sourcePath);
+
+        const size_t noneOffset = contents.find("@fn none()");
+        const size_t twoOffset = contents.find("@fn two(");
+        REQUIRE(noneOffset != std::string::npos);
+        REQUIRE(twoOffset != std::string::npos);
+
+        StubTypeResolver resolver;
+        Compiler::Ptr compiler = Compiler::create(flowConfig(Compiler::Config::OutputTarget::JS));
+        compiler->setTypeResolver(&resolver);
+        try {
+            compiler->compileToTarget(sourcePath, contents);
+        } catch ( const lv::Exception& ){
+            // the stub returns no results, only the requests are checked
+        }
+
+        REQUIRE(resolver.observedRequests.size() == 3);
+        REQUIRE(resolver.observedRequests[0].requestId() == sourcePath + "::flow@" + std::to_string(noneOffset));
+        REQUIRE(resolver.observedRequests[0].sourceText().find("declare function __lvflow_" + std::to_string(noneOffset) + "(): any;") != std::string::npos);
+        REQUIRE(resolver.observedRequests[0].sourceText().find("declare function __lvflow_" + std::to_string(twoOffset) + "(a: number, b: number): number;") != std::string::npos);
+        REQUIRE(resolver.observedRequests[2].functionName() == "__lvflow_" + std::to_string(twoOffset));
+    }
+
+    SECTION("Flow functions allow the previous reference on the first line only with one parameter"){
+        const std::string sourcePath = Path::join(dataPath, "FlowTest17.lv");
+        const std::string contents = fileIO.readFromFile(sourcePath);
+
+        Compiler::Ptr compiler = Compiler::create(flowConfig(Compiler::Config::OutputTarget::JS_DTS));
+
+        try {
+            compiler->compileToTarget(sourcePath, contents);
+            FAIL("Expected a SyntaxException for '%' on the first line of a two parameter flow.");
+        } catch ( const SyntaxException& e ){
+            REQUIRE(e.message().find("The '%' reference can only be used on the first line when the flow has exactly one parameter, or on later lines.") != std::string::npos);
+            REQUIRE(e.parsedLocation().range().start().line() == 4);
+            REQUIRE(e.parsedLocation().range().start().column() == 9);
+        }
+    }
+
+    SECTION("Flow functions reject global callees"){
+        const std::string sourcePath = Path::join(dataPath, "FlowTest18.lv");
+        const std::string contents = fileIO.readFromFile(sourcePath);
+
+        Compiler::Ptr compiler = Compiler::create(flowConfig(Compiler::Config::OutputTarget::JS_DTS));
+        compiler->configureImplicitType("setTimeout");
+
+        try {
+            compiler->compileToTarget(sourcePath, contents);
+            FAIL("Expected a SyntaxException for a global flow callee.");
+        } catch ( const SyntaxException& e ){
+            REQUIRE(e.message().find("'setTimeout' is a global; a flow can only call imported names or functions declared in this module") != std::string::npos);
+            REQUIRE(e.parsedLocation().range().start().line() == 2);
+            REQUIRE(e.parsedLocation().range().start().column() == 5);
+        }
+    }
+
+    SECTION("Flow functions are module exports callable from sibling files"){
+        const std::string tmpRoot = Path::join(Path::temporaryDirectory(), "lv-compiler-flow-functions-module");
+        Txtar archive = Txtar::parseFile(Path::join(dataPath, "FlowTestModulePack02.txtar"));
+        Txtar::ExtractionGuard extraction = archive.extractTemp(tmpRoot);
+
+        const std::string packageDir = Path::join(tmpRoot, "pkg");
+        Compiler::Config config(true, ".mjs", &fileIO);
+        MLNode options(MLNode::Type::Object);
+        options["importLocalPath"] = "node_modules";
+        options["packageBuildPath"] = "build";
+        options["outputTarget"] = "JS";
+        config.initialize(options);
+        config.allowUnresolvedTypes(false);
+        config.setFlowModule("flow/flow.mjs", "Flow");
+        config.setFlowCall(Compiler::Config::FlowCall::Create, "Flow.create");
+        config.setFlowCall(Compiler::Config::FlowCall::Call, "Flow.call");
+        config.setFlowCall(Compiler::Config::FlowCall::Return, "Flow.ret");
+        config.setFlowCall(Compiler::Config::FlowCall::Ref, "Flow.ref");
+        config.setFlowCall(Compiler::Config::FlowCall::Member, "Flow.member");
+        config.setFlowCall(Compiler::Config::FlowCall::Function, "Flow.fn");
+
+        Compiler::Ptr compiler = Compiler::create(config);
+
+        REQUIRE_NOTHROW(Compiler::compileModule(compiler, Path::join(packageDir, "app")));
+
+        const std::string js = fileIO.readFromFile(Path::join(packageDir, "build/app/main.lv.mjs"));
+        REQUIRE(js.find("import {helper} from './helpers.lv.mjs'") != std::string::npos);
+        REQUIRE(js.find("export const main = Flow.fn('main', Flow.create('n', undefined, [Flow.call(helper, [Flow.ref('n')], 'h'), Flow.ret(Flow.ref('h'))]), {") != std::string::npos);
+        REQUIRE(js.find("get sourceFileName(){ return 'main.lv' }") != std::string::npos);
+        REQUIRE(js.find("get parameterNames(){ return ['n'] }") != std::string::npos);
+
+        const std::string descriptorPath = Path::join(packageDir, "build/app", ModuleDescriptor::buildFileName);
+        MLNode descriptor;
+        ml::fromJson(fileIO.readFromFile(descriptorPath), descriptor);
+
+        std::map<std::string, MLNode> exports;
+        for ( const MLNode& file : descriptor["exports"].asArray() ){
+            for ( const MLNode& expt : file["exports"].asArray() ){
+                exports[expt["name"].asString()] = expt;
+            }
+        }
+        REQUIRE(exports["helper"]["kind"].asString() == "flow");
+        REQUIRE(exports["helper"]["meta"].asBool());
+        REQUIRE(exports["main"]["kind"].asString() == "flow");
+        REQUIRE(exports["double"]["kind"].asString() == "function");
+    }
+
+    SECTION("Flow export descriptors round trip"){
+        ModuleFileDescriptor::Ptr descriptor = ModuleFileDescriptor::create("main.lv");
+        descriptor->addExport(ExportDescriptor("main", ExportDescriptor::Flow, true));
+        descriptor->addExport(ExportDescriptor("add", ExportDescriptor::Function));
+
+        ModuleFileDescriptor::Ptr roundTrip = ModuleFileDescriptor::createFromMLNode(descriptor->toMLNode());
+        REQUIRE(roundTrip->exports().size() == 2);
+        REQUIRE(roundTrip->exports()[0].kind() == ExportDescriptor::Flow);
+        REQUIRE(roundTrip->exports()[0].kindString() == "flow");
+        REQUIRE(roundTrip->exports()[0].meta());
+        REQUIRE(roundTrip->exports()[1].kind() == ExportDescriptor::Function);
     }
 
 }

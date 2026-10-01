@@ -29,7 +29,8 @@ public:
         Element,
         Function,
         Interface,
-        TypeAlias
+        TypeAlias,
+        Flow
     };
 
 public:

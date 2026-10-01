@@ -1,0 +1,6 @@
+import {add} from './math.mjs'
+
+@fn two(a:number, b:number) %> {
+    add(%, b) @sum
+    return sum
+}

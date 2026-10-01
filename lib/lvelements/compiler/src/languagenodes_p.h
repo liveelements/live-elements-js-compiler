@@ -89,6 +89,7 @@ class EnumDeclarationNode;
 class FlowStatementNode;
 class FlowValueNode;
 class FlowExpressionNode;
+class FlowFunctionDeclarationNode;
 class FlowReturnNode;
 class FlowStepNode;
 class FlowCallNode;
@@ -139,7 +140,8 @@ public:
             Call,
             Return,
             Ref,
-            Member
+            Member,
+            Function
         };
 
         ConversionContext() : jsImportsEnabled(true), allowUnresolved(true), outputComponentMeta(false), outputTarget(JS){}
@@ -283,6 +285,7 @@ private:
     static InterfaceDeclarationNode*       visitInterfaceDeclaration(BaseNode* parent, const TSNode& node);
     static EnumDeclarationNode*            visitEnumDeclaration(BaseNode* parent, const TSNode& node);
     static FlowExpressionNode*             visitFlowExpression(BaseNode* parent, const TSNode& node);
+    static FlowFunctionDeclarationNode*    visitFlowFunctionDeclaration(BaseNode* parent, const TSNode& node);
     static FlowStatementNode*              buildFlowStatement(BaseNode* parent, const TSNode& node);
     static FlowValueNode*                  buildFlowValue(BaseNode* parent, const TSNode& node);
     static FlowLiteralNode*                buildFlowLiteral(BaseNode* parent, const TSNode& node);
@@ -487,6 +490,24 @@ private:
     TypeNode*          m_returnType = nullptr;
     FlowBodyNode*      m_flowBody = nullptr;
     bool               m_parenthesized;
+};
+
+class FlowFunctionDeclarationNode : public BaseNode{
+    friend class BaseNode;
+    LANGUAGE_NODE_INFO(FlowFunctionDeclarationNode);
+public:
+    FlowFunctionDeclarationNode(const TSNode& node)
+        : BaseNode(node, FlowFunctionDeclarationNode::nodeInfo())
+    {}
+
+    IdentifierNode* name() const{ return m_name; }
+    FlowExpressionNode* flow() const{ return m_flow; }
+    const std::vector<CommentNode*>& precedingComments() const { return m_precedingComments; }
+
+private:
+    IdentifierNode*            m_name = nullptr;
+    FlowExpressionNode*        m_flow = nullptr;
+    std::vector<CommentNode*>  m_precedingComments;
 };
 
 class FlowReturnNode : public FlowStatementNode{

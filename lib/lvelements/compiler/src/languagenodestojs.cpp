@@ -336,6 +336,8 @@ void LanguageNodesToJs::convert(BaseNode* node, const std::string &source, std::
         convertEnumDeclaration(node->as<EnumDeclarationNode>(), source, sections, indentValue, ctx);
     } else if ( node->isNodeType<FlowExpressionNode>() ){
         convertFlowExpression(node->as<FlowExpressionNode>(), source, sections, indentValue, ctx);
+    } else if ( node->isNodeType<FlowFunctionDeclarationNode>() ){
+        convertFlowFunctionDeclaration(node->as<FlowFunctionDeclarationNode>(), source, sections, indentValue, ctx);
     }
     else {
         for ( BaseNode* child : node->children() ){
@@ -1668,30 +1670,17 @@ void LanguageNodesToJs::convertRootFunction(
 
         if ( funcNode->isMeta() ){
             std::string fnName = slice(source, funcNode->name());
-            *compose << "\n" << indent(indentValue) << fnName << ".Meta = {\n";
-            *compose << indent(indentValue + 1)
-                     << "get sourceFileName(){ return \'" << Path::name(ctx->componentPath) << "\' },\n";
-            if ( !ctx->currentImportUri.empty() ){
-                *compose << indent(indentValue + 1)
-                         << "get module(){ return \'" << ctx->currentImportUri << "\' },\n";
-            }
-            if ( funcNode->isDeclared() ){
-                *compose << indent(indentValue + 1)
-                         << "get declared(){ return true },\n";
-            }
+            std::string typeExpression;
             if ( ctx->typeResolutionEnabled && ctx->typeRequestSink && !ctx->typeResolutionKey.empty() ){
                 std::string requestId = ctx->componentPath + "::" + fnName;
-                std::string marker = "/*@@LVTYPE:" + requestId + "@@*/undefined";
+                typeExpression = "/*@@LVTYPE:" + requestId + "@@*/undefined";
                 TypeResolver::Request request(requestId, ctx->typeResolutionSourcePath, "", fnName);
                 SourceRangeLocation loc = BaseNode::nodeSourceLocation(funcNode, funcNode->current());
-                ctx->typeRequestSink->recordTypeRequest(request, ctx->typeResolutionKey, marker, loc);
-                *compose << indent(indentValue + 1)
-                         << "get type(){ return " << marker << " },\n";
+                ctx->typeRequestSink->recordTypeRequest(request, ctx->typeResolutionKey, typeExpression, loc);
             }
-            *compose << indent(indentValue + 1)
-                     << "get parameterNames(){ return [" << paramNamesArrayLiteral << "] }\n";
-            // Future extension point: emit full parameter and return type metadata.
-            *compose << indent(indentValue) << "}\n";
+            *compose << "\n" << indent(indentValue) << fnName << ".Meta = "
+                     << renderFunctionMeta(fnName, paramNamesArrayLiteral, funcNode->isDeclared(), typeExpression, indentValue, ctx)
+                     << "\n";
         }
     } else {
         *compose << ";\n";
@@ -1701,6 +1690,31 @@ void LanguageNodesToJs::convertRootFunction(
         *compose << "\n";
 
     sections.push_back(compose);
+}
+
+std::string LanguageNodesToJs::renderFunctionMeta(
+    const std::string &functionName,
+    const std::string &parameterNamesArrayLiteral,
+    bool declared,
+    const std::string &typeExpression,
+    int indentValue,
+    BaseNode::ConversionContext *ctx)
+{
+    std::string result = "{\n";
+    result += indent(indentValue + 1) + "get sourceFileName(){ return \'" + Path::name(ctx->componentPath) + "\' },\n";
+    if ( !ctx->currentImportUri.empty() ){
+        result += indent(indentValue + 1) + "get module(){ return \'" + ctx->currentImportUri + "\' },\n";
+    }
+    if ( declared ){
+        result += indent(indentValue + 1) + "get declared(){ return true },\n";
+    }
+    if ( !typeExpression.empty() ){
+        result += indent(indentValue + 1) + "get type(){ return " + typeExpression + " },\n";
+    }
+    result += indent(indentValue + 1) + "get parameterNames(){ return [" + parameterNamesArrayLiteral + "] }\n";
+    // Future extension point: emit full parameter and return type metadata.
+    result += indent(indentValue) + "}";
+    return result;
 }
 
 void LanguageNodesToJs::convertArrowFunction(
@@ -1919,14 +1933,39 @@ std::string LanguageNodesToJs::lowerFlowValue(FlowValueNode *node, const std::st
     }
 
     if ( node->isNodeType<FlowExpressionNode>() ){
-        return lowerFlowExpression(node->as<FlowExpressionNode>(), source, ctx);
+        FlowExpressionNode* flowNode = node->as<FlowExpressionNode>();
+        return lowerFlowExpression(flowNode, source, ctx, requestFlowType(flowNode, ctx));
     }
 
     BaseNode::throwError(node, node->current(), "Unsupported flow value during lowering.");
     return "";
 }
 
-std::string LanguageNodesToJs::lowerFlowExpression(FlowExpressionNode *node, const std::string &source, BaseNode::ConversionContext *ctx){
+
+std::string LanguageNodesToJs::requestFlowType(FlowExpressionNode *node, BaseNode::ConversionContext *ctx){
+    if ( !ctx->typeResolutionEnabled || !ctx->typeRequestSink || ctx->typeResolutionKey.empty()
+         || ctx->outputTarget != BaseNode::ConversionContext::JS ){
+        return "";
+    }
+
+    std::string key = std::to_string(node->startByte());
+    std::string requestId = ctx->componentPath + "::flow@" + key;
+    std::string marker = "/*@@LVTYPE:" + requestId + "@@*/undefined";
+    std::string functionName = "__lvflow_" + key;
+
+    TypeResolver::Request request(
+        requestId,
+        LanguageNodesToJs::shadowFlowSourcePath(ctx->typeResolutionSourcePath),
+        ctx->flowShadowSourceText,
+        functionName
+    );
+    SourceRangeLocation loc = BaseNode::nodeSourceLocation(node, node->current());
+
+    ctx->typeRequestSink->recordTypeRequest(request, ctx->typeResolutionKey, marker, loc);
+    return marker;
+}
+
+std::string LanguageNodesToJs::lowerFlowExpression(FlowExpressionNode *node, const std::string &source, BaseNode::ConversionContext *ctx, const std::string& typeExpression){
     std::string params;
     const std::vector<ParameterNode*>& parameters = node->parameters()->parameters();
     if ( parameters.size() == 1 ){
@@ -1988,29 +2027,8 @@ std::string LanguageNodesToJs::lowerFlowExpression(FlowExpressionNode *node, con
         }
     }
 
-    std::string typesArg = "undefined";
-
-    if ( ctx->typeResolutionEnabled && ctx->typeRequestSink && !ctx->typeResolutionKey.empty()
-         && ctx->outputTarget == BaseNode::ConversionContext::JS ){
-        std::string key = std::to_string(node->startByte());
-        std::string requestId = ctx->componentPath + "::flow@" + key;
-        std::string marker = "/*@@LVTYPE:" + requestId + "@@*/undefined";
-        std::string functionName = "__lvflow_" + key;
-
-        TypeResolver::Request request(
-            requestId,
-            LanguageNodesToJs::shadowFlowSourcePath(ctx->typeResolutionSourcePath),
-            ctx->flowShadowSourceText,
-            functionName
-        );
-        SourceRangeLocation loc = BaseNode::nodeSourceLocation(node, node->current());
-
-        ctx->typeRequestSink->recordTypeRequest(request, ctx->typeResolutionKey, marker, loc);
-        typesArg = marker;
-    }
-
     std::string result = BaseNode::ConversionContext::flowCall(ctx, BaseNode::ConversionContext::FlowCall::Create);
-    result += "(" + params + ", " + typesArg + ", [";
+    result += "(" + params + ", " + (typeExpression.empty() ? "undefined" : typeExpression) + ", [";
     for ( size_t i = 0; i < statements.size(); ++i ){
         if ( i != 0 ){
             result += ", ";
@@ -2032,11 +2050,68 @@ void LanguageNodesToJs::convertFlowExpression(FlowExpressionNode *node, const st
     if ( ctx && ctx->outputTarget == BaseNode::ConversionContext::DTS ){
         *compose << " " << ctx->flowModuleName;
     } else {
-        *compose << " " << lowerFlowExpression(node, source, ctx);
+        *compose << " " << lowerFlowExpression(node, source, ctx, requestFlowType(node, ctx));
     }
     sections.push_back(compose);
 }
 
+void LanguageNodesToJs::convertFlowFunctionDeclaration(
+    FlowFunctionDeclarationNode *node,
+    const std::string &source,
+    std::vector<ElementsInsertion *> &sections,
+    int indentValue,
+    BaseNode::ConversionContext *ctx)
+{
+    if ( !BaseNode::ConversionContext::flowConfigured(ctx) ){
+        THROW_EXCEPTION(lv::Exception, "Flow literal found but flow configuration (flowCalls/flowModuleName) is not set.", lv::Exception::toCode("~Flow"));
+    }
+
+    ElementsInsertion* compose = new ElementsInsertion;
+    compose->from = node->startByte();
+    if ( !node->precedingComments().empty() ){
+        compose->from = node->precedingComments().front()->startByte();
+    }
+    compose->to = node->endByte();
+
+    for ( CommentNode* c : node->precedingComments() ){
+        *compose << indent(indentValue) << c->text(source) << "\n";
+    }
+
+    const std::string name = slice(source, node->name());
+    FlowExpressionNode* flow = node->flow();
+    const std::vector<ParameterNode*>& parameters = flow->parameters()->parameters();
+
+    if ( ctx->outputTarget == BaseNode::ConversionContext::DTS ){
+        std::string paramList;
+        for ( size_t i = 0; i < parameters.size(); ++i ){
+            if ( i != 0 )
+                paramList += ", ";
+            paramList += slice(source, parameters[i]->identifier()) + ": " + TypeNode::sliceWithoutAnnotation(source, parameters[i]->type());
+        }
+        const std::string returnType = flow->returnType() ? TypeNode::sliceWithoutAnnotation(source, flow->returnType()) : "any";
+
+        *compose << indent(indentValue) << "export declare function " << name << "(" << paramList << "): Promise<" << returnType << ">;\n";
+        *compose << indent(indentValue) << "export declare namespace " << name << " { const flow: " << ctx->flowModuleName << "; const Meta: any; }\n";
+    } else {
+        // the flow's function type is the function's type, so Meta reuses the flow's type marker
+        const std::string typeExpression = requestFlowType(flow, ctx);
+        const std::string flowCode = lowerFlowExpression(flow, source, ctx, typeExpression);
+
+        *compose << indent(indentValue) << "export const " << name << " = "
+                 << BaseNode::ConversionContext::flowCall(ctx, BaseNode::ConversionContext::FlowCall::Function)
+                 << "('" << name << "', " << flowCode;
+
+        std::string paramNamesArrayLiteral;
+        for ( size_t i = 0; i < parameters.size(); ++i ){
+            if ( i != 0 )
+                paramNamesArrayLiteral += ", ";
+            paramNamesArrayLiteral += "'" + slice(source, parameters[i]->identifier()) + "'";
+        }
+        *compose << ", " << renderFunctionMeta(name, paramNamesArrayLiteral, false, typeExpression, indentValue, ctx) << ")\n";
+    }
+
+    sections.push_back(compose);
+}
 
 std::string LanguageNodesToJs::getDTSPropertyType(const std::string& source, BaseNode* propOrAss, int indt) {
     BaseNode* statementBlock = nullptr;

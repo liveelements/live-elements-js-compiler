@@ -2612,6 +2612,67 @@
     }
   },
   {
+    "type": "flow_function_declaration",
+    "named": true,
+    "fields": {
+      "body": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "flow_body",
+            "named": true
+          }
+        ]
+      },
+      "name": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      },
+      "parameters": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "flow_function_parameters",
+            "named": true
+          }
+        ]
+      },
+      "return": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "type_annotation",
+            "named": true
+          }
+        ]
+      }
+    }
+  },
+  {
+    "type": "flow_function_parameters",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": false,
+      "types": [
+        {
+          "type": "flow_parameter",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
     "type": "flow_literal",
     "named": true,
     "fields": {},
@@ -5362,6 +5423,10 @@
         },
         {
           "type": "enum_declaration",
+          "named": true
+        },
+        {
+          "type": "flow_function_declaration",
           "named": true
         },
         {

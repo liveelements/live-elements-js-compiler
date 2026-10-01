@@ -59,7 +59,8 @@ public:
             Call,
             Return,
             Ref,
-            Member
+            Member,
+            Function
         };
 
         Config(

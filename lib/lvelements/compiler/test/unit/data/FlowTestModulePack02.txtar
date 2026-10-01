@@ -1,0 +1,19 @@
+Package/module fixture for root-level flow functions.
+-- pkg/live.package.json --
+{"name":"pkg.flowfn","version":"1.0.0"}
+-- pkg/app/live.module.json --
+{"name":"app","package":"..","modules":["main","helpers"]}
+-- pkg/app/helpers.lv --
+@fn double(a:number): number {
+    return a * 2
+}
+
+@fn helper(n:number): number %> {
+    double(n) @d
+    return d
+}
+-- pkg/app/main.lv --
+@fn main(n:number): number %> {
+    helper(n) @h
+    return h
+}

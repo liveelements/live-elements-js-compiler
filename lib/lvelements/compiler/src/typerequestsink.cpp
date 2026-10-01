@@ -81,11 +81,11 @@ std::string TypeRequestSink::buildTypeImportStatement(const std::set<std::string
 }
 
 std::string TypeRequestSink::substituteResolvedType(std::string js, const std::string& marker, const std::string& expr){
-    const size_t position = js.find(marker);
-    if ( position == std::string::npos ){
-        return js;
+    size_t position = js.find(marker);
+    while ( position != std::string::npos ){
+        js.replace(position, marker.size(), expr);
+        position = js.find(marker, position + expr.size());
     }
-    js.replace(position, marker.size(), expr);
     return js;
 }
 

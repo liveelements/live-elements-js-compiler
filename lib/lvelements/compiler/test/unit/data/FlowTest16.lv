@@ -1,0 +1,21 @@
+import {add, value} from './math.mjs'
+
+@fn none() %> {
+    value() @v
+    return v
+}
+
+@fn one(n:number) %> {
+    add(%, 1) @next
+    return next
+}
+
+// adds two numbers
+@fn two(a:number, b:number): number %> {
+    add(a, b) @sum
+    return sum
+}
+
+fn plain(a:number){
+    return a
+}

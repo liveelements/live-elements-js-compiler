@@ -1,0 +1,4 @@
+@fn main(n:number) %> {
+    setTimeout(n, 0) @t
+    return t
+}

@@ -31,6 +31,8 @@ Utf8 ExportDescriptor::kindString() const{
         return "interface";
     } else if ( m_kind == ExportDescriptor::TypeAlias ){
         return "type";
+    } else if ( m_kind == ExportDescriptor::Flow ){
+        return "flow";
     }
     return "function";
 }
@@ -46,6 +48,8 @@ ExportDescriptor::Kind ExportDescriptor::kindFromString(const Utf8 &str){
         return ExportDescriptor::Interface;
     } else if ( str == "type" ){
         return ExportDescriptor::TypeAlias;
+    } else if ( str == "flow" ){
+        return ExportDescriptor::Flow;
     } else {
         THROW_EXCEPTION(Exception, Utf8("ExportDescriptor: Invalid kind string: \'%\'").format(str), Exception::toCode("~Kind"));
     }

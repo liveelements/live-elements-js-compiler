@@ -152,6 +152,7 @@ std::string FlowValueNode::flowCallRoleName(BaseNode::ConversionContext::FlowCal
     case BaseNode::ConversionContext::FlowCall::Return: return "return";
     case BaseNode::ConversionContext::FlowCall::Ref:    return "ref";
     case BaseNode::ConversionContext::FlowCall::Member: return "member";
+    case BaseNode::ConversionContext::FlowCall::Function: return "function";
     }
     return "";
 }
@@ -777,6 +778,8 @@ BaseNode *BaseNode::visitRecognized(BaseNode *parent, const TSNode &node){
     } else if ( strcmp(ts_node_type(node), "typed_function_declaration") == 0 ||
                 strcmp(ts_node_type(node), "declared_typed_function_declaration") == 0 ){
         return visitTypedFunctionDeclaration(parent, node);
+    } else if ( strcmp(ts_node_type(node), "flow_function_declaration") == 0 ){
+        return visitFlowFunctionDeclaration(parent, node);
     } else if ( strcmp(ts_node_type(node), "property_accessor_declaration") == 0 ){
         return visitPropertyAccessorDeclaration(parent, node);
     } else if ( strcmp(ts_node_type(node), "function_declaration") == 0 ){
@@ -1102,6 +1105,9 @@ FlowExpressionNode* BaseNode::visitFlowExpression(BaseNode* parent, const TSNode
     expressionNode->m_parameters = BaseNode::scanFlowParameters(expressionNode, parameters);
 
     TSNode returnType = BaseNode::nodeChildByFieldName(parameters, "return");
+    if ( ts_node_is_null(returnType) ){
+        returnType = BaseNode::nodeChildByFieldName(node, "return");
+    }
     if ( !ts_node_is_null(returnType) ){
         expressionNode->m_returnType = expressionNode->addCreatedChild(TypeNode::create(returnType, expressionNode, true));
     }
@@ -1138,6 +1144,22 @@ FlowExpressionNode* BaseNode::visitFlowExpression(BaseNode* parent, const TSNode
     checkFlowExpressionShape(expressionNode);
 
     return expressionNode;
+}
+
+FlowFunctionDeclarationNode* BaseNode::visitFlowFunctionDeclaration(BaseNode* parent, const TSNode& node){
+    FlowFunctionDeclarationNode* fnode = parent->addCreatedChild(new FlowFunctionDeclarationNode(node));
+    for ( auto c : extractPrecedingComments(node) ){
+        fnode->addChild(c);
+        fnode->m_precedingComments.push_back(c);
+    }
+
+    TSNode name = nodeChildByFieldName(node, "name");
+    assertValid(parent, name, "Flow function name is null.");
+    fnode->m_name = fnode->addCreatedChild(IdentifierNode::createNonEmpty(name, fnode));
+    addToDeclarations(parent, fnode->m_name, Occurrence::SpaceValue);
+
+    fnode->m_flow = visitFlowExpression(fnode, node);
+    return fnode;
 }
 
 BaseNode* BaseNode::visit(BaseNode *parent, const TSNode &node){
@@ -2849,7 +2871,8 @@ void ProgramNode::addChild(BaseNode *child){
     } else if ( child->isNodeType<ComponentInstanceStatementNode>() ){
         m_exports.push_back(child);
         BaseNode::addChild(child);
-    } else if ( child->isNodeType<TypedFunctionDeclarationNode>() ){
+    } else if ( child->isNodeType<TypedFunctionDeclarationNode>() ||
+                child->isNodeType<FlowFunctionDeclarationNode>() ){
         m_exports.push_back(child);
         BaseNode::addChild(child);
     } else if ( child->isNodeType<TypeAliasDeclarationNode>() ||

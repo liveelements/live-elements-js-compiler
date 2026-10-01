@@ -146,6 +146,14 @@ public:
         BaseNode::ConversionContext *ctx
     );
 
+    void convertFlowFunctionDeclaration(
+        FlowFunctionDeclarationNode* node,
+        const std::string &source,
+        std::vector<ElementsInsertion *> &sections,
+        int indentValue,
+        BaseNode::ConversionContext *ctx
+    );
+
     void convertPropertyDeclaration(
         PropertyDeclarationNode* node,
         const std::string& source,
@@ -171,7 +179,16 @@ private:
     static std::string getDTSPropertyType(const std::string& source, BaseNode* propOrAss, int indt);
     static std::string getDTSEventType(const std::string& source, EventDeclarationNode* edn);
     static std::string escapeForDoubleQuotedJsString(const std::string& input);
-    static std::string lowerFlowExpression(FlowExpressionNode* node, const std::string& source, BaseNode::ConversionContext *ctx);
+    static std::string renderFunctionMeta(
+        const std::string& functionName,
+        const std::string& parameterNamesArrayLiteral,
+        bool declared,
+        const std::string& typeExpression,
+        int indentValue,
+        BaseNode::ConversionContext* ctx
+    );
+    static std::string requestFlowType(FlowExpressionNode* node, BaseNode::ConversionContext* ctx);
+    static std::string lowerFlowExpression(FlowExpressionNode* node, const std::string& source, BaseNode::ConversionContext *ctx, const std::string& typeExpression);
     static std::string lowerFlowValue(FlowValueNode* node, const std::string& source, BaseNode::ConversionContext *ctx, bool allowCall);
     static std::string lowerFlowCallee(const std::string& source, FlowCallNode* node);
 
