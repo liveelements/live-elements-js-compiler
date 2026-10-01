@@ -3,6 +3,7 @@
 #include "live/utf8.h"
 #include "live/fileio.h"
 #include "live/path.h"
+#include "live/txtar.h"
 #include "live/applicationcontext.h"
 
 #include "live/elements/compiler/compiler.h"
@@ -508,6 +509,59 @@ TEST_CASE("Flow Type Resolution", "[Flow]"){
         REQUIRE(targetResult.js.find("import {max as __mod__max} from '__UNRESOLVED__'") != std::string::npos);
         REQUIRE(targetResult.js.find("let mod = {max:__mod__max}") != std::string::npos);
         REQUIRE(targetResult.js.find("Flow.call(mod.max, [Flow.ref('n'), 2], 'next')") != std::string::npos);
+    }
+
+    SECTION("Flow allows callees from module imports, sibling files and same-file functions"){
+        const std::string tmpRoot = Path::join(Path::temporaryDirectory(), "lv-compiler-flow-module-callees");
+        Txtar archive = Txtar::parseFile(Path::join(dataPath, "FlowTestModulePack01.txtar"));
+        Txtar::ExtractionGuard extraction = archive.extractTemp(tmpRoot);
+
+        const std::string packageDir = Path::join(tmpRoot, "pkg");
+        Compiler::Config config(true, ".mjs", &fileIO);
+        MLNode options(MLNode::Type::Object);
+        options["importLocalPath"] = "node_modules";
+        options["packageBuildPath"] = "build";
+        options["outputTarget"] = "JS";
+        config.initialize(options);
+        config.allowUnresolvedTypes(false);
+        config.setFlowModule("flow/flow.mjs", "Flow");
+        config.setFlowCall(Compiler::Config::FlowCall::Create, "Flow.create");
+        config.setFlowCall(Compiler::Config::FlowCall::Call, "Flow.call");
+        config.setFlowCall(Compiler::Config::FlowCall::Return, "Flow.ret");
+        config.setFlowCall(Compiler::Config::FlowCall::Ref, "Flow.ref");
+        config.setFlowCall(Compiler::Config::FlowCall::Member, "Flow.member");
+
+        Compiler::Ptr compiler = Compiler::create(config);
+        compiler->setPackageImportPaths({Path::join(packageDir, "node_modules")});
+
+        REQUIRE_NOTHROW(Compiler::compileModule(compiler, Path::join(packageDir, "app")));
+
+        const std::string js = fileIO.readFromFile(Path::join(packageDir, "build/app/main.lv.mjs"));
+        const std::string expected = fileIO.readFromFile(Path::join(tmpRoot, "expected/app/main.lv.mjs"));
+        requireEquivalentElementsOutput(expected, js, "FlowTestModulePack01.txtar: expected/app/main.lv.mjs");
+    }
+
+    SECTION("Flow rejects implicit globals as callees and leaves other unknown callees unresolved"){
+        const std::string sourcePath = Path::join(dataPath, "FlowTest15.lv");
+        const std::string contents = fileIO.readFromFile(sourcePath);
+
+        Compiler::Ptr compiler = Compiler::create(flowConfig(Compiler::Config::OutputTarget::JS_DTS));
+        compiler->configureImplicitType("Date");
+        Compiler::TargetResult targetResult = compiler->compileToTarget(sourcePath, contents);
+
+        requireFlowExpectedOutput("FlowTest15", ".js", targetResult.js);
+        requireFlowExpectedOutput("FlowTest15", ".d.ts", targetResult.dts);
+
+        Compiler::Ptr globalsCompiler = Compiler::create(flowConfig(Compiler::Config::OutputTarget::JS_DTS));
+        globalsCompiler->configureImplicitType("setTimeout");
+        try {
+            globalsCompiler->compileToTarget(sourcePath, contents);
+            FAIL("Expected a SyntaxException for the global 'setTimeout' callee.");
+        } catch ( const SyntaxException& e ){
+            REQUIRE(e.message().find("'setTimeout' is a global; a flow can only call imported names or functions declared in this module") != std::string::npos);
+            REQUIRE(e.parsedLocation().range().start().line() == 6);
+            REQUIRE(e.parsedLocation().range().start().column() == 9);
+        }
     }
 
     SECTION("Flow type annotations reject same-file types"){

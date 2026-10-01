@@ -1,0 +1,17 @@
+component Box{
+}
+
+fn build(): any {
+    const timer = n: number %> {
+        setTimeout("tick", 0) @t
+        return t
+    }
+    const constructed = n: number %> Function("return 1")
+    const logged = n: number %> {
+        console.log(n) @line
+        return line
+    }
+    const fetched = url: string %> fetch(url)
+    const boxed = (n: number, at: Date) %> Box(n)
+    return [timer, constructed, logged, fetched, boxed]
+}

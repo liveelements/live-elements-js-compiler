@@ -1,0 +1,59 @@
+Package/module fixture for flow callees resolved through module imports.
+-- pkg/live.package.json --
+{"name":"pkg.flow","version":"1.0.0"}
+-- pkg/node_modules/shared/live.package.json --
+{"name":"shared","version":"1.0.0"}
+-- pkg/node_modules/shared/common/live.module.json --
+{"name":"common","package":"..","modules":["math"]}
+-- pkg/node_modules/shared/common/math.lv --
+@fn add(a:number, b:number): number {
+    return a + b
+}
+-- pkg/node_modules/shared/extra/live.module.json --
+{"name":"extra","package":"..","modules":["limits"]}
+-- pkg/node_modules/shared/extra/limits.lv --
+@fn max(a:number, b:number): number {
+    return a > b ? a : b
+}
+-- pkg/app/live.module.json --
+{"name":"app","package":"..","modules":["main","helpers"]}
+-- pkg/app/helpers.lv --
+@fn double(a:number): number {
+    return a * 2
+}
+-- pkg/app/main.lv --
+import shared.common
+import shared.extra as m
+
+@fn inc(a:number): number {
+    return a + 1
+}
+
+fn build(): any {
+    return n: number %> {
+        add(n, 1) @added
+        inc(added) @incremented
+        double(incremented) @doubled
+        m.max(doubled, 2) @limited
+        return limited
+    }
+}
+-- expected/app/main.lv.mjs --
+import {Flow} from 'flow/flow.mjs'
+import {add} from 'shared/build/common/math.lv.mjs'
+import {double} from './helpers.lv.mjs'
+import {max as __m__max} from 'shared/build/extra/limits.lv.mjs'
+let m = {max:__m__max}
+export function inc(a) {
+    return a + 1
+}
+inc.Meta = {
+    get sourceFileName(){ return 'main.lv' },
+    get module(){ return 'pkg.flow.app' },
+    get parameterNames(){ return ['a'] }
+}
+
+export function build() {
+    return Flow.create('n', undefined, [Flow.call(add, [Flow.ref('n'), 1], 'added'), Flow.call(inc, [Flow.ref('added')], 'incremented'), Flow.call(double, [Flow.ref('incremented')], 'doubled'), Flow.call(m.max, [Flow.ref('doubled'), 2], 'limited'), Flow.ret(Flow.ref('limited'))])
+}
+

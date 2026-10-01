@@ -373,6 +373,16 @@ void FlowBodyNode::collectImports(const std::string &source, std::vector<Occurre
                 );
             }
 
+            if ( ConversionContext::isImplicitType(ctx, name) ){
+                throwError(
+                    use,
+                    use->current(),
+                    Utf8("'%' is a global; a flow can only call imported names or functions declared in this module")
+                        .format(name)
+                        .data()
+                );
+            }
+
             references.push_back(reference);
             continue;
         }
