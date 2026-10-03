@@ -62,6 +62,24 @@ BaseNode::ConversionContext::FlowCall toConversionFlowCall(Compiler::Config::Flo
     return BaseNode::ConversionContext::FlowCall::Create;
 }
 
+std::map<ElementsModule*, bool> scanModuleChangesFrom(ElementsModule* module){
+    std::map<ElementsModule*, bool> changes;
+    bool changed = module->haveSourcesChanged();
+    for ( auto it = module->files().begin(); it != module->files().end(); ++it ){
+        for ( const ModuleFile::ModuleImport& imp : it->second->imports() ){
+            if ( !imp.module )
+                continue;
+            if ( changes.find(imp.module.get()) == changes.end() ){
+                std::map<ElementsModule*, bool> importChanges = scanModuleChangesFrom(imp.module.get());
+                changes.insert(importChanges.begin(), importChanges.end());
+            }
+            changed = changed || changes[imp.module.get()];
+        }
+    }
+    changes[module] = changed;
+    return changes;
+}
+
 } // namespace
 
 class CompilerPrivate{
@@ -77,6 +95,17 @@ public:
     std::map<std::string, ElementsModule::Ptr> loadedModulesByPath;
     TypeResolver* typeResolver = nullptr;
     std::unique_ptr<CompileRun> currentRun;
+
+    std::map<ElementsModule*, bool> scanModuleChanges(){
+        std::map<ElementsModule*, bool> changes;
+        for ( auto it = loadedModules.begin(); it != loadedModules.end(); ++it ){
+            if ( changes.find(it->second.get()) == changes.end() ){
+                std::map<ElementsModule*, bool> moduleChanges = scanModuleChangesFrom(it->second.get());
+                changes.insert(moduleChanges.begin(), moduleChanges.end());
+            }
+        }
+        return changes;
+    }
 
     void compileModuleFileTarget(
             BaseNode::ConversionContext::OutputTarget target,
@@ -488,6 +517,13 @@ std::shared_ptr<ElementsModule> Compiler::compileModuleImpl(
 }
 
 std::shared_ptr<Compilation> Compiler::compile(Ptr compiler, const std::string &path, Engine *engine){
+    for ( const auto& change : compiler->m_d->scanModuleChanges() ){
+        if ( change.second ){
+            compiler->m_d->loadedModules.erase(change.first->uri());
+            compiler->m_d->loadedModulesByPath.erase(change.first->module()->path());
+        }
+    }
+
     compiler->m_d->currentRun = CompileRun::createUnique(compiler->m_d->typeResolver);
     std::string modulePath = Path::parent(path);
     std::string fileName = Path::name(path);

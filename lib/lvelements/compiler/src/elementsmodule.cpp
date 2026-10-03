@@ -47,6 +47,7 @@ public:
     ElementsModule::Status status;
 
     ModuleDescriptor::Ptr  descriptor;
+    bool                   loadedFromDescriptor = false;
 };
 
 
@@ -111,6 +112,7 @@ ElementsModule::Ptr ElementsModule::createImpl(Module::Ptr module, Compiler::Ptr
 
     if ( descriptor ){ // read the descriptor and load files based on the descriptor
         ElementsModule::Ptr epl(new ElementsModule(module, compiler, descriptor, engine));
+        epl->m_d->loadedFromDescriptor = true;
         for ( auto it = module->fileModules().begin(); it != module->fileModules().end(); ++it ){
             auto fileName = *it + ".lv";
             ModuleFileDescriptor::Ptr mfd = descriptor->findFile(fileName);
@@ -210,6 +212,7 @@ ModuleFile *ElementsModule::parseModuleFile(ElementsModule::Ptr &epl, Compiler::
         );
     }
 
+    DateTime sourceModified = Path::lastModified(filePath);
     std::string content = compiler->fileIO()->readFromFile(filePath);
 
     std::string componentName = name;
@@ -221,7 +224,7 @@ ModuleFile *ElementsModule::parseModuleFile(ElementsModule::Ptr &epl, Compiler::
     LanguageParser::AST* ast = compiler->parser()->parse(content);
     ProgramNode* pn = compiler->parseProgramNodes(filePath, componentName, ast);
 
-    ModuleFile* mf = ModuleFile::createFromProgramNode(epl.get(), compiler, name, content, pn, ast);
+    ModuleFile* mf = ModuleFile::createFromProgramNode(epl.get(), compiler, name, content, pn, ast, sourceModified);
     epl->m_d->fileModules[name] = mf;
     epl->m_d->descriptor->addModuleFileDescriptor(mf->descriptor());
 
@@ -366,6 +369,17 @@ void ElementsModule::compile(Compiler::Ptr compiler){
     }
     
     m_d->status = ElementsModule::Compiled;
+}
+
+bool ElementsModule::haveSourcesChanged() const{
+    if ( m_d->loadedFromDescriptor ) // prebuilt, never changes
+        return false;
+
+    for ( auto it = m_d->fileModules.begin(); it != m_d->fileModules.end(); ++it ){
+        if ( it->second->sourceChanged() )
+            return true;
+    }
+    return false;
 }
 
 Engine *ElementsModule::engine() const{

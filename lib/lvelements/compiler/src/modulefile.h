@@ -20,6 +20,7 @@
 #include "live/elements/compiler/elementsmodule.h"
 #include "live/elements/compiler/languagedescriptors.h"
 #include "live/packagegraph.h"
+#include "live/datetime.h"
 
 #include <memory>
 #include <list>
@@ -92,6 +93,7 @@ private:
     void addImport(const ModuleImport& imp);
     void addDependency(ModuleFile* to);
     void setCompilationData(CompilationData* cd);
+    bool sourceChanged() const;
 
     bool hasDependency(ModuleFile* module, ModuleFile* dependency);
     static PackageGraph::CyclesResult<ModuleFile*> checkCycles(ModuleFile* mf);
@@ -104,7 +106,8 @@ private:
         const std::string& name, 
         const std::string& content, 
         ProgramNode* node, 
-        LanguageParser::AST* ast
+        LanguageParser::AST* ast,
+        const DateTime& sourceModified
     );
     static ModuleFile* createFromDescriptor(
         ElementsModule* module, 

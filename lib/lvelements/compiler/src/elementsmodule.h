@@ -65,6 +65,7 @@ public:
     const std::string& buildLocation() const;
     const std::string& outputExtension() const;
     Status status() const;
+    bool haveSourcesChanged() const;
 
     std::string pathInPackage() const;
     std::string uri() const;

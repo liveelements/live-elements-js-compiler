@@ -44,6 +44,8 @@ public:
     std::list<ModuleFile*> dependents;
 
     ModuleFileDescriptor::Ptr descriptor;
+
+    DateTime sourceModified;
 };
 
 ModuleFile::~ModuleFile(){
@@ -263,6 +265,16 @@ std::string ModuleFile::uri() const{
     return m_d->elementsModule->uri() + "/" + fileName();
 }
 
+/**
+ * \brief Returns true if the file on disk was removed or modified since this file was parsed.
+ */
+bool ModuleFile::sourceChanged() const{
+    std::string path = filePath();
+    if ( !Path::exists(path) )
+        return true;
+    return Path::lastModified(path) != m_d->sourceModified;
+}
+
 std::string ModuleFile::filePath() const{
     return Path::join(m_d->elementsModule->module()->path(), fileName());
 }
@@ -382,7 +394,7 @@ PackageGraph::CyclesResult<ModuleFile*> ModuleFile::checkCycles(
     return PackageGraph::CyclesResult<ModuleFile*>(PackageGraph::CyclesResult<ModuleFile*>::NotFound);
 }
 
-ModuleFile *ModuleFile::createFromProgramNode(ElementsModule *module, Compiler::Ptr compiler, const std::string &name, const std::string &content, ProgramNode *node, LanguageParser::AST *ast){
+ModuleFile *ModuleFile::createFromProgramNode(ElementsModule *module, Compiler::Ptr compiler, const std::string &name, const std::string &content, ProgramNode *node, LanguageParser::AST *ast, const DateTime& sourceModified){
     auto descriptor = ModuleFileDescriptor::create(name);
 
     std::vector<BaseNode*> exports = compiler->collectProgramExports(content, node);
@@ -424,6 +436,7 @@ ModuleFile *ModuleFile::createFromProgramNode(ElementsModule *module, Compiler::
     }
 
     auto mf = new ModuleFile(module, name, content, node, ast, descriptor);
+    mf->m_d->sourceModified = sourceModified;
     std::vector<ImportNode*> imports = node->imports();
 
     for ( auto val : imports ){
