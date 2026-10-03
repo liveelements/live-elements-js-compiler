@@ -22,6 +22,8 @@
 #include "languagenodestojs_p.h"
 #include "elementssections_p.h"
 #include "elementsmodule.h"
+#include "modulefile.h"
+#include "compilation.h"
 #include "compilerun.h"
 #include "tracepointexception.h"
 #include <algorithm>
@@ -485,7 +487,7 @@ std::shared_ptr<ElementsModule> Compiler::compileModuleImpl(
     return epl;
 }
 
-std::shared_ptr<ElementsModule> Compiler::compile(Ptr compiler, const std::string &path, Engine *engine){
+std::shared_ptr<Compilation> Compiler::compile(Ptr compiler, const std::string &path, Engine *engine){
     compiler->m_d->currentRun = CompileRun::createUnique(compiler->m_d->typeResolver);
     std::string modulePath = Path::parent(path);
     std::string fileName = Path::name(path);
@@ -543,7 +545,14 @@ std::shared_ptr<ElementsModule> Compiler::compile(Ptr compiler, const std::strin
 
     auto epl = Compiler::compileModuleImpl(compiler, module, engine, fileName);
     compiler->m_d->currentRun->finalize(compiler->m_d->config.m_fileIO, compiler->m_d->config.m_typesModulePath);
-    return epl;
+
+    ModuleFile* target = epl->moduleFileByName(fileName);
+    if ( !target ){
+        THROW_EXCEPTION(lv::Exception, Utf8("Assertion: Target file '%' not found in compiled module.").format(path), Exception::toCode("~NullPtr"));
+    }
+
+    const auto* generatedJs = compiler->m_d->currentRun->sink().generatedOutput(target->jsFilePath());
+    return Compilation::Ptr(new Compilation(epl, target, generatedJs ? generatedJs->content : std::string()));
 }
 
 std::shared_ptr<ElementsModule> Compiler::compileModule(Compiler::Ptr compiler, const std::string &path, Engine *engine){

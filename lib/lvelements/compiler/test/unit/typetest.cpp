@@ -23,6 +23,7 @@
 #include "live/utf8.h"
 
 #include "live/elements/compiler/compiler.h"
+#include "live/elements/compiler/compilation.h"
 #include "live/elements/compiler/languagedescriptors.h"
 #include "live/elements/compiler/typerequestsink.h"
 #include "live/elements/compiler/typeresolver.h"
@@ -430,7 +431,7 @@ TEST_CASE("Type Resolution", "[TypeResolution]"){
         Compiler::Ptr compiler = Compiler::create(config);
         compiler->setTypeResolver(&resolver);
 
-        REQUIRE_NOTHROW(Compiler::compile(compiler, sourcePath));
+        REQUIRE_NOTHROW(Compiler::compile(compiler, sourcePath)->module());
 
         REQUIRE(resolver.observedRequests.size() == 1);
         REQUIRE(Path::resolve(resolver.observedRequests[0].sourcePath()) == Path::resolve(outputDtsPath));

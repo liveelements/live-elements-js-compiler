@@ -181,6 +181,12 @@ ModuleFile *ElementsModule::loadModuleFile(ElementsModule::Ptr &epl, Compiler::P
             if ( !ep ){
                 THROW_EXCEPTION(TracePointException, Utf8("Failed to find module \'%\' imported in \'%\'").format(importUriFull, currentUriName), Exception::toCode("~Import"));
             }
+
+            ModuleFile::ModuleImport imp;
+            imp.uri = importUri.data();
+            imp.isRelative = importUri.startsWith('.');
+            imp.module = ep;
+            mf->addImport(imp);
         } catch ( TracePointException& e ){
             throw TracePointException(e, Utf8(" - Imported \'%\' from \'%\'").format(importUri, currentUriName));
         }
@@ -291,6 +297,10 @@ ModuleFile *ElementsModule::moduleFileBypath(const std::string &path) const{
             return mf;
     }
     return nullptr;
+}
+
+const std::map<std::string, ModuleFile *> &ElementsModule::files() const{
+    return m_d->fileModules;
 }
 
 const Module::Ptr& ElementsModule::module() const{

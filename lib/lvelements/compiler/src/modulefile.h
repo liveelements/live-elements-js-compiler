@@ -51,6 +51,12 @@ public:
         Compiled
     };
 
+    enum DeclarativeKind{
+        DeclarativeUnknown = 0,
+        Declarative,
+        NotDeclarative
+    };
+
     class ModuleImport{
     public:
         ModuleImport() : isRelative(false){}
@@ -75,6 +81,7 @@ public:
     void resolveImport(const std::string& uri, ElementsModule::Ptr epl);
 
     const ModuleFileDescriptor::Ptr& descriptor() const;
+    DeclarativeKind declarativeKind() const;
 
     std::string uri() const;
 
@@ -82,6 +89,7 @@ private:
     void resolveTypes(Compiler::Ptr compiler);
     void compile(Compiler::Ptr compiler);
 
+    void addImport(const ModuleImport& imp);
     void addDependency(ModuleFile* to);
     void setCompilationData(CompilationData* cd);
 

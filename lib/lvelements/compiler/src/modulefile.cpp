@@ -282,6 +282,31 @@ const ModuleFileDescriptor::Ptr &ModuleFile::descriptor() const{
     return m_d->descriptor;
 }
 
+/**
+ * \brief Returns whether the file's root holds only imports, flows, type aliases and interfaces
+ *
+ * Files loaded from a build descriptor have no parsed root, so their state is DeclarativeUnknown.
+ */
+ModuleFile::DeclarativeKind ModuleFile::declarativeKind() const{
+    if ( !m_d->rootNode )
+        return ModuleFile::DeclarativeUnknown;
+
+    for ( BaseNode* child : m_d->rootNode->children() ){
+        if ( !child->isNodeType<ImportNode>() &&
+             !child->isNodeType<FlowFunctionDeclarationNode>() &&
+             !child->isNodeType<TypeAliasDeclarationNode>() &&
+             !child->isNodeType<InterfaceDeclarationNode>() )
+        {
+            return ModuleFile::NotDeclarative;
+        }
+    }
+    return ModuleFile::Declarative;
+}
+
+void ModuleFile::addImport(const ModuleImport &imp){
+    m_d->imports.push_back(imp);
+}
+
 void ModuleFile::addDependency(ModuleFile *dependency){
     if ( dependency == this )
         return;

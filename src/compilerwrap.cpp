@@ -19,6 +19,7 @@
 #include "live/utf8.h"
 #include "live/path.h"
 #include "live/elements/compiler/compiler.h"
+#include "live/elements/compiler/compilation.h"
 #include "live/elements/compiler/modulefile.h"
 #include "live/elements/compiler/tracepointexception.h"
 #include "live/elements/compiler/typeresolver.h"
@@ -374,8 +375,8 @@ void compileWrap(const Napi::CallbackInfo& info){
             }
         }
 
-        lv::el::ElementsModule::Ptr elemMod = lv::el::Compiler::compile(compiler, scriptFile);
-        lv::el::ModuleFile* mf = elemMod->moduleFileBypath(scriptFile);
+        lv::el::Compilation::Ptr compilation = lv::el::Compiler::compile(compiler, scriptFile);
+        lv::el::ModuleFile* mf = compilation->target();
 
         if ( mf ){
             res = Napi::String::New(env, Path::toUnixSeparator(mf->jsFilePath()));
@@ -621,8 +622,8 @@ void runCompilerWrap(const Napi::CallbackInfo &info){
             }
         }
 
-        lv::el::ElementsModule::Ptr elemMod = lv::el::Compiler::compile(compiler, scriptFile);
-        lv::el::ModuleFile* mf = elemMod->moduleFileBypath(scriptFile);
+        lv::el::Compilation::Ptr compilation = lv::el::Compiler::compile(compiler, scriptFile);
+        lv::el::ModuleFile* mf = compilation->target();
 
         
         if ( mf ){

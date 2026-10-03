@@ -34,6 +34,7 @@ namespace el{
 class BaseNode;
 class ProgramNode;
 class ElementsModule;
+class Compilation;
 class CompilerPrivate;
 class LV_ELEMENTS_COMPILER_EXPORT Compiler{
 
@@ -156,7 +157,7 @@ public:
     void configureImplicitType(const std::string& type);
     void setTypeResolver(TypeResolver* resolver);
 
-    static std::shared_ptr<ElementsModule> compile(Compiler::Ptr compiler, const std::string& path, Engine* engine = nullptr);
+    static std::shared_ptr<Compilation> compile(Compiler::Ptr compiler, const std::string& path, Engine* engine = nullptr);
     static std::shared_ptr<ElementsModule> compileModule(Compiler::Ptr compiler, const std::string& path, Engine* engine = nullptr);
     static std::vector<ModuleCompileResult> compileModules(Compiler::Ptr compiler, const std::vector<std::string>& paths, Engine* engine = nullptr);
     static std::vector<std::shared_ptr<ElementsModule> > compilePackage(Compiler::Ptr compiler, const std::string& path, Engine* engine = nullptr);
