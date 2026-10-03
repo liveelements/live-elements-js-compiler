@@ -79,6 +79,8 @@ public:
 
     const ModuleFileDescriptor::Ptr& descriptor() const;
 
+    std::string uri() const;
+
 private:
     void addDependency(ModuleFile* to);
     void setCompilationData(CompilationData* cd);

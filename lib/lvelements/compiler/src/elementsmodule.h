@@ -70,6 +70,9 @@ public:
     const std::string& buildLocation() const;
     Status status() const;
 
+    std::string pathInPackage() const;
+    std::string uri() const;
+
     const std::map<std::string, ModuleFile*>& fileExports() const;
     const std::list<ModuleLibrary*>& libraryModules() const;
 

@@ -84,6 +84,13 @@ ModuleFileDescriptor::Ptr ModuleFileDescriptor::createFromMLNode(const MLNode &n
         mfd->m_dependencies.push_back(ModuleFileDescriptor::ImportDependency((*it)["importUri"].asString()));
     }
 
+    if ( node.hasKey("dependencyEntries") ){
+        MLNode::ArrayType entries = node["dependencyEntries"].asArray();
+        for ( auto it = entries.begin(); it != entries.end(); ++it ){
+            mfd->m_dependencyEntries.push_back(ModuleFileDescriptor::DependencyEntry((*it)["name"].asString(), (*it)["uri"].asString()));
+        }
+    }
+
     return mfd;
 }
 
@@ -93,6 +100,10 @@ void ModuleFileDescriptor::addExport(const ExportDescriptor &edsc){
 
 void ModuleFileDescriptor::addDependency(const ImportDependency& dep){
     m_dependencies.push_back(dep);
+}
+
+void ModuleFileDescriptor::addDependencyEntry(const DependencyEntry &entry){
+    m_dependencyEntries.push_back(entry);
 }
 
 MLNode ModuleFileDescriptor::toMLNode() const
@@ -123,6 +134,15 @@ MLNode ModuleFileDescriptor::toMLNode() const
         deps.append(dep);
     }
     result["dependencies"] = deps;
+
+    MLNode entries(MLNode::Array);
+    for ( auto it = m_dependencyEntries.begin(); it != m_dependencyEntries.end(); ++it ){
+        MLNode entry(MLNode::Object);
+        entry["name"] = it->name().data();
+        entry["uri"] = it->uri().data();
+        entries.append(entry);
+    }
+    result["dependencyEntries"] = entries;
 
     return result;
 }

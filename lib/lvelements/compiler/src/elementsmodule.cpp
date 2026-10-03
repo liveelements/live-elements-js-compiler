@@ -16,6 +16,8 @@
 #include "elementsmodule.h"
 #include "modulefile.h"
 #include "live/modulecontext.h"
+#include "live/package.h"
+#include "live/utf8.h"
 #include "live/exception.h"
 #include "live/fileio.h"
 #include "live/path.h"
@@ -402,6 +404,27 @@ ElementsModule::Status ElementsModule::status() const{
 
 const std::list<ModuleLibrary *> &ElementsModule::libraryModules() const{
     return m_d->libraries;
+}
+
+std::string ElementsModule::pathInPackage() const{
+    Package::Ptr package = m_d->module->context()->packageUnwrapped();
+    if ( !package ){
+        THROW_EXCEPTION(Exception,
+            Utf8("ElementsModule::pathInPackage: Package expired or unset for module (path %, importId %).")
+                .format(m_d->module->path(), m_d->module->context()->importId.data()),
+            Exception::toCode("~NullPtr"));
+    }
+    std::string packageName = package->nameScope();
+    Utf8 importId = m_d->module->context()->importId;
+    if ( importId.length() <= packageName.length() ){
+        return "";
+    }
+    Utf8 packageToModule = importId.substr(packageName.length() + 1, std::string::npos);
+    return Utf8::join(packageToModule.split("."), "/").data();
+}
+
+std::string ElementsModule::uri() const{
+    return m_d->module->context()->importId.data();
 }
 
 }} // namespace lv, el

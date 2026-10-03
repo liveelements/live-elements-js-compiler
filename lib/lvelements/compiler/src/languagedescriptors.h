@@ -90,6 +90,18 @@ public:
         Utf8 m_importUri;
     };
 
+    class DependencyEntry{
+    public:
+        DependencyEntry(const Utf8& name, const Utf8& uri) : m_name(name), m_uri(uri){}
+
+        const Utf8& name() const{ return m_name; }
+        const Utf8& uri() const{ return m_uri; }
+
+    private:
+        Utf8 m_name;
+        Utf8 m_uri;
+    };
+
 public:
     typedef std::shared_ptr<ModuleFileDescriptor>       Ptr;
     typedef std::shared_ptr<const ModuleFileDescriptor> ConstPtr;
@@ -101,9 +113,11 @@ public:
     const Utf8& fileName() const{ return m_fileName; }
     const std::vector<ExportDescriptor>& exports() const{ return m_exports; }
     const std::vector<ImportDependency>& dependencies() const{ return m_dependencies; }
+    const std::vector<DependencyEntry>& dependencyEntries() const{ return m_dependencyEntries; }
 
     void addExport(const ExportDescriptor& dsc);
     void addDependency(const ImportDependency& dep);
+    void addDependencyEntry(const DependencyEntry& entry);
 
     MLNode toMLNode() const;
 
@@ -114,6 +128,7 @@ private:
     Utf8                          m_fileName;
     std::vector<ExportDescriptor> m_exports;
     std::vector<ImportDependency> m_dependencies;
+    std::vector<DependencyEntry>  m_dependencyEntries;
 };
 
 class LV_ELEMENTS_COMPILER_EXPORT ModuleDescriptor{

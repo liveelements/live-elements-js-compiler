@@ -92,6 +92,11 @@ void ModuleFile::resolveTypes(){
 
                     m_d->rootNode->resolveImport(impType.importNamespace, impType.name, "./" + foundFile->jsFileName(), expSpace);
                     foundLocalExport = true;
+                    
+                    Occurrence::Space valueSpace = ( expSpace & Occurrence::SpaceValue ) ? impType.space : ( impType.space & ~Occurrence::SpaceMeta );
+                    if ( valueSpace == 0 || ( valueSpace & ( Occurrence::SpaceValue | Occurrence::SpaceMeta ) ) != 0 ){
+                        m_d->descriptor->addDependencyEntry(ModuleFileDescriptor::DependencyEntry(impType.name, foundFile->uri() + "@" + impType.name));
+                    }
                 }
             }
 
@@ -131,6 +136,11 @@ void ModuleFile::resolveTypes(){
                                     SourceRangeLocation(SourceRange(SourcePoint(location.line(), location.column() + 1, location.offset())), filePath()),
                                     SOURCE_TRACE()
                                 );
+                            }
+                            
+                            Occurrence::Space valueSpace = ( expSpace & Occurrence::SpaceValue ) ? impType.space : ( impType.space & ~Occurrence::SpaceMeta );
+                            if ( valueSpace == 0 || ( valueSpace & ( Occurrence::SpaceValue | Occurrence::SpaceMeta ) ) != 0 ){
+                                m_d->descriptor->addDependencyEntry(ModuleFileDescriptor::DependencyEntry(impType.name, foundFile->uri() + "@" + impType.name));
                             }
                             if ( impIt->isRelative ){
                                 // this plugin to package
@@ -184,17 +194,11 @@ void ModuleFile::resolveTypes(){
                                         Exception::toCode("~NullPtr"));
                                 }
                                 Utf8 packageName = importedPkg->nameScopeAsPath();
-                                Utf8 importId = impIt->module->module()->context()->importId;
-                                Utf8 packageToPluginName =  importId.length() > packageName.length() 
-                                    ? importId.substr(packageName.length() + 1, std::string::npos)
-                                    : "";
-
-                                std::vector<Utf8> packageToPlugin = packageToPluginName.split(".");
 
                                 std::string configPackageBuildPath = m_d->elementsModule->compiler()->packageBuildPath();
                                 std::string packageBuildPath = packageName.data() +
                                     (configPackageBuildPath.empty() ? "" : "/" + configPackageBuildPath);
-                                std::string packageToPluginStr = Utf8::join(packageToPlugin, "/").data();
+                                std::string packageToPluginStr = impIt->module->pathInPackage();
                                 std::string importPath = packageBuildPath + (packageToPluginStr.empty() ? "" : "/" + packageToPluginStr) + "/" + foundFile->jsFileName();
 
                                 m_d->rootNode->resolveImport(impType.importNamespace, impType.name, importPath, expSpace);
@@ -206,6 +210,20 @@ void ModuleFile::resolveTypes(){
             }
         }
     }
+
+    for ( JsImportNode* jsImport : m_d->rootNode->jsImports() ){
+        std::string importPath = jsImport->importPath() ? BaseNode::slice(m_d->content, jsImport->importPath()) : "";
+        if ( importPath.length() > 2 ){
+            importPath = importPath.substr(1, importPath.length() - 2);
+        }
+        for ( const JsImportName& importName : jsImport->importNames() ){
+            if ( importName.isTypeOnly() ){
+                continue;
+            }
+            m_d->descriptor->addDependencyEntry(ModuleFileDescriptor::DependencyEntry(BaseNode::slice(m_d->content, importName.identifier()), importPath));
+        }
+    }
+
     if ( m_d->status != ModuleFile::Compiled ){
         m_d->status = ModuleFile::Resolved;
     }
@@ -239,6 +257,10 @@ std::string ModuleFile::jsFileName() const{
 
 std::string ModuleFile::jsFilePath() const{
     return Path::join(m_d->elementsModule->compiler()->moduleBuildPath(m_d->elementsModule->module()), jsFileName());
+}
+
+std::string ModuleFile::uri() const{
+    return m_d->elementsModule->uri() + "/" + fileName();
 }
 
 std::string ModuleFile::filePath() const{
