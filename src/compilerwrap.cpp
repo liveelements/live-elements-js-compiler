@@ -15,6 +15,7 @@
 
 #include "compilerwrap.h"
 #include "compilerhandle.h"
+#include "compilationwrap.h"
 #include "live/visuallog.h"
 #include "live/utf8.h"
 #include "live/path.h"
@@ -31,6 +32,7 @@ namespace lv{
 class CompilerAddonData{
 public:
     Napi::FunctionReference CompilerHandleConstructor;
+    Napi::FunctionReference CompilationConstructor;
 };
 
 class NapiTypeResolver : public lv::el::TypeResolver {
@@ -623,15 +625,11 @@ void runCompilerWrap(const Napi::CallbackInfo &info){
         }
 
         lv::el::Compilation::Ptr compilation = lv::el::Compiler::compile(compiler, scriptFile);
-        lv::el::ModuleFile* mf = compilation->target();
 
-        
-        if ( mf ){
-            Napi::Object result = Napi::Object::New(env);
-            Napi::Value file = Napi::String::New(env, Path::toUnixSeparator(mf->jsFilePath()));
-            result.Set("file", file);
-            res = result;
-        }
+        CompilerAddonData* compilerData = env.GetInstanceData<CompilerAddonData>();
+        res = compilerData->CompilationConstructor.New({
+            Napi::External<lv::el::Compilation::Ptr>::New(env, &compilation)
+        });
 
     } catch ( lv::el::SyntaxException& e ){
         Napi::Object ob = Napi::Object::New(env);
@@ -802,6 +800,9 @@ Napi::Object Init(Napi::Env env, Napi::Object exports) {
     Napi::Function funcCompilerHandle = CompilerHandle::Init(env, exports);
     addonData->CompilerHandleConstructor = Napi::Persistent(funcCompilerHandle);
     exports.Set("CompilerHandle", funcCompilerHandle);
+
+    // Compilation is only created by runCompiler, so it's not exported
+    addonData->CompilationConstructor = Napi::Persistent(CompilationWrap::Init(env));
 
     // Export functions
     exports.Set("compile", Napi::Function::New(env, lv::compileWrap));
