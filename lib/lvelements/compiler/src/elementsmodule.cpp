@@ -38,12 +38,12 @@ public:
         : engine(e), status(ElementsModule::Initialized){}
 
     Module::Ptr       module;
-    Compiler::WeakPtr compiler;
     Engine*           engine;
     std::map<std::string, ModuleFile*> fileModules;
     std::list<ModuleLibrary*>          libraries;
 
     std::string            buildLocation;
+    std::string            outputExtension;
     ElementsModule::Status status;
 
     ModuleDescriptor::Ptr  descriptor;
@@ -55,7 +55,7 @@ ElementsModule::ElementsModule(Module::Ptr module, Compiler::Ptr compiler, Modul
 {
     m_d->descriptor = descriptor;
     m_d->buildLocation = compiler->moduleBuildPath(module);
-    m_d->compiler = compiler;
+    m_d->outputExtension = compiler->outputExtension();
     m_d->module = module;
 }
 
@@ -115,7 +115,7 @@ ElementsModule::Ptr ElementsModule::createImpl(Module::Ptr module, Compiler::Ptr
             auto fileName = *it + ".lv";
             ModuleFileDescriptor::Ptr mfd = descriptor->findFile(fileName);
             if ( mfd ){
-                ElementsModule::loadModuleFile(epl, fileName, mfd);
+                ElementsModule::loadModuleFile(epl, compiler, fileName, mfd);
             }
         }
         epl->initializeLibraries(module->libraryModules());
@@ -127,7 +127,7 @@ ElementsModule::Ptr ElementsModule::createImpl(Module::Ptr module, Compiler::Ptr
     descriptor = ModuleDescriptor::create(module->context()->importId);
     ElementsModule::Ptr epl(new ElementsModule(module, compiler, descriptor, engine));
     for ( auto it = module->fileModules().begin(); it != module->fileModules().end(); ++it ){
-        ElementsModule::parseModuleFile(epl, *it + ".lv");
+        ElementsModule::parseModuleFile(epl, compiler, *it + ".lv");
     }
     epl->initializeLibraries(module->libraryModules());
 
@@ -148,7 +148,7 @@ void ElementsModule::initializeLibraries(const std::list<std::string> &libs){
 #endif
 }
 
-ModuleFile *ElementsModule::loadModuleFile(ElementsModule::Ptr &epl, const std::string &name, const ModuleFileDescriptor::Ptr &mfd){
+ModuleFile *ElementsModule::loadModuleFile(ElementsModule::Ptr &epl, Compiler::Ptr compiler, const std::string &name, const ModuleFileDescriptor::Ptr &mfd){
     auto it = epl->m_d->fileModules.find(name);
     if ( it != epl->m_d->fileModules.end() ){
         return it->second;
@@ -177,7 +177,7 @@ ModuleFile *ElementsModule::loadModuleFile(ElementsModule::Ptr &epl, const std::
         }
 
         try{
-            ElementsModule::Ptr ep = Compiler::createAndResolveImportedModule(epl->compiler(), importUriFull.data(), epl->module(), epl->engine());
+            ElementsModule::Ptr ep = Compiler::createAndResolveImportedModule(compiler, importUriFull.data(), epl->module(), epl->engine());
             if ( !ep ){
                 THROW_EXCEPTION(TracePointException, Utf8("Failed to find module \'%\' imported in \'%\'").format(importUriFull, currentUriName), Exception::toCode("~Import"));
             }
@@ -189,16 +189,10 @@ ModuleFile *ElementsModule::loadModuleFile(ElementsModule::Ptr &epl, const std::
     return mf;
 }
 
-ModuleFile *ElementsModule::parseModuleFile(ElementsModule::Ptr &epl, const std::string &name){
+ModuleFile *ElementsModule::parseModuleFile(ElementsModule::Ptr &epl, Compiler::Ptr compiler, const std::string &name){
     auto it = epl->m_d->fileModules.find(name);
     if ( it != epl->m_d->fileModules.end() ){
         return it->second;
-    }
-
-    Compiler::WeakPtr wcompiler = epl->m_d->compiler;
-    Compiler::Ptr compiler = wcompiler.lock();
-    if ( !compiler ){
-        THROW_EXCEPTION(lv::Exception, Utf8("Assertion: Compiler has been released."), Exception::toCode("~Compiler"));
     }
 
     std::string filePath = Path::join(epl->module()->path(), name);
@@ -221,7 +215,7 @@ ModuleFile *ElementsModule::parseModuleFile(ElementsModule::Ptr &epl, const std:
     LanguageParser::AST* ast = compiler->parser()->parse(content);
     ProgramNode* pn = compiler->parseProgramNodes(filePath, componentName, ast);
 
-    ModuleFile* mf = ModuleFile::createFromProgramNode(epl.get(), name, content, pn, ast);
+    ModuleFile* mf = ModuleFile::createFromProgramNode(epl.get(), compiler, name, content, pn, ast);
     epl->m_d->fileModules[name] = mf;
     epl->m_d->descriptor->addModuleFileDescriptor(mf->descriptor());
 
@@ -250,7 +244,7 @@ ModuleFile *ElementsModule::parseModuleFile(ElementsModule::Ptr &epl, const std:
             }
 
             try{
-                ElementsModule::Ptr ep = Compiler::createAndResolveImportedModule(epl->compiler(), importUri, epl->module(), epl->engine());
+                ElementsModule::Ptr ep = Compiler::createAndResolveImportedModule(compiler, importUri, epl->module(), epl->engine());
                 if ( !ep ){
                     THROW_EXCEPTION(TracePointException, Utf8("Failed to find module \'%\' imported in \'%\'").format(imp.uri, currentUriName), Exception::toCode("~Import"));
                 }
@@ -268,7 +262,7 @@ ModuleFile *ElementsModule::parseModuleFile(ElementsModule::Ptr &epl, const std:
                 );
             }
             try{
-                ElementsModule::Ptr ep = Compiler::createAndResolveImportedModule(epl->compiler(), it->uri, epl->module(), epl->engine());
+                ElementsModule::Ptr ep = Compiler::createAndResolveImportedModule(compiler, it->uri, epl->module(), epl->engine());
                 if ( !ep ){
                     THROW_EXCEPTION(lv::Exception, Utf8("Failed to find module \'%\' imported in \'%\'").format(imp.uri, currentUriName), Exception::toCode("~Import"));
                 }
@@ -303,14 +297,14 @@ const Module::Ptr& ElementsModule::module() const{
     return m_d->module;
 }
 
-void ElementsModule::compile(){
+void ElementsModule::compile(Compiler::Ptr compiler){
     if ( m_d->status == ElementsModule::Compiled || m_d->status == ElementsModule::Compiling )
         return;
 
     // resolve types
     if ( m_d->status != ElementsModule::Resolved && m_d->status != ElementsModule::Parsed){
         for ( auto it = m_d->fileModules.begin(); it != m_d->fileModules.end(); ++it ){
-            it->second->resolveTypes();
+            it->second->resolveTypes(compiler);
         }
         m_d->status = ElementsModule::Resolved;
     }
@@ -324,20 +318,19 @@ void ElementsModule::compile(){
             if ( mit->module == nullptr ){
                 THROW_EXCEPTION(lv::Exception, Utf8("Import not resolved \'%\' when compiling \'%\'").format(mit->uri, mf->filePath()), lv::Exception::toCode("~Import"));
             }
-            mit->module->compile();
+            mit->module->compile(compiler);
         }
     }
 
     for ( auto it = m_d->fileModules.begin(); it != m_d->fileModules.end(); ++it ){
-        it->second->compile();
+        it->second->compile(compiler);
     }
 
     auto assets = m_d->module->assets();
-    std::string moduleBuildPath = compiler()->moduleBuildPath(m_d->module);
 
     for ( auto it = assets.begin(); it != assets.end(); ++it ){
         std::string assetPath = Path::join(m_d->module->path(), *it);
-        std::string resultPath = Path::join(moduleBuildPath, *it);
+        std::string resultPath = Path::join(m_d->buildLocation, *it);
         if (Path::exists(resultPath))
             Path::remove(resultPath);
         Path::copyFile(assetPath, resultPath, Path::OverwriteExisting);
@@ -349,11 +342,6 @@ void ElementsModule::compile(){
     ml::toJson(descriptorData, descriptorContent);
 
     std::string descriptorPath = Path::join(m_d->buildLocation, ModuleDescriptor::buildFileName);
-
-    Compiler::Ptr compiler = m_d->compiler.lock();
-    if ( !compiler ){
-        THROW_EXCEPTION(lv::Exception, Utf8("Assertion: ElementsModule: Compiler pointer has been released."), Exception::toCode("~Compiler"));
-    }
 
     bool descriptorUnchanged = false;
     if ( Path::exists(descriptorPath) ){
@@ -368,14 +356,6 @@ void ElementsModule::compile(){
     }
     
     m_d->status = ElementsModule::Compiled;
-}
-
-Compiler::Ptr ElementsModule::compiler() const{
-    Compiler::Ptr compiler = m_d->compiler.lock();
-    if ( !compiler ){
-        THROW_EXCEPTION(lv::Exception, Utf8("ElementsModule: Compiler has been released."), Exception::toCode("~Compiler"));
-    }
-    return compiler;
 }
 
 Engine *ElementsModule::engine() const{
@@ -396,6 +376,10 @@ ModuleFile *ElementsModule::moduleFileByName(const std::string &fileName) const{
 
 const std::string &ElementsModule::buildLocation() const{
     return m_d->buildLocation;
+}
+
+const std::string &ElementsModule::outputExtension() const{
+    return m_d->outputExtension;
 }
 
 ElementsModule::Status ElementsModule::status() const{

@@ -47,27 +47,23 @@ public:
     typedef std::shared_ptr<ElementsModule> Ptr;
 
 public:
+    friend class Compiler;
+
+public:
     ~ElementsModule();
-
-    static ElementsModule::Ptr create(Module::Ptr module, Compiler::Ptr compiler, Engine* engine);
-    static ElementsModule::Ptr create(Module::Ptr module, Compiler::Ptr compiler);
-
-    static ModuleFile *parseModuleFile(ElementsModule::Ptr& epl, const std::string& name);
 
     ModuleFile* findModuleFileByName(const std::string& name) const;
     ModuleFile* moduleFileBypath(const std::string& path) const;
 
     const Module::Ptr &module() const;
 
-    void compile();
-
-    Compiler::Ptr compiler() const;
     Engine* engine() const;
 
     ModuleDescriptor::ExportLink findExport(const std::string& name) const;
     ModuleFile* moduleFileByName(const std::string& fileName) const;
 
     const std::string& buildLocation() const;
+    const std::string& outputExtension() const;
     Status status() const;
 
     std::string pathInPackage() const;
@@ -77,9 +73,16 @@ public:
     const std::list<ModuleLibrary*>& libraryModules() const;
 
 private:
+    static ElementsModule::Ptr create(Module::Ptr module, Compiler::Ptr compiler, Engine* engine);
+    static ElementsModule::Ptr create(Module::Ptr module, Compiler::Ptr compiler);
+
+    static ModuleFile *parseModuleFile(ElementsModule::Ptr& epl, Compiler::Ptr compiler, const std::string& name);
+
+    void compile(Compiler::Ptr compiler);
+
     void initializeLibraries(const std::list<std::string>& libs);
 
-    static ModuleFile *loadModuleFile(ElementsModule::Ptr& epl, const std::string& name, const ModuleFileDescriptor::Ptr& mfd);
+    static ModuleFile *loadModuleFile(ElementsModule::Ptr& epl, Compiler::Ptr compiler, const std::string& name, const ModuleFileDescriptor::Ptr& mfd);
 
     static ElementsModule::Ptr createImpl(Module::Ptr module, Compiler::Ptr compiler, Engine* engine);
     ElementsModule(Module::Ptr module, Compiler::Ptr compiler, ModuleDescriptor::Ptr descriptor, Engine* engine);

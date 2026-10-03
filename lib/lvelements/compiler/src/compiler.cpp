@@ -479,9 +479,9 @@ std::shared_ptr<ElementsModule> Compiler::compileModuleImpl(
 {
     auto epl = engine ? ElementsModule::create(module, compiler, engine) : ElementsModule::create(module, compiler);
     if ( !fileName.empty() ){
-        ElementsModule::parseModuleFile(epl, fileName);
+        ElementsModule::parseModuleFile(epl, compiler, fileName);
     }
-    epl->compile();
+    epl->compile(compiler);
     return epl;
 }
 

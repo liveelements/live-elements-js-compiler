@@ -65,9 +65,6 @@ public:
 public:
     ~ModuleFile();
 
-    void resolveTypes();
-    void compile();
-
     Status status() const;
     const std::string& name() const;
     std::string fileName() const;
@@ -82,6 +79,9 @@ public:
     std::string uri() const;
 
 private:
+    void resolveTypes(Compiler::Ptr compiler);
+    void compile(Compiler::Ptr compiler);
+
     void addDependency(ModuleFile* to);
     void setCompilationData(CompilationData* cd);
 
@@ -92,6 +92,7 @@ private:
 
     static ModuleFile* createFromProgramNode(
         ElementsModule* plugin, 
+        Compiler::Ptr compiler,
         const std::string& name, 
         const std::string& content, 
         ProgramNode* node, 

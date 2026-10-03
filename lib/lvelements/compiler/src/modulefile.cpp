@@ -56,7 +56,7 @@ ModuleFile::~ModuleFile(){
 /**
  * Resolve programNode imports to js imports.
  */
-void ModuleFile::resolveTypes(){
+void ModuleFile::resolveTypes(Compiler::Ptr compiler){
     if ( !m_d->rootNode ){
         return;
     }
@@ -195,7 +195,7 @@ void ModuleFile::resolveTypes(){
                                 }
                                 Utf8 packageName = importedPkg->nameScopeAsPath();
 
-                                std::string configPackageBuildPath = m_d->elementsModule->compiler()->packageBuildPath();
+                                std::string configPackageBuildPath = compiler->packageBuildPath();
                                 std::string packageBuildPath = packageName.data() +
                                     (configPackageBuildPath.empty() ? "" : "/" + configPackageBuildPath);
                                 std::string packageToPluginStr = impIt->module->pathInPackage();
@@ -229,12 +229,12 @@ void ModuleFile::resolveTypes(){
     }
 }
 
-void ModuleFile::compile(){
+void ModuleFile::compile(Compiler::Ptr compiler){
     if ( m_d->status != ModuleFile::Compiled ){
         if ( !m_d->rootNode ){
             THROW_EXCEPTION(lv::Exception, Utf8("Assertion: ModuleFile being compiled without parsed node."), Exception::toCode("~NullPtr"));
         }
-        m_d->elementsModule->compiler()->compileModuleFileToTarget(m_d->elementsModule->module(), filePath(), m_d->content, m_d->rootNode);
+        compiler->compileModuleFileToTarget(m_d->elementsModule->module(), filePath(), m_d->content, m_d->rootNode);
         m_d->status = ModuleFile::Compiled;
     }
 }
@@ -252,11 +252,11 @@ std::string ModuleFile::fileName() const{
 }
 
 std::string ModuleFile::jsFileName() const{
-    return fileName() + m_d->elementsModule->compiler()->outputExtension();
+    return fileName() + m_d->elementsModule->outputExtension();
 }
 
 std::string ModuleFile::jsFilePath() const{
-    return Path::join(m_d->elementsModule->compiler()->moduleBuildPath(m_d->elementsModule->module()), jsFileName());
+    return Path::join(m_d->elementsModule->buildLocation(), jsFileName());
 }
 
 std::string ModuleFile::uri() const{
@@ -357,10 +357,10 @@ PackageGraph::CyclesResult<ModuleFile*> ModuleFile::checkCycles(
     return PackageGraph::CyclesResult<ModuleFile*>(PackageGraph::CyclesResult<ModuleFile*>::NotFound);
 }
 
-ModuleFile *ModuleFile::createFromProgramNode(ElementsModule *module, const std::string &name, const std::string &content, ProgramNode *node, LanguageParser::AST *ast){
+ModuleFile *ModuleFile::createFromProgramNode(ElementsModule *module, Compiler::Ptr compiler, const std::string &name, const std::string &content, ProgramNode *node, LanguageParser::AST *ast){
     auto descriptor = ModuleFileDescriptor::create(name);
 
-    std::vector<BaseNode*> exports = module->compiler()->collectProgramExports(content, node);
+    std::vector<BaseNode*> exports = compiler->collectProgramExports(content, node);
     for ( auto val : exports ){
         if ( val->isNodeType<ComponentInstanceStatementNode>() ){
             auto expression = val->as<ComponentInstanceStatementNode>();
