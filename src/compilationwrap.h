@@ -32,6 +32,7 @@ public:
 private:
     Napi::Value target(const Napi::CallbackInfo& info);
     Napi::Value targetSource(const Napi::CallbackInfo& info);
+    Napi::Value files(const Napi::CallbackInfo& info);
     Napi::Value jsPath(const Napi::CallbackInfo& info);
     Napi::Value isDeclarative(const Napi::CallbackInfo& info);
     Napi::Value dependencies(const Napi::CallbackInfo& info);

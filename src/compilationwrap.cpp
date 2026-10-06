@@ -25,6 +25,7 @@ Napi::Function CompilationWrap::Init(Napi::Env env){
     return DefineClass(env, "Compilation", {
         InstanceAccessor("target", &CompilationWrap::target, nullptr),
         InstanceAccessor("targetSource", &CompilationWrap::targetSource, nullptr),
+        InstanceMethod("files", &CompilationWrap::files),
         InstanceMethod("jsPath", &CompilationWrap::jsPath),
         InstanceMethod("isDeclarative", &CompilationWrap::isDeclarative),
         InstanceMethod("dependencies", &CompilationWrap::dependencies),
@@ -62,6 +63,33 @@ Napi::Value CompilationWrap::targetSource(const Napi::CallbackInfo &info){
     if ( !m_compilation->hasTargetSource() )
         return env.Undefined();
     return Napi::String::New(env, m_compilation->targetSource());
+}
+
+Napi::Value CompilationWrap::files(const Napi::CallbackInfo &info){
+    Napi::Env env = info.Env();
+    if ( !m_compilation ){
+        Napi::Error::New(env, "Compilation released.").ThrowAsJavaScriptException();
+        return env.Undefined();
+    }
+
+    size_t count = 0;
+    for ( const lv::el::ElementsModule::Ptr& module : m_compilation->modules() )
+        count += module->files().size();
+
+    Napi::Array result = Napi::Array::New(env, count);
+    uint32_t index = 0;
+    for ( const lv::el::ElementsModule::Ptr& module : m_compilation->modules() ){
+        for ( const auto& entry : module->files() ){
+            const lv::el::ModuleFile* file = entry.second;
+            Napi::Object value = Napi::Object::New(env);
+            value.Set("uri", file->uri());
+            value.Set("path", Path::toUnixSeparator(file->filePath()));
+            value.Set("jsPath", Path::toUnixSeparator(file->jsFilePath()));
+            value.Set("prebuilt", module->isPrebuilt());
+            result.Set(index++, value);
+        }
+    }
+    return result;
 }
 
 Napi::Value CompilationWrap::jsPath(const Napi::CallbackInfo &info){

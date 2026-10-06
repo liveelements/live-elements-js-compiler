@@ -66,6 +66,7 @@ public:
     const std::string& outputExtension() const;
     Status status() const;
     bool haveSourcesChanged() const;
+    bool isPrebuilt() const;
 
     std::string pathInPackage() const;
     std::string uri() const;

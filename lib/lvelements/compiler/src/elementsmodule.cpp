@@ -382,6 +382,10 @@ bool ElementsModule::haveSourcesChanged() const{
     return false;
 }
 
+bool ElementsModule::isPrebuilt() const{
+    return m_d->loadedFromDescriptor;
+}
+
 Engine *ElementsModule::engine() const{
     return m_d->engine;
 }
