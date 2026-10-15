@@ -1,0 +1,16 @@
+import {add, map, print, useFlow, findUser} from './flow-tools.mjs'
+
+fn buildFlow(): any {
+    const expressionFlow = n: number %> add(n, 3)
+    const primitiveLiteralFlow = n: number %> 3
+    const arrayLiteralFlow = n: number %> [n, 3, "done"]
+    const blockFlow = (a: UserContext, b: List<number>) %> {
+        findUser a.params.userId @user
+        map b (x: number %> add(x, 2)) @doubled
+        print "done" ^user ^doubled
+        return { email: user.email, items: doubled, last: %, "display-name": "done" }
+    }
+    useFlow(primitiveLiteralFlow, n: number %> 1)
+    useFlow(arrayLiteralFlow, n: number %> n)
+    useFlow(blockFlow, n: number %> add(n, 1))
+}

@@ -1,0 +1,15 @@
+import {add, print, send, sum} from './flow-tools.mjs'
+import .module as mod
+
+fn build(): any {
+    return (n: number, user: UserContext) %> {
+        add n 1 @a
+        add(a, 2) @b
+        mod.max a b @m
+        print user.email % @p
+        send { id: n, email: user.email } @r
+        sum [a, b, 3] ^r
+        mod.max(m, 1) @c
+        return add c 1
+    }
+}

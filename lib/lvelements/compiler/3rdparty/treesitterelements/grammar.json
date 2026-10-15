@@ -11133,8 +11133,22 @@
             "type": "FIELD",
             "name": "value",
             "content": {
-              "type": "SYMBOL",
-              "name": "_flow_operand"
+              "type": "CHOICE",
+              "members": [
+                {
+                  "type": "SYMBOL",
+                  "name": "_flow_operand"
+                },
+                {
+                  "type": "ALIAS",
+                  "content": {
+                    "type": "SYMBOL",
+                    "name": "flow_bare_call"
+                  },
+                  "named": true,
+                  "value": "flow_call"
+                }
+              ]
             }
           }
         ]
@@ -11147,8 +11161,22 @@
           "type": "FIELD",
           "name": "expression",
           "content": {
-            "type": "SYMBOL",
-            "name": "_flow_operand"
+            "type": "CHOICE",
+            "members": [
+              {
+                "type": "SYMBOL",
+                "name": "_flow_operand"
+              },
+              {
+                "type": "ALIAS",
+                "content": {
+                  "type": "SYMBOL",
+                  "name": "flow_bare_call"
+                },
+                "named": true,
+                "value": "flow_call"
+              }
+            ]
           }
         },
         {
@@ -11179,6 +11207,132 @@
           }
         }
       ]
+    },
+    "flow_bare_call": {
+      "type": "PREC",
+      "value": 1,
+      "content": {
+        "type": "SEQ",
+        "members": [
+          {
+            "type": "FIELD",
+            "name": "function",
+            "content": {
+              "type": "CHOICE",
+              "members": [
+                {
+                  "type": "SYMBOL",
+                  "name": "identifier"
+                },
+                {
+                  "type": "SYMBOL",
+                  "name": "nested_identifier"
+                }
+              ]
+            }
+          },
+          {
+            "type": "FIELD",
+            "name": "arguments",
+            "content": {
+              "type": "ALIAS",
+              "content": {
+                "type": "SYMBOL",
+                "name": "flow_bare_arguments"
+              },
+              "named": true,
+              "value": "flow_arguments"
+            }
+          }
+        ]
+      }
+    },
+    "flow_bare_arguments": {
+      "type": "PREC_RIGHT",
+      "value": 0,
+      "content": {
+        "type": "REPEAT1",
+        "content": {
+          "type": "SYMBOL",
+          "name": "_flow_bare_argument"
+        }
+      }
+    },
+    "_flow_bare_argument": {
+      "type": "CHOICE",
+      "members": [
+        {
+          "type": "SYMBOL",
+          "name": "flow_member"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "flow_reference"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "flow_literal"
+        },
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "SYMBOL",
+            "name": "flow_braced_expression"
+          },
+          "named": true,
+          "value": "flow_expression"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "flow_parenthesized_value"
+        }
+      ]
+    },
+    "flow_braced_expression": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "FIELD",
+          "name": "parameters",
+          "content": {
+            "type": "SYMBOL",
+            "name": "flow_parameters"
+          }
+        },
+        {
+          "type": "STRING",
+          "value": "%>"
+        },
+        {
+          "type": "FIELD",
+          "name": "body",
+          "content": {
+            "type": "SYMBOL",
+            "name": "flow_body"
+          }
+        }
+      ]
+    },
+    "flow_parenthesized_value": {
+      "type": "PREC",
+      "value": -1,
+      "content": {
+        "type": "SEQ",
+        "members": [
+          {
+            "type": "STRING",
+            "value": "("
+          },
+          {
+            "type": "SYMBOL",
+            "name": "flow_expression"
+          },
+          {
+            "type": "STRING",
+            "value": ")"
+          }
+        ]
+      }
     },
     "flow_step_label": {
       "type": "SEQ",

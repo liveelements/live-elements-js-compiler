@@ -2483,6 +2483,10 @@
           "named": true
         },
         {
+          "type": "flow_parenthesized_value",
+          "named": true
+        },
+        {
           "type": "flow_reference",
           "named": true
         }
@@ -2886,6 +2890,21 @@
       "types": [
         {
           "type": "flow_parameter",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "flow_parenthesized_value",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": false,
+      "required": true,
+      "types": [
+        {
+          "type": "flow_expression",
           "named": true
         }
       ]

@@ -1,0 +1,6 @@
+import {add, map} from './flow-tools.mjs'
+
+@fn main(xs: List<number>) %> {
+    map xs (x: number) %> add x 1 @m
+    return m
+}

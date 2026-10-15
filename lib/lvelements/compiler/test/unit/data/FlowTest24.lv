@@ -1,0 +1,6 @@
+import {f} from './flow-tools.mjs'
+
+@fn main(a: number, b: number) %> {
+    f(a) b
+    return %
+}

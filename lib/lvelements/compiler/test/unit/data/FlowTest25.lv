@@ -1,0 +1,6 @@
+import {now} from './flow-tools.mjs'
+
+@fn main(a: number) %> {
+    now @t
+    return t
+}

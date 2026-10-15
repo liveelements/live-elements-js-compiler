@@ -1,0 +1,9 @@
+import {add, map} from './flow-tools.mjs'
+
+fn build(): any {
+    return (xs: List<number>) %> {
+        map(xs, (x: number) %> { add(x, 1) }) @a
+        map(xs, (x: number) %> add(x, 1)) @b
+        return b
+    }
+}

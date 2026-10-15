@@ -652,6 +652,91 @@ TEST_CASE("Flow Type Resolution", "[Flow]"){
         }
     }
 
+    SECTION("Flow calls without parentheses"){ testFlowFileParse("FlowTest19"); }
+
+    SECTION("Flow calls without parentheses mix with classic calls"){
+        Compiler::TargetResult targetResult = compileFlowFileWithoutResolver("FlowTest20");
+
+        requireFlowExpectedOutput("FlowTest20", ".js", targetResult.js);
+        requireFlowExpectedOutput("FlowTest20", ".d.ts", targetResult.dts);
+
+        REQUIRE(targetResult.js.find("Flow.call(mod.max, [Flow.ref('a'), Flow.ref('b')], 'm')") != std::string::npos);
+        REQUIRE(targetResult.js.find("Flow.ret(Flow.call(add, [Flow.ref('c'), 1]))") != std::string::npos);
+    }
+
+    SECTION("Flow classic calls lower like calls without parentheses"){
+        Compiler::TargetResult targetResult = compileFlowFileWithoutResolver("FlowTest21");
+
+        requireFlowExpectedOutput("FlowTest20", ".js", targetResult.js);
+        requireFlowExpectedOutput("FlowTest20", ".d.ts", targetResult.dts);
+    }
+
+    SECTION("Flow lambda arguments without parentheses"){
+        Compiler::TargetResult targetResult = compileFlowFileWithoutResolver("FlowTest22");
+
+        requireFlowExpectedOutput("FlowTest22", ".js", targetResult.js);
+        requireFlowExpectedOutput("FlowTest22", ".d.ts", targetResult.dts);
+
+        REQUIRE(targetResult.js.find("Flow.call(map, [Flow.ref('xs'), Flow.create('x', undefined, [Flow.call(add, [Flow.ref('x'), 1])])], 'a')") != std::string::npos);
+        REQUIRE(targetResult.js.find("Flow.call(map, [Flow.ref('xs'), Flow.create('x', undefined, [Flow.ret(Flow.call(add, [Flow.ref('x'), 1]))])], 'b')") != std::string::npos);
+    }
+
+    SECTION("Flow classic lambda arguments lower like lambda arguments without parentheses"){
+        Compiler::TargetResult targetResult = compileFlowFileWithoutResolver("FlowTest23");
+
+        requireFlowExpectedOutput("FlowTest22", ".js", targetResult.js);
+        requireFlowExpectedOutput("FlowTest22", ".d.ts", targetResult.dts);
+    }
+
+    SECTION("Flow rejects a bare reference step after a call"){
+        const std::string sourcePath = Path::join(dataPath, "FlowTest24.lv");
+        const std::string contents = fileIO.readFromFile(sourcePath);
+
+        Compiler::Ptr compiler = Compiler::create(flowConfig(Compiler::Config::OutputTarget::JS_DTS));
+
+        try {
+            compiler->compileToTarget(sourcePath, contents);
+            FAIL("Expected a SyntaxException for a step that is not a function call.");
+        } catch ( const SyntaxException& e ){
+            REQUIRE(e.message().find("Flow steps must be function calls.") != std::string::npos);
+            REQUIRE(e.parsedLocation().range().start().line() == 4);
+            REQUIRE(e.parsedLocation().range().start().column() == 10);
+        }
+    }
+
+    SECTION("Flow rejects a zero-argument call without parentheses"){
+        const std::string sourcePath = Path::join(dataPath, "FlowTest25.lv");
+        const std::string contents = fileIO.readFromFile(sourcePath);
+
+        Compiler::Ptr compiler = Compiler::create(flowConfig(Compiler::Config::OutputTarget::JS_DTS));
+
+        try {
+            compiler->compileToTarget(sourcePath, contents);
+            FAIL("Expected a SyntaxException for a step that is not a function call.");
+        } catch ( const SyntaxException& e ){
+            REQUIRE(e.message().find("Flow steps must be function calls.") != std::string::npos);
+            REQUIRE(e.parsedLocation().range().start().line() == 4);
+            REQUIRE(e.parsedLocation().range().start().column() == 5);
+        }
+    }
+
+    SECTION("Flow rejects an unbraced lambda argument without parentheses"){
+        const std::string sourcePath = Path::join(dataPath, "FlowTest26.lv");
+        const std::string contents = fileIO.readFromFile(sourcePath);
+
+        Compiler::Ptr compiler = Compiler::create(flowConfig(Compiler::Config::OutputTarget::JS_DTS));
+
+        try {
+            compiler->compileToTarget(sourcePath, contents);
+            FAIL("Expected a syntax error for a lambda without braces passed without parentheses.");
+        } catch ( const SyntaxException& e ){
+            REQUIRE(e.code() == Exception::toCode("~Language"));
+            REQUIRE(e.message().find("Syntax error") != std::string::npos);
+            REQUIRE(e.parsedLocation().range().start().line() == 4);
+            REQUIRE(e.parsedLocation().range().start().column() == 12);
+        }
+    }
+
     SECTION("Flow functions are module exports callable from sibling files"){
         const std::string tmpRoot = Path::join(Path::temporaryDirectory(), "lv-compiler-flow-functions-module");
         Txtar archive = Txtar::parseFile(Path::join(dataPath, "FlowTestModulePack02.txtar"));
