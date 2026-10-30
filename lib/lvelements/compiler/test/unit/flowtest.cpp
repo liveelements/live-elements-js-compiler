@@ -365,8 +365,8 @@ TEST_CASE("Flow Type Resolution", "[Flow]"){
         StubTypeResolver resolver;
         resolver.responses[requestId] = TypeResolver::Result(
             requestId,
-            "FunctionType.for(TypeVariable.for('X'), TypeVariable.for('X')).withTypeParameters(['X'])",
-            {"FunctionType", "Type", "TypeVariable"}
+            "FunctionType.forGeneric([\"X\"], ($X) => FunctionType.for($X, $X))",
+            {"FunctionType"}
         );
 
         Compiler::Config config = flowConfig(Compiler::Config::OutputTarget::JS_DTS);

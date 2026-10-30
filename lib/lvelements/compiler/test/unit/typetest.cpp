@@ -875,8 +875,8 @@ TEST_CASE("Type Resolution", "[TypeResolution]"){
         StubTypeResolver resolver;
         resolver.responses[sourcePath + "::mapVal"] = TypeResolver::Result{
             sourcePath + "::mapVal",
-            "FunctionType.for(TypeVariable.for('Y'), TypeVariable.for('X'), GenericType.for(Flow, FunctionType.for(TypeVariable.for('Y'), TypeVariable.for('X')))).withTypeParameters(['X', 'Y'])",
-            {"FunctionType", "GenericType", "Type", "TypeVariable"}
+            "FunctionType.forGeneric([\"X\", \"Y\"], ($X, $Y) => FunctionType.for($Y, $X, AppliedType.for(Flow, FunctionType.for($Y, $X))))",
+            {"AppliedType", "FunctionType"}
         };
 
         Compiler::Ptr compiler = Compiler::create(config);
@@ -907,8 +907,8 @@ TEST_CASE("Type Resolution", "[TypeResolution]"){
         StubTypeResolver resolver;
         resolver.responses[sourcePath + "::identity"] = TypeResolver::Result{
             sourcePath + "::identity",
-            "FunctionType.for(TypeVariable.for('X'), TypeVariable.for('X')).withTypeParameters(['X'])",
-            {"FunctionType", "Type", "TypeVariable"}
+            "FunctionType.forGeneric([\"X\"], ($X) => FunctionType.for($X, $X))",
+            {"FunctionType"}
         };
 
         Compiler::Ptr compiler = Compiler::create(config);
