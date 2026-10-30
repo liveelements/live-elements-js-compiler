@@ -18,6 +18,7 @@
 #include "testsupport.h"
 #include "live/applicationcontext.h"
 #include "live/fileio.h"
+#include "live/mlnodetojson.h"
 #include "live/path.h"
 #include "live/txtar.h"
 #include "live/utf8.h"
@@ -447,6 +448,66 @@ TEST_CASE("Type Resolution", "[TypeResolution]"){
         const std::string jsContents = fileIO.readFromFile(outputJsPath);
         REQUIRE(jsContents.find("FunctionType.for(Type.number, Type.number, Type.number)") != std::string::npos);
         REQUIRE(jsContents.find("/*@@LVTYPE:") == std::string::npos);
+    }
+
+    SECTION("Module compile declares the module import id in each dts"){
+        for ( bool componentMetaInfo : {true, false} ){
+            const std::string tmpRoot = Path::join(Path::temporaryDirectory(), "lv-compiler-dts-module-alias");
+            Txtar archive = Txtar::parseFile(Path::join(typeTestDataPath(), "TypeTestModuleAliasPack01.txtar"));
+            Txtar::ExtractionGuard extraction = archive.extractTemp(tmpRoot);
+
+            FileIO fileIO;
+            Compiler::Config config(true, ".mjs", &fileIO);
+            MLNode options(MLNode::Type::Object);
+            options["packageBuildPath"] = "build";
+            options["outputTarget"] = "JS_DTS";
+            options["enableComponentMetaInfo"] = componentMetaInfo;
+            config.initialize(options);
+
+            Compiler::Ptr compiler = Compiler::create(config);
+            REQUIRE_NOTHROW(Compiler::compileModule(compiler, Path::join(tmpRoot, "pkg/sample")));
+
+            const std::string buildDir = Path::join(tmpRoot, "pkg/build/sample");
+            MLNode moduleDescriptor;
+            ml::fromJson(fileIO.readFromFile(Path::join(buildDir, "__module__.lv.json")), moduleDescriptor);
+            const std::string importId = moduleDescriptor["uri"].asString();
+            REQUIRE(importId == "test.alias.sample");
+
+            const std::string alias = "export type __lvmodule__ = \"" + importId + "\"\n";
+            for ( const std::string& fileName : {std::string("shapes.lv"), std::string("main.lv")} ){
+                const std::string dts = fileIO.readFromFile(Path::join(buildDir, fileName + ".d.mts"));
+                const size_t aliasPos = dts.find(alias);
+                REQUIRE(aliasPos != std::string::npos);
+                REQUIRE(dts.find("__lvmodule__", aliasPos + alias.size()) == std::string::npos);
+                const size_t lastImport = dts.rfind("\nimport ");
+                if ( lastImport != std::string::npos ){
+                    REQUIRE(lastImport < aliasPos);
+                }
+
+                const std::string js = fileIO.readFromFile(Path::join(buildDir, fileName + ".mjs"));
+                REQUIRE_FALSE(js.empty());
+                REQUIRE(js.find("__lvmodule__") == std::string::npos);
+            }
+
+            const std::string mainDts = fileIO.readFromFile(Path::join(buildDir, "main.lv.d.mts"));
+            REQUIRE(mainDts.find("import {Shape} from './shapes.lv.mjs'\n" + alias) == 0);
+        }
+    }
+
+    SECTION("Single-file dts does not declare a module import id"){
+        FileIO fileIO;
+        const std::string sourcePath = Path::join(typeTestDataPath(), "TypeTest11.lv");
+        const std::string contents = fileIO.readFromFile(sourcePath);
+
+        Compiler::Config config(false);
+        config.allowUnresolvedTypes(true);
+        config.outputTarget(Compiler::Config::OutputTarget::JS_DTS);
+
+        Compiler::Ptr compiler = Compiler::create(config);
+        Compiler::TargetResult targetResult = compiler->compileToTarget(sourcePath, contents);
+
+        REQUIRE_FALSE(targetResult.dts.empty());
+        REQUIRE(targetResult.dts.find("__lvmodule__") == std::string::npos);
     }
 
     SECTION("Module compile emits the same outputs with shared and separate compilers"){

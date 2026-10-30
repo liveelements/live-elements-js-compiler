@@ -1,0 +1,16 @@
+Package/module fixture for the '__lvmodule__' declaration alias tests.
+-- pkg/live.package.json --
+{"name":"test.alias","version":"1.0.0"}
+-- pkg/sample/live.module.json --
+{"name":"sample","package":"..","modules":["shapes","main"]}
+-- pkg/sample/shapes.lv --
+interface Shape {
+    area(): number
+}
+
+component Square {
+}
+-- pkg/sample/main.lv --
+fn total(shape: Shape): number {
+    return shape.area()
+}

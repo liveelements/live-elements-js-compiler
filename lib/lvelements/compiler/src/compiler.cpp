@@ -147,11 +147,9 @@ public:
         for ( const auto& flowCall : config.m_flowCalls ){
             ctx->flowCalls[toConversionFlowCall(flowCall.first)] = flowCall.second;
         }
-        if ( config.componentMetaInfoEnabled() ){
-            if ( module && module->context() && !(module->context()->importId.isEmpty()) ){
-                ctx->outputComponentMeta = true;
-                ctx->currentImportUri = module->context()->importId.data();
-            }
+        if ( module && module->context() && !(module->context()->importId.isEmpty()) ){
+            ctx->currentImportUri = module->context()->importId.data();
+            ctx->outputComponentMeta = config.componentMetaInfoEnabled();
         }
         return ctx;
     }

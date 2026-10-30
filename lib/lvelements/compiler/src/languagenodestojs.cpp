@@ -360,6 +360,9 @@ void LanguageNodesToJs::convertProgram(ProgramNode *node, const std::string &sou
     }
     importsCompose->to = to;
     *importsCompose << renderProgramHeader(node, source, ctx);
+    if ( ctx && ctx->outputTarget == BaseNode::ConversionContext::DTS && !ctx->currentImportUri.empty() ){
+        *importsCompose << "export type __lvmodule__ = \"" << escapeForDoubleQuotedJsString(ctx->currentImportUri) << "\"\n";
+    }
 
     sections.push_back(importsCompose);
 
@@ -1702,7 +1705,7 @@ std::string LanguageNodesToJs::renderFunctionMeta(
 {
     std::string result = "{\n";
     result += indent(indentValue + 1) + "get sourceFileName(){ return \'" + Path::name(ctx->componentPath) + "\' },\n";
-    if ( !ctx->currentImportUri.empty() ){
+    if ( ctx->outputComponentMeta && !ctx->currentImportUri.empty() ){
         result += indent(indentValue + 1) + "get module(){ return \'" + ctx->currentImportUri + "\' },\n";
     }
     if ( declared ){
