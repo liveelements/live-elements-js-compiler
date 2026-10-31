@@ -784,6 +784,18 @@ TEST_CASE("Flow Type Resolution", "[Flow]"){
         REQUIRE(exports["double"]["kind"].asString() == "function");
     }
 
+    SECTION("Flow literals use global types as their return type"){
+        const std::string sourcePath = Path::join(dataPath, "FlowTest27.lv");
+        const std::string contents = fileIO.readFromFile(sourcePath);
+
+        Compiler::Config config = flowConfig(Compiler::Config::OutputTarget::JS_DTS);
+        config.allowUnresolvedTypes(false);
+        Compiler::Ptr compiler = Compiler::create(config);
+        compiler->configureImplicitType("Promise");
+
+        REQUIRE_NOTHROW(compiler->compileToTarget(sourcePath, contents));
+    }
+
     SECTION("Flow export descriptors round trip"){
         ModuleFileDescriptor::Ptr descriptor = ModuleFileDescriptor::create("main.lv");
         descriptor->addExport(ExportDescriptor("main", ExportDescriptor::Flow, true));

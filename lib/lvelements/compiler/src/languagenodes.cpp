@@ -1109,7 +1109,7 @@ FlowExpressionNode* BaseNode::visitFlowExpression(BaseNode* parent, const TSNode
         returnType = BaseNode::nodeChildByFieldName(node, "return");
     }
     if ( !ts_node_is_null(returnType) ){
-        expressionNode->m_returnType = expressionNode->addCreatedChild(TypeNode::create(returnType, expressionNode, true));
+        expressionNode->m_returnType = expressionNode->addCreatedChild(TypeNode::create(returnType, expressionNode->m_parameters, true));
     }
 
     TSNode body = BaseNode::nodeChildByFieldName(node, "body");

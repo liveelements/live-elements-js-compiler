@@ -1,0 +1,10 @@
+@fn inner(v:any, f:any): any{
+    return f(v)
+}
+
+@fn outer(n:number): any %> {
+    inner(n, (v: number): Promise<number> %> {
+        return v
+    }) @m
+    return m
+}
