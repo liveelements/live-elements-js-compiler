@@ -605,7 +605,7 @@ ParameterListNode *BaseNode::scanFormalParameters(BaseNode *parent, const TSNode
     return result;
 }
 
-ParameterListNode *BaseNode::scanFormalTypeParameters(BaseNode *parent, const TSNode &parameters, bool isMeta){
+ParameterListNode *BaseNode::scanFormalTypeParameters(BaseNode *parent, const TSNode &parameters, bool isMeta, bool allowRest){
     auto result = parent->addCreatedChild(new ParameterListNode(parameters));
     uint32_t parameterCount = ts_node_child_count(parameters);
 
@@ -615,6 +615,10 @@ ParameterListNode *BaseNode::scanFormalTypeParameters(BaseNode *parent, const TS
         if (strcmp(ts_node_type(ftpc), "formal_type_parameter") == 0){
 
             if ( ts_node_child_count(ftpc) > 0 ){
+                if ( !result->m_parameters.empty() && result->m_parameters.back()->isRest() ){
+                    throwError(parent, result->m_parameters.back()->current(), "A rest parameter must be the last parameter.");
+                }
+
                 TSNode typeParameter = ts_node_child(ftpc, 0);
 
                 TSNode parameterName = BaseNode::nodeChildByFieldName(typeParameter, "name");
@@ -634,6 +638,14 @@ ParameterListNode *BaseNode::scanFormalTypeParameters(BaseNode *parent, const TS
                     paramNode = result->addCreatedChild(
                         new ParameterNode(typeParameter, IdentifierNode::createNonEmpty(parameterName, result), true)
                     );
+                } else if ( strcmp(ts_node_type(typeParameter), "rest_type_parameter") == 0 ){
+                    if ( !allowRest ){
+                        throwError(parent, typeParameter, "Only root functions can declare a rest parameter.");
+                    }
+                    paramNode = result->addCreatedChild(
+                        new ParameterNode(typeParameter, IdentifierNode::createNonEmpty(parameterName, result), false)
+                    );
+                    paramNode->m_isRest = true;
                 }
 
                 if ( paramNode ){
@@ -995,9 +1007,15 @@ FlowValueNode* BaseNode::buildFlowValue(BaseNode* parent, const TSNode& node){
         TSNode arguments = BaseNode::nodeChildByFieldName(node, "arguments");
         BaseNode::assertValid(parent, arguments, "Failed to find flow arguments.");
         uint32_t argCount = ts_node_child_count(arguments);
+        const bool hasParentheses = argCount > 0 && strcmp(ts_node_type(ts_node_child(arguments, 0)), "(") == 0;
+        uint32_t previousEndRow = ts_node_end_point(function).row;
         for ( uint32_t i = 0; i < argCount; ++i ){
             TSNode argument = ts_node_child(arguments, i);
             if ( ts_node_is_named(argument) ){
+                if ( !hasParentheses && ts_node_start_point(argument).row > previousEndRow ){
+                    BaseNode::throwError(parent, argument, "This line continues the call above it. A call without parentheses must stay on one line.");
+                }
+                previousEndRow = ts_node_end_point(argument).row;
                 callNode->m_arguments.push_back(buildFlowValue(callNode, argument));
             }
         }
@@ -1949,7 +1967,7 @@ TypedFunctionDeclarationNode* BaseNode::visitTypedFunctionDeclaration(BaseNode *
     TSNode parameters = nodeChildByFieldName(node, "parameters");
     assertValid(parent, parameters, "Function parameters are null.");
 
-    cnode->m_parameters = BaseNode::scanFormalTypeParameters(cnode, parameters, cnode->isMeta());
+    cnode->m_parameters = BaseNode::scanFormalTypeParameters(cnode, parameters, cnode->isMeta(), true);
 
     TSNode returnType = nodeChildByFieldName(node, "return");
     if ( !ts_node_is_null(returnType) ){
@@ -1969,6 +1987,10 @@ TypedFunctionDeclarationNode* BaseNode::visitTypedFunctionDeclaration(BaseNode *
         TSNode child = ts_node_child(node, i);
         if ( strcmp(ts_node_type(child), "async") == 0 ){
             cnode->setAsync(true);
+        } else if ( !cnode->m_parameters->m_parameters.empty() && cnode->m_parameters->m_parameters.back()->isRest() ){
+            // Flow parameters have no rest form, so the parser recovers from `%>` into a plain function.
+            const bool isFlowArrow = ts_node_child_count(child) > 0 && strcmp(ts_node_type(ts_node_child(child, 0)), "%>") == 0;
+            assertError(cnode, child, isFlowArrow ? "Flow functions can't declare a rest parameter." : "Unexpected token.");
         }
     }
 
@@ -2099,6 +2121,8 @@ ConstructorDefinitionNode* BaseNode::visitConstructorDefinition(BaseNode *parent
                             paramNode = cnode->addCreatedChild(new ParameterNode(typeParameter, IdentifierNode::createNonEmpty(parameterName, cnode), false));
                         } else if ( strcmp(ts_node_type(typeParameter), "optional_type_parameter") == 0){
                             paramNode = cnode->addCreatedChild(new ParameterNode(typeParameter, IdentifierNode::createNonEmpty(parameterName, cnode), true));
+                        } else if ( strcmp(ts_node_type(typeParameter), "rest_type_parameter") == 0 ){
+                            throwError(cnode, typeParameter, "Only root functions can declare a rest parameter.");
                         }
 
                         if ( paramNode ){
@@ -3273,6 +3297,7 @@ ParameterNode::ParameterNode(const TSNode& node, IdentifierNode* identifier, boo
     , m_identifier(identifier)
     , m_type(nullptr)
     , m_isOptional(isOptional)
+    , m_isRest(false)
     , m_isDestructuringPattern(false)
     , m_defaultValue(nullptr)
 {

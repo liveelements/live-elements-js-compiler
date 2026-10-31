@@ -1,0 +1,17 @@
+@fn list(...items:any[]): any[]{
+    return items
+}
+
+@fn join(sep:string, ...parts:string[]): string{
+    return parts.join(sep)
+}
+
+@fn merge<T>(...items:T[]): T[]{
+    return items
+}
+
+declare @fn decl(...items:number[]): number[]
+
+@fn notArray(...values:number): any{
+    return values
+}

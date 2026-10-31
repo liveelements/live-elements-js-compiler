@@ -3282,6 +3282,10 @@
         {
           "type": "required_type_parameter",
           "named": true
+        },
+        {
+          "type": "rest_type_parameter",
+          "named": true
         }
       ]
     }
@@ -6018,6 +6022,32 @@
           "named": true
         }
       ]
+    }
+  },
+  {
+    "type": "rest_type_parameter",
+    "named": true,
+    "fields": {
+      "name": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      },
+      "type": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "type_annotation",
+            "named": true
+          }
+        ]
+      }
     }
   },
   {

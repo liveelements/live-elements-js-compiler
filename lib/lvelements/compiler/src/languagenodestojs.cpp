@@ -1623,6 +1623,8 @@ void LanguageNodesToJs::convertRootFunction(
         for ( auto pit = pdn->parameters().begin(); pit != pdn->parameters().end(); ++pit ){
             if ( pit != pdn->parameters().begin() )
                 paramList += ", ";
+            if ( (*pit)->isRest() )
+                paramList += "...";
             paramList += slice(source, (*pit)->identifier());
             if ( pit != pdn->parameters().begin() )
                 paramNamesArrayLiteral += ", ";

@@ -12,6 +12,7 @@
 #include "live/elements/compiler/typeresolver.h"
 #include <array>
 #include <cctype>
+#include <vector>
 
 using namespace lv;
 using namespace lv::el;
@@ -794,6 +795,65 @@ TEST_CASE("Flow Type Resolution", "[Flow]"){
         compiler->configureImplicitType("Promise");
 
         REQUIRE_NOTHROW(compiler->compileToTarget(sourcePath, contents));
+    }
+
+    SECTION("Root functions declare rest parameters"){
+        Compiler::TargetResult targetResult = compileFlowFileWithoutResolver("FlowTest28");
+
+        requireFlowExpectedOutput("FlowTest28", ".js", targetResult.js);
+        requireFlowExpectedOutput("FlowTest28", ".d.ts", targetResult.dts);
+
+        REQUIRE(targetResult.js.find("export function join(sep, ...parts)") != std::string::npos);
+        REQUIRE(targetResult.js.find("get parameterNames(){ return ['sep', 'parts'] }") != std::string::npos);
+        REQUIRE(targetResult.dts.find("export declare function join(sep: string, ...parts: string[]): string;") != std::string::npos);
+    }
+
+    SECTION("Rest parameters and calls without parentheses across lines are rejected"){
+        class Rejection{
+        public:
+            std::string source;
+            std::string message;
+            int line;
+            int column;
+        };
+
+        const std::string notLast = "A rest parameter must be the last parameter.";
+        const std::string notRoot = "Only root functions can declare a rest parameter.";
+        const std::string multiLine = "This line continues the call above it. A call without parentheses must stay on one line.";
+
+        const std::vector<Rejection> rejections = {
+            {"@fn f(...a:number[], b:number){ return a }", notLast, 1, 7},
+            {"component A{ fn m(...r:number[]){ return r } }", notRoot, 1, 19},
+            {"component A{ event e(...r:number[]) }", notRoot, 1, 22},
+            {"component A{ constructor(...r:number[]){ super() } }", notRoot, 1, 26},
+            {"@fn main(...a:number[]): any %> { return a }", "Flow functions can't declare a rest parameter.", 1, 30},
+            {"@fn f(...a:number[]) garbage garbage { return a }", "Unexpected token.", 1, 22},
+            {"@fn main(a:number, b:number): any %> {\n    join a b\n    %.email @y\n    return y\n}", multiLine, 3, 5},
+            {"@fn main(a:number, b:number): any %> {\n    join a b\n    [1, 2] @y\n    return y\n}", multiLine, 3, 5}
+        };
+
+        const std::string sourcePath = Path::join(dataPath, "FlowTestInline.lv");
+        for ( const Rejection& rejection : rejections ){
+            Compiler::Ptr compiler = Compiler::create(flowConfig(Compiler::Config::OutputTarget::JS_DTS));
+
+            INFO(rejection.source);
+            try {
+                compiler->compileToTarget(sourcePath, rejection.source);
+                FAIL("Expected a SyntaxException: " + rejection.message);
+            } catch ( const SyntaxException& e ){
+                REQUIRE(e.code() == Exception::toCode("~Language"));
+                REQUIRE(e.message().find(rejection.message) != std::string::npos);
+                REQUIRE(e.parsedLocation().range().start().line() == rejection.line);
+                REQUIRE(e.parsedLocation().range().start().column() == rejection.column);
+            }
+        }
+    }
+
+    SECTION("Flow calls keep compiling across lines where the arguments allow it"){
+        Compiler::TargetResult targetResult = compileFlowFileWithoutResolver("FlowTest29");
+
+        requireFlowExpectedOutput("FlowTest29", ".js", targetResult.js);
+        requireFlowExpectedOutput("FlowTest29", ".d.ts", targetResult.dts);
     }
 
     SECTION("Flow export descriptors round trip"){

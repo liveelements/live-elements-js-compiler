@@ -215,7 +215,7 @@ public:
     static TSNode nodeChildByFieldName(const TSNode& node, const std::string& name);
     static std::vector<IdentifierNode*> fromNestedIdentifier(BaseNode* parent, const TSNode& node);
     static ParameterListNode* scanFormalParameters(BaseNode* parent, const TSNode& formalParameters);
-    static ParameterListNode* scanFormalTypeParameters(BaseNode* parent, const TSNode& formalParameters, bool isMeta = false);
+    static ParameterListNode* scanFormalTypeParameters(BaseNode* parent, const TSNode& formalParameters, bool isMeta = false, bool allowRest = false);
     static ParameterListNode* scanFlowParameters(BaseNode* parent, const TSNode& parameters);
     static BaseNode* resolveBindingBase(BaseNode* node);
 
@@ -1387,6 +1387,7 @@ public:
     IdentifierNode* identifier(){ return m_identifier; }
     TypeNode* type(){ return m_type; }
     bool isOptional(){ return m_isOptional; }
+    bool isRest() const{ return m_isRest; }
 
     bool isDestructuringPattern() const{ return m_isDestructuringPattern; }
 
@@ -1397,6 +1398,7 @@ private:
     IdentifierNode* m_identifier;
     TypeNode*       m_type;
     bool            m_isOptional;
+    bool            m_isRest;
     bool            m_isDestructuringPattern;
     ExpressionNode* m_defaultValue;
 };

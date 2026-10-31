@@ -1,0 +1,16 @@
+import {add, apply, sum} from './flow-tools.mjs'
+
+@fn main(other:number): any %> {
+    apply 20 (v: number) %> {
+        add v 20 @added
+        return added
+    } other @result
+    sum(
+        result,
+        other
+    ) @total
+    sum total {
+        a: 1
+    } other @mixed
+    return mixed
+}
