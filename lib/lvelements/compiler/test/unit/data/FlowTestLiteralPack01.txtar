@@ -1,0 +1,156 @@
+Flow literals that hold constants and flow literals. Each .lv compiles to the .lv.js next to it.
+-- array-flow.lv --
+import {pass} from './flow-tools.mjs'
+
+@fn call(a: any): any %> {
+    pass([1, (v: number) %> { return v }]) @r
+    return r
+}
+
+@fn bare(a: any): any %> {
+    pass [1, (v: number) %> { return v }] @r
+    return r
+}
+
+@fn ret(a: any): any %> {
+    return [1, (v: number) %> { return v }]
+}
+-- array-flow.lv.js --
+import {pass} from './flow-tools.mjs'
+import {Flow} from 'flow/flow.mjs'
+export const call = Flow.fn('call', Flow.create('a', undefined, [Flow.call(pass, [[1, Flow.create('v', undefined, [Flow.ret(Flow.ref('v'))])]], 'r'), Flow.ret(Flow.ref('r'))]), {
+    get sourceFileName(){ return 'array-flow.lv' },
+    get parameterNames(){ return ['a'] }
+})
+export const bare = Flow.fn('bare', Flow.create('a', undefined, [Flow.call(pass, [[1, Flow.create('v', undefined, [Flow.ret(Flow.ref('v'))])]], 'r'), Flow.ret(Flow.ref('r'))]), {
+    get sourceFileName(){ return 'array-flow.lv' },
+    get parameterNames(){ return ['a'] }
+})
+export const ret = Flow.fn('ret', Flow.create('a', undefined, [Flow.ret([1, Flow.create('v', undefined, [Flow.ret(Flow.ref('v'))])])]), {
+    get sourceFileName(){ return 'array-flow.lv' },
+    get parameterNames(){ return ['a'] }
+})
+-- object-flow.lv --
+import {pass} from './flow-tools.mjs'
+
+@fn call(a: any): any %> {
+    pass({ flow: (v: number) %> { return v } }) @r
+    return r
+}
+
+@fn bare(a: any): any %> {
+    pass { flow: (v: number) %> { return v } } @r
+    return r
+}
+
+@fn ret(a: any): any %> {
+    return { flow: (v: number) %> { return v } }
+}
+-- object-flow.lv.js --
+import {pass} from './flow-tools.mjs'
+import {Flow} from 'flow/flow.mjs'
+export const call = Flow.fn('call', Flow.create('a', undefined, [Flow.call(pass, [{flow: Flow.create('v', undefined, [Flow.ret(Flow.ref('v'))])}], 'r'), Flow.ret(Flow.ref('r'))]), {
+    get sourceFileName(){ return 'object-flow.lv' },
+    get parameterNames(){ return ['a'] }
+})
+export const bare = Flow.fn('bare', Flow.create('a', undefined, [Flow.call(pass, [{flow: Flow.create('v', undefined, [Flow.ret(Flow.ref('v'))])}], 'r'), Flow.ret(Flow.ref('r'))]), {
+    get sourceFileName(){ return 'object-flow.lv' },
+    get parameterNames(){ return ['a'] }
+})
+export const ret = Flow.fn('ret', Flow.create('a', undefined, [Flow.ret({flow: Flow.create('v', undefined, [Flow.ret(Flow.ref('v'))])})]), {
+    get sourceFileName(){ return 'object-flow.lv' },
+    get parameterNames(){ return ['a'] }
+})
+-- nested-flow.lv --
+import {pass} from './flow-tools.mjs'
+
+@fn call(a: any): any %> {
+    pass({ a: [{ flow: (v: number) %> { return v } }] }) @r
+    return r
+}
+
+@fn bare(a: any): any %> {
+    pass { a: [{ flow: (v: number) %> { return v } }] } @r
+    return r
+}
+
+@fn ret(a: any): any %> {
+    return { a: [{ flow: (v: number) %> { return v } }] }
+}
+-- nested-flow.lv.js --
+import {pass} from './flow-tools.mjs'
+import {Flow} from 'flow/flow.mjs'
+export const call = Flow.fn('call', Flow.create('a', undefined, [Flow.call(pass, [{a: [{flow: Flow.create('v', undefined, [Flow.ret(Flow.ref('v'))])}]}], 'r'), Flow.ret(Flow.ref('r'))]), {
+    get sourceFileName(){ return 'nested-flow.lv' },
+    get parameterNames(){ return ['a'] }
+})
+export const bare = Flow.fn('bare', Flow.create('a', undefined, [Flow.call(pass, [{a: [{flow: Flow.create('v', undefined, [Flow.ret(Flow.ref('v'))])}]}], 'r'), Flow.ret(Flow.ref('r'))]), {
+    get sourceFileName(){ return 'nested-flow.lv' },
+    get parameterNames(){ return ['a'] }
+})
+export const ret = Flow.fn('ret', Flow.create('a', undefined, [Flow.ret({a: [{flow: Flow.create('v', undefined, [Flow.ret(Flow.ref('v'))])}]})]), {
+    get sourceFileName(){ return 'nested-flow.lv' },
+    get parameterNames(){ return ['a'] }
+})
+-- string-key.lv --
+import {pass} from './flow-tools.mjs'
+
+@fn call(a: any): any %> {
+    pass({ 'a-b': 1 }) @r
+    return r
+}
+
+@fn bare(a: any): any %> {
+    pass { 'a-b': 1 } @r
+    return r
+}
+
+@fn ret(a: any): any %> {
+    return { 'a-b': 1 }
+}
+-- string-key.lv.js --
+import {pass} from './flow-tools.mjs'
+import {Flow} from 'flow/flow.mjs'
+export const call = Flow.fn('call', Flow.create('a', undefined, [Flow.call(pass, [{'a-b': 1}], 'r'), Flow.ret(Flow.ref('r'))]), {
+    get sourceFileName(){ return 'string-key.lv' },
+    get parameterNames(){ return ['a'] }
+})
+export const bare = Flow.fn('bare', Flow.create('a', undefined, [Flow.call(pass, [{'a-b': 1}], 'r'), Flow.ret(Flow.ref('r'))]), {
+    get sourceFileName(){ return 'string-key.lv' },
+    get parameterNames(){ return ['a'] }
+})
+export const ret = Flow.fn('ret', Flow.create('a', undefined, [Flow.ret({'a-b': 1})]), {
+    get sourceFileName(){ return 'string-key.lv' },
+    get parameterNames(){ return ['a'] }
+})
+-- negative-number.lv --
+import {add, pass} from './flow-tools.mjs'
+
+@fn call(a: any): any %> {
+    pass([-1]) @r
+    return r
+}
+
+@fn bare(a: any): any %> {
+    add -1 2 @r
+    return r
+}
+
+@fn ret(a: any): any %> {
+    return [-1]
+}
+-- negative-number.lv.js --
+import {add,pass} from './flow-tools.mjs'
+import {Flow} from 'flow/flow.mjs'
+export const call = Flow.fn('call', Flow.create('a', undefined, [Flow.call(pass, [[-1]], 'r'), Flow.ret(Flow.ref('r'))]), {
+    get sourceFileName(){ return 'negative-number.lv' },
+    get parameterNames(){ return ['a'] }
+})
+export const bare = Flow.fn('bare', Flow.create('a', undefined, [Flow.call(add, [-1, 2], 'r'), Flow.ret(Flow.ref('r'))]), {
+    get sourceFileName(){ return 'negative-number.lv' },
+    get parameterNames(){ return ['a'] }
+})
+export const ret = Flow.fn('ret', Flow.create('a', undefined, [Flow.ret([-1])]), {
+    get sourceFileName(){ return 'negative-number.lv' },
+    get parameterNames(){ return ['a'] }
+})

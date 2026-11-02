@@ -1,9 +1,9 @@
 import {add, subtract} from './math.mjs'
 
 fn build(): any {
-    return x: number %> {
-        add(x, 2) @add
-        subtract(add, 10) @subtract
-        return add
+    return add: number %> {
+        add(add, 2) @total
+        subtract(total, 10) @difference
+        return difference
     }
 }

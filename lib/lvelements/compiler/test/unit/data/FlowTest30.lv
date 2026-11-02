@@ -1,0 +1,31 @@
+import {add, mul} from './flow-tools.mjs'
+
+fn sum(a: number, b: number): number { return a + b }
+
+@fn importedCallee(v: number): any %> {
+    add(v, 10) @total
+    return total
+}
+
+@fn moduleCallee(v: number): any %> {
+    sum(v, 10) @total
+    return total
+}
+
+@fn outerNames(v: any): any %> {
+    mul(v, 2) @r
+    mul(r, (x: number) %> {
+        mul(x, 2) @v
+        mul(v, 2) @r
+        return r
+    }) @s
+    return s
+}
+
+fn build(): any {
+    const scale = 1
+    return (v: number) %> {
+        mul(v, 10) @scale
+        return scale
+    }
+}

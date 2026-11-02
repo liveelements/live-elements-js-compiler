@@ -222,6 +222,7 @@ public:
     static void assertValid(BaseNode* from, const TSNode& node, const std::string& message);
     static void assertError(BaseNode* from, const TSNode& node, const std::string& message);
     static void throwError(BaseNode* from, const TSNode& node, const std::string& message);
+    static bool hasErrorNode(const TSNode& from, TSNode& node);
 
 protected:
     template<typename T> T* addCreatedChild(T* child){ addChild(child); return child; }
@@ -638,6 +639,8 @@ public:
     Kind kind() const{ return m_kind; }
     const std::vector<FlowValueNode*>& items() const{ return m_items; }
     const std::vector<FlowObjectPairNode*>& objectPairs() const{ return m_objectPairs; }
+
+    virtual void collectImports(const std::string& source, std::vector<Occurrence>& references, ConversionContext* ctx = nullptr);
 
 private:
     Kind                           m_kind;

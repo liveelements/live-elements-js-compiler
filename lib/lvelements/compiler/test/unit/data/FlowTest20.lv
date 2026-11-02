@@ -7,8 +7,8 @@ fn build(): any {
         add(a, 2) @b
         mod.max a b @m
         print user.email % @p
-        send { id: n, email: user.email } @r
-        sum [a, b, 3] ^r
+        send { id: 1 } n user.email @r
+        sum [3] a b ^r
         mod.max(m, 1) @c
         return add c 1
     }

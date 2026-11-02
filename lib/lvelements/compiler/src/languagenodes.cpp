@@ -342,6 +342,33 @@ void FlowBodyNode::collectImports(const std::string &source, std::vector<Occurre
         seenDeclarations.insert(name);
     }
 
+    for ( FlowStatementNode* statement : m_statements ){
+        IdentifierNode* tap = statement->isNodeType<FlowStepNode>() ? statement->as<FlowStepNode>()->label() : nullptr;
+        if ( !tap ){
+            continue;
+        }
+
+        const std::string name = slice(source, tap);
+        bool isModuleLevel = DeclarationLookup::find(
+            source, this->parent(), Occurrence(tap, Occurrence::SpaceValue | Occurrence::SpaceType)
+        ).isModuleLevel();
+
+        if ( !isModuleLevel && !ConversionContext::isImplicitType(ctx, name) ){
+            for ( const Occurrence& reference : this->references() ){
+                IdentifierNode* use = reference.identifier();
+                if ( use->parent() && use->parent()->isNodeType<FlowCallNode>() && use->parent()->as<FlowCallNode>()->callee().size() == 1 &&
+                     use->startByte() <= tap->startByte() && slice(source, use) == name )
+                {
+                    isModuleLevel = true;
+                }
+            }
+        }
+
+        if ( isModuleLevel ){
+            throwError(this, tap->current(), Utf8("A step result can't reuse '%', a name from outside the flow. Use another name.").format(name).data());
+        }
+    }
+
     for ( const Occurrence& reference : this->references() ){
         IdentifierNode* use = reference.identifier();
         const std::string name = slice(source, use);
@@ -357,7 +384,7 @@ void FlowBodyNode::collectImports(const std::string &source, std::vector<Occurre
                 throwError(
                     use,
                     use->current(),
-                    Utf8("'%' is declared outside the flow; a flow can only use its own parameters and taps, imported names, or top-level functions")
+                    Utf8("'%' is declared outside the flow; a flow can only use its own parameters and step results, imported names, or top-level functions")
                         .format(name)
                         .data()
                 );
@@ -411,7 +438,7 @@ void FlowBodyNode::collectImports(const std::string &source, std::vector<Occurre
         throwError(
             use,
             use->current(),
-            Utf8("'%' is declared outside the flow; a flow can only use its own parameters and taps, imported names, or top-level functions")
+            Utf8("'%' is declared outside the flow; a flow can only use its own parameters and step results, imported names, or top-level functions")
                 .format(name)
                 .data()
         );
@@ -422,6 +449,30 @@ void FlowCallNode::collectImports(const std::string &source, std::vector<Occurre
     for ( FlowValueNode* argument : m_arguments ){
         argument->collectImports(source, references, ctx);
     }
+}
+
+void FlowLiteralNode::collectImports(const std::string &source, std::vector<Occurrence>& references, ConversionContext *ctx){
+    FlowValueNode* reference = nullptr;
+    for ( FlowValueNode* item : m_items ){
+        if ( !reference && ( item->isNodeType<FlowReferenceNode>() || item->isNodeType<FlowMemberNode>() ) ){
+            reference = item;
+        }
+    }
+    for ( FlowObjectPairNode* pair : m_objectPairs ){
+        if ( !reference && ( pair->value()->isNodeType<FlowReferenceNode>() || pair->value()->isNodeType<FlowMemberNode>() ) ){
+            reference = pair->value();
+        }
+    }
+    if ( reference ){
+        throwError(
+            this,
+            reference->current(),
+            Utf8("'%' can't be used inside an object or array literal. Pass it as a whole argument, or build the value with a function.")
+                .format(slice(source, reference))
+                .data()
+        );
+    }
+    BaseNode::collectImports(source, references, ctx);
 }
 
 bool JsBlockNode::declaresIdentifier(IdentifierNode* declaration) const{
@@ -520,6 +571,20 @@ void BaseNode::assertError(BaseNode *from, const TSNode &node, const std::string
         );
         throw se;
     }
+}
+
+bool BaseNode::hasErrorNode(const TSNode& from, TSNode& node){
+    if ( strcmp(ts_node_type(from), "ERROR") == 0 || ts_node_is_missing(from) ){
+        node = from;
+        return true;
+    }
+    uint32_t count = ts_node_child_count(from);
+    for ( uint32_t i = 0; i < count; ++i ){
+        if ( hasErrorNode(ts_node_child(from, i), node) ){
+            return true;
+        }
+    }
+    return false;
 }
 
 void BaseNode::throwError(BaseNode *from, const TSNode &node, const std::string &message){
@@ -864,7 +929,8 @@ ProgramNode* flowProgramNode(BaseNode* node){
 // Flow validation, build pass (AST-only): structural rules that do not need the
 // source text. Each flow expression is checked in isolation; nested flow
 // expressions are reached by their own visitFlowExpression call, so the value
-// walk below treats them as a no-op.
+// walk below treats them as a no-op. A reference in a literal needs the source
+// text for its message, so FlowLiteralNode::collectImports refuses it.
 void checkFlowValueShape(FlowValueNode* value, bool allowCall, bool allowPrevious){
     if ( value->isNodeType<FlowCallNode>() ){
         if ( !allowCall ){
@@ -892,10 +958,10 @@ void checkFlowValueShape(FlowValueNode* value, bool allowCall, bool allowPreviou
     if ( value->isNodeType<FlowLiteralNode>() ){
         FlowLiteralNode* literal = value->as<FlowLiteralNode>();
         for ( FlowValueNode* item : literal->items() ){
-            checkFlowValueShape(item, false, allowPrevious);
+            checkFlowValueShape(item, false, true);
         }
         for ( FlowObjectPairNode* pair : literal->objectPairs() ){
-            checkFlowValueShape(pair->value(), false, allowPrevious);
+            checkFlowValueShape(pair->value(), false, true);
         }
         return;
     }
@@ -1115,6 +1181,11 @@ FlowStatementNode* BaseNode::buildFlowStatement(BaseNode* parent, const TSNode& 
 }
 
 FlowExpressionNode* BaseNode::visitFlowExpression(BaseNode* parent, const TSNode& node){
+    TSNode errorNode;
+    if ( hasErrorNode(node, errorNode) ){
+        BaseNode::throwError(parent, errorNode, "Invalid flow syntax.");
+    }
+
     FlowExpressionNode* expressionNode = parent->addCreatedChild(new FlowExpressionNode(node));
 
     TSNode parameters = BaseNode::nodeChildByFieldName(node, "parameters");

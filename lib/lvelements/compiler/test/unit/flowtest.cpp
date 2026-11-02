@@ -275,7 +275,7 @@ TEST_CASE("Flow Type Resolution", "[Flow]"){
     SECTION("Flow Literal Type Substitution"){ testFlowFileParse("FlowTest02"); }
     SECTION("Flow Literal Return Type"){ testFlowFileParse("FlowTest03"); }
     SECTION("Flow explicit import reuse"){ testFlowFileParse("FlowTest04"); }
-    SECTION("Flow tap shadowing keeps module-level callees and flow values"){ testFlowFileParse("FlowTest05"); }
+    SECTION("Flow parameter shadowing keeps module-level callees and flow values"){ testFlowFileParse("FlowTest05"); }
 
     SECTION("Flow literals request function signatures through the type resolver"){
         const std::string sourcePath = Path::join(dataPath, "FlowTest02.lv");
@@ -854,6 +854,33 @@ TEST_CASE("Flow Type Resolution", "[Flow]"){
 
         requireFlowExpectedOutput("FlowTest29", ".js", targetResult.js);
         requireFlowExpectedOutput("FlowTest29", ".d.ts", targetResult.dts);
+    }
+
+    SECTION("Flow literals hold constants and flow literals"){
+        Txtar archive = Txtar::parseFile(Path::join(dataPath, "FlowTestLiteralPack01.txtar"));
+
+        std::map<std::string, std::string> contents;
+        for ( const Txtar::Entry& entry : archive.entries() ){
+            contents[entry.name()] = entry.content();
+        }
+
+        for ( const Txtar::Entry& entry : archive.entries() ){
+            if ( Path::suffix(entry.name()) != "lv" ){
+                continue;
+            }
+            REQUIRE(contents.count(entry.name() + ".js") == 1);
+
+            Compiler::Ptr compiler = Compiler::create(flowConfig(Compiler::Config::OutputTarget::JS));
+            Compiler::TargetResult targetResult = compiler->compileToTarget(Path::join(dataPath, entry.name()), entry.content());
+            requireEquivalentElementsOutput(contents[entry.name() + ".js"], targetResult.js, "FlowTestLiteralPack01.txtar: " + entry.name() + ".js");
+        }
+    }
+
+    SECTION("Flow step results can use names not declared at module level"){
+        Compiler::TargetResult targetResult = compileFlowFileWithoutResolver("FlowTest30");
+
+        requireFlowExpectedOutput("FlowTest30", ".js", targetResult.js);
+        requireFlowExpectedOutput("FlowTest30", ".d.ts", targetResult.dts);
     }
 
     SECTION("Flow export descriptors round trip"){

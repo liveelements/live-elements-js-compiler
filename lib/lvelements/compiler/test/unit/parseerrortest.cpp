@@ -23,6 +23,8 @@
 #include "live/elements/compiler/languageparser.h"
 #include "live/elements/compiler/compiler.h"
 
+#include <vector>
+
 using namespace lv;
 using namespace lv::el;
 
@@ -48,6 +50,31 @@ const std::string& scriptPath(){
     return scriptPath;
 }
 
+class FlowRejection{
+public:
+    std::string source;
+    std::string message;
+    int line;
+    int column;
+};
+
+void requireFlowRejections(const std::vector<FlowRejection>& rejections){
+    const std::string filePath = scriptPath() + "/ParserErrorTestInline.lv";
+    for ( const FlowRejection& rejection : rejections ){
+        Compiler::Ptr compiler = Compiler::create(flowErrorCompilerConfig());
+
+        INFO(rejection.source);
+        try {
+            compiler->compileToTarget(filePath, rejection.source);
+            FAIL("Expected a SyntaxException: " + rejection.message);
+        } catch ( const lv::el::SyntaxException& e ) {
+            REQUIRE(e.code() == lv::Exception::toCode("~Language"));
+            REQUIRE(e.message().find(rejection.message) != std::string::npos);
+            REQUIRE(e.parsedLocation().range().start().line() == rejection.line);
+            REQUIRE(e.parsedLocation().range().start().column() == rejection.column);
+        }
+    }
+}
 
 
 TEST_CASE( "Parse Error Test", "[ParseError]" ) {
@@ -389,6 +416,71 @@ TEST_CASE( "Parse Error Test", "[ParseError]" ) {
             REQUIRE(e.code() == lv::Exception::toCode("~Language"));
             REQUIRE(e.message().find("'outer' is declared outside the flow") != std::string::npos);
         }
+    }
+
+    SECTION("Flow Rejects Swallowed Syntax Errors"){
+        const std::string invalid = "Invalid flow syntax.";
+
+        requireFlowRejections({
+            {"@fn main(v:number): any %> {\n    pass({ t })\n    return v\n}", invalid, 2, 12},
+            {"@fn main(v:number): any %> {\n    pass({ a: 1, t })\n    return v\n}", invalid, 2, 18},
+            {"@fn main(v:number): any %> {\n    pass({ a: 1 b: 2 })\n    return v\n}", invalid, 2, 12},
+            {"@fn main(v:number): any %> {\n    pass({ 1: 2 })\n    return v\n}", invalid, 2, 12},
+            {"@fn main(v:number): any %> {\n    pass({ a: 1, + })\n    return v\n}", invalid, 2, 18},
+            {"fn build(): any {\n    return v: number %> { pass({ t }) }\n}", invalid, 2, 34},
+            {"@fn main(v:number): any %> {\n    add - 1 2 @r\n    return r\n}", invalid, 2, 9},
+            {"@fn main(v:number): any %> {\n    pass(1\n    return v\n}", invalid, 2, 11},
+            {"@fn main(v: List<number): any %> {\n    return v\n}", invalid, 1, 24},
+            {"@fn main(v: any): a[ny %> {\n    return v\n}", invalid, 1, 23},
+            {"@fn main(v:any): any %> {\n    map(v, (x: number) %> {\n        pass({ t })\n        return x\n    }) @r\n    return r\n}", invalid, 3, 16},
+        });
+    }
+
+    SECTION("Flow Rejects References In Literals"){
+        auto message = [](const std::string& name){
+            return "'" + name + "' can't be used inside an object or array literal. Pass it as a whole argument, or build the value with a function.";
+        };
+
+        requireFlowRejections({
+            {"@fn main(sum:number): any %> {\n    pass([sum])\n    return sum\n}", message("sum"), 2, 11},
+            {"@fn main(sum:number): any %> {\n    pass({ a: sum })\n    return sum\n}", message("sum"), 2, 15},
+            {"@fn main(sum:number): any %> {\n    pass({ a: [{ b: sum }] })\n    return sum\n}", message("sum"), 2, 21},
+            {"@fn main(a:any): any %> {\n    pass([%])\n    return a\n}", message("%"), 2, 11},
+            {"@fn main(a:any, b:any): any %> {\n    pass([%])\n    return a\n}", message("%"), 2, 11},
+            {"@fn main(a:any): any %> {\n    pass([a.b])\n    return a\n}", message("a.b"), 2, 11},
+            {"@fn main(a:any): any %> {\n    pass [a.b]\n    return a\n}", message("a.b"), 2, 11},
+            {"@fn main(a:any): any %> {\n    pass([1, nope])\n    return a\n}", message("nope"), 2, 14},
+            {"@fn main(sum:number): any %> {\n    return [sum]\n}", message("sum"), 2, 13},
+            {"@fn main(sum:number): any %> {\n    return { a: sum }\n}", message("sum"), 2, 17},
+            {"@fn main(sum:number): any %> {\n    return { a: [{ b: sum }] }\n}", message("sum"), 2, 23},
+            {"@fn main(a:any): any %> {\n    pass(a)\n    return [%]\n}", message("%"), 3, 13},
+            {"@fn main(a:any): any %> {\n    return [a.b]\n}", message("a.b"), 2, 13},
+            {"@fn main(a:any): any %> {\n    pass([1, (v: number) %> [v]])\n    return a\n}", message("v"), 2, 30},
+        });
+    }
+
+    SECTION("Flow Keeps The Nested Call Error Inside Literals"){
+        requireFlowRejections({
+            {"@fn main(a:any): any %> {\n    pass([inner(a)])\n    return a\n}", "Nested flow calls are not allowed in argument position.", 2, 11},
+        });
+    }
+
+    SECTION("Flow Rejects A Step Result Reusing An Outside Name"){
+        auto message = [](const std::string& name){
+            return "A step result can't reuse '" + name + "', a name from outside the flow. Use another name.";
+        };
+        const std::string flow = "fn build(): any {\n    return (v: number) %> {\n        add(1, 10) @add\n        return add\n    }\n}\n";
+
+        requireFlowRejections({
+            {"import {add} from './math.mjs'\n" + flow, message("add"), 4, 21},
+            {"import .math\n" + flow, message("add"), 4, 21},
+            {"fn add(a:number, b:number): number { return a + b }\n" + flow, message("add"), 4, 21},
+            {"@fn add(a:number): any %> { return a }\n" + flow, message("add"), 4, 21},
+            {"import {add, mul} from './math.mjs'\n@fn main(v:number): any %> {\n    mul(v, 2) @add\n    return add\n}", message("add"), 3, 16},
+            {"import {add, mul} from './math.mjs'\n@fn main(v:any): any %> {\n    mul(v, (x: number) %> {\n        mul(x, 2) @add\n        return add\n    }) @r\n    return r\n}", message("add"), 4, 20},
+            {"import {mul} from './math.mjs'\ncomponent Box{}\n@fn main(v:number): any %> {\n    mul(v, 10) @Box\n    return Box\n}", message("Box"), 4, 17},
+            {"import {mul} from './math.mjs'\ntype Count = number\n@fn main(v:number): any %> {\n    mul(v, 10) @Count\n    return Count\n}", message("Count"), 4, 17},
+        });
     }
 
     SECTION("Duplicate Generic Type Parameters"){
